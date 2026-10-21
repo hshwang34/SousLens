@@ -1,6 +1,6 @@
 # 001 — Slice 0: backend foundation
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
 
 ## Problem
 Nothing exists yet. Every later slice (authoring, pantry, cooking engine) needs an owned, versioned,
