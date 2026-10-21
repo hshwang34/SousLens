@@ -1,0 +1,12 @@
+# macOS minutes are billed 10x on private repos, so this runs on demand and on release tags only.
+name: ios
+on:
+  workflow_dispatch:
+  push: { tags: ['v*'] }
+jobs:
+  check:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: make ios-check SIM="iPhone 16"

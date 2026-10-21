@@ -1,0 +1,27 @@
+# Local reference copy of the Retrace repos (nested git repos; not part of this project)
+_retrace_ref/
+# Claude Code worktrees
+.claude/worktrees/
+# Secrets
+.env
+.env.*
+!.env.example
+backend/.env
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+backend/data/
+backend/media/
+# Xcode / Swift
+ios/**/*.xcodeproj/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/**/DerivedData/
+ios/**/.build/
+ios/**/build/
+*.xcuserstate
+# macOS
+.DS_Store

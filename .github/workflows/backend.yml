@@ -1,0 +1,24 @@
+name: backend
+on:
+  push: { paths: ['backend/**', 'fixtures/**', '.github/workflows/backend.yml'] }
+  pull_request: { paths: ['backend/**', 'fixtures/**', '.github/workflows/backend.yml'] }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: souslens, POSTGRES_PASSWORD: souslens, POSTGRES_DB: souslens_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U souslens" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
+          DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
+          JWT_SECRET: ci-only
+        run: make check
