@@ -208,8 +208,19 @@ async def get_detail(
 async def get_version_detail(
     session: AsyncSession, version_id: uuid.UUID, *, user: User, share_url_base: str
 ) -> RecipeDetail:
-    """That exact version, regardless of the recipe's current visibility (REC-05): a session
-    or saved reference keeps working after an unpublish. Version ids are unguessable UUIDs."""
+    """That exact version, even after the recipe was unpublished (REC-05), but only for a
+    caller with a *prior reference* to it. Allowed when at least one holds:
+
+    * the recipe is currently public and published (visible to everyone), or
+    * the caller owns the recipe, or
+    * the caller has a Save on the recipe.
+
+    TODO(Slice 3, brief 005): also allow a caller who owns a cooking session that pins this
+    ``recipe_version_id`` (``cooking_sessions.recipe_version_id == version.id``); sessions
+    must keep reading their pinned version after an unpublish.
+
+    Anything else is a 404 indistinguishable from an unknown id.
+    """
     stmt = (
         select(RecipeVersion, Recipe)
         .join(Recipe, Recipe.id == RecipeVersion.recipe_id)
@@ -220,10 +231,12 @@ async def get_version_detail(
     if row is None:
         raise NotFound("Recipe version not found")
     version, recipe = row
-    saved = await saved_ids(session, user, [recipe.id])
-    return to_detail(
-        recipe, version, saved=_saved_flag(saved, recipe.id), share_url_base=share_url_base
-    )
+    saved = await saved_ids(session, user, [recipe.id]) or set()
+    is_saved = recipe.id in saved
+    is_public = recipe.visibility == Visibility.PUBLIC and recipe.latest_version_id is not None
+    if not (is_public or recipe.owner_user_id == user.id or is_saved):
+        raise NotFound("Recipe version not found")
+    return to_detail(recipe, version, saved=is_saved, share_url_base=share_url_base)
 
 
 # --------------------------------------------------------------------------- saves (REC-02)

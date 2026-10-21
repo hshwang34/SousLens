@@ -10,8 +10,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domains.recipes.schemas import EvidenceOrigin, IngredientOut, StepOut
 
@@ -26,7 +27,27 @@ MAX_TAGS = 20
 _SHORT = 200
 _TEXT = 2000
 _ID = 64
-_URL = 2048
+URL_MAX = 2048
+
+
+def validate_https_url(value: str | None) -> str | None:
+    """Accept only an absolute ``https://`` URL with a host, no credentials, ≤ 2048 chars.
+
+    Until uploads land (Slice 5, media ids served through signed URLs) a cover image is just
+    an external link the creator pastes; this keeps ``javascript:``, ``file:``, relative
+    paths and ``user:pass@host`` out of the stored recipe metadata.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if len(value) > URL_MAX:
+        raise ValueError(f"must be at most {URL_MAX} characters")
+    parts = urlsplit(value)
+    if parts.scheme.lower() != "https" or not parts.hostname:
+        raise ValueError("must be an absolute https:// URL")
+    if parts.username is not None or parts.password is not None:
+        raise ValueError("must not contain credentials")
+    return value
 
 
 class DraftIngredientIn(BaseModel):
@@ -73,7 +94,7 @@ class DraftPatch(BaseModel):
     title: str | None = Field(default=None, max_length=1000)
     summary: str | None = Field(default=None, max_length=_TEXT)
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS)
-    cover_image_url: str | None = Field(default=None, max_length=_URL)
+    cover_image_url: str | None = Field(default=None, max_length=URL_MAX)
     servings: int | None = Field(default=None, ge=0, le=1000)
     prep_minutes: int | None = Field(default=None, ge=0, le=7 * 24 * 60)
     cook_minutes: int | None = Field(default=None, ge=0, le=7 * 24 * 60)
@@ -81,6 +102,11 @@ class DraftPatch(BaseModel):
     steps: list[DraftStepIn] = Field(default_factory=list, max_length=MAX_STEPS)
     creator_notes: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
     dietary_warnings: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+
+    @field_validator("cover_image_url")
+    @classmethod
+    def _cover_is_https(cls, value: str | None) -> str | None:
+        return validate_https_url(value)
 
     # Read-only Draft fields: tolerated so `PATCH` can receive a whole Draft, never applied.
     id: Any = Field(default=None, exclude=True)

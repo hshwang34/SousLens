@@ -129,3 +129,59 @@ async def dev_sign_in(client: AsyncClient, email: str) -> str:
 
 
 dev_login = dev_sign_in  # backwards-compatible name used by earlier gate probes
+
+
+async def bearer(client: AsyncClient, email: str) -> dict[str, str]:
+    """Authorization header for a freshly signed-in dev user."""
+    return {"Authorization": f"Bearer {await dev_sign_in(client, email)}"}
+
+
+def draft_payload(**overrides: object) -> dict[str, object]:
+    """A publishable draft (brief 003 rules) that tests tweak via ``overrides``."""
+    payload: dict[str, object] = {
+        "title": "Weeknight Garlic Noodles",
+        "summary": "Fast, garlicky, forgiving.",
+        "tags": ["noodles", "weeknight"],
+        "servings": 2,
+        "prep_minutes": 5,
+        "cook_minutes": 10,
+        "ingredients": [
+            {"id": "ing-1", "name": "dried noodles", "quantity": 200, "unit": "g"},
+            {
+                "id": "ing-2",
+                "name": "garlic",
+                "quantity": 4,
+                "unit": "clove",
+                "preparation": "sliced",
+            },
+            {"id": "ing-3", "name": "butter", "quantity": 2, "unit": "tbsp", "optional": True},
+        ],
+        "steps": [
+            {
+                "id": "step-1",
+                "instruction": "Boil the noodles until just tender.",
+                "ingredient_refs": ["ing-1"],
+                "estimated_minutes": 6,
+                "success_cues": ["Noodles bend without snapping"],
+            },
+            {
+                "id": "step-2",
+                "instruction": "Toast the garlic in butter over low heat.",
+                "ingredient_refs": ["ing-2", "ing-3"],
+                "estimated_minutes": 3,
+                "success_cues": ["Garlic is pale gold"],
+                "warnings": ["Garlic burns fast; keep the heat low."],
+                "creator_note": "Low and slow.",
+            },
+            {
+                "id": "step-3",
+                "instruction": "Toss the noodles through the garlic butter and serve.",
+                "ingredient_refs": ["ing-1"],
+                "success_cues": ["Every strand is glossy"],
+            },
+        ],
+        "creator_notes": ["Use the pasta water to loosen the sauce."],
+        "dietary_warnings": ["Contains wheat and dairy."],
+    }
+    payload.update(overrides)
+    return payload

@@ -88,7 +88,9 @@ def apply_patch(content: DraftContent, patch: DraftPatch) -> DraftContent:
     }
     merged = content.model_dump()
     for name, value in provided.items():
-        if name in ("ingredients", "steps"):
+        if name == "steps":
+            merged[name] = [{**step.model_dump(), "order": i} for i, step in enumerate(value)]
+        elif name == "ingredients":
             merged[name] = [item.model_dump() for item in value]
         else:
             merged[name] = value
