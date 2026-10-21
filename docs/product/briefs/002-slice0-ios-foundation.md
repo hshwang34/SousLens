@@ -1,6 +1,6 @@
 # 002 — Slice 0: iOS foundation
 
-**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** in review (PR #2) · **Owner:** PM · **PR:** https://github.com/hshwang34/SousLens/pull/2 · **Updated:** 2026-10-20
 
 ## Problem
 No app exists. Slice 0 must prove the SwiftUI shell, API client, dev sign-in, and the device
@@ -58,6 +58,29 @@ None blocking.
 - Minimum iOS 17.2 (PRD §14, DAT sample). No SwiftData yet; a tiny `Persistence/` with
   `Codable` file cache for the recipe list; SwiftData can come in Slice 3 for session cache.
 - MVVM with `@Observable`; one `AppEnvironment` injecting `APIClient`, `AuthStore`, capture sources.
+- Swift 6 language mode with strict concurrency kept (no fallback needed). Non-Sendable AV objects
+  live inside a private actor / lock-protected delegate bridges.
+- `make ios-check` signs ad hoc (`CODE_SIGN_IDENTITY=-`) instead of the brief's
+  `CODE_SIGNING_ALLOWED=NO`: an unsigned simulator host app cannot use the Keychain (-34018), so
+  the token-store tests would not run. The simulator OS is auto-detected (`ios/scripts/sim-os.sh`)
+  because a bare `name=iPhone 15` resolves to the newest runtime, which has no iPhone 15.
+- `SousLens.xcodeproj` is gitignored; it is a pure XcodeGen artifact and CI regenerates it.
+- Bonjour discovery skipped in Slice 0 (manual URL + simulator default suffice; the backend does
+  not advertise yet). Revisit when a physical device joins the pilot.
+- Health response no longer carries `auth_mode` (backend hardening); the DTO was trimmed to match.
+- Dev sign-in is two-step (email → 6-digit code from the server log → token) per DECISIONS #5 and
+  the security review of PR #1; the sign-in screen has a code step.
+- `EvidenceOrigin` decodes unknown values to `.unknown`, labelled conservatively as
+  "AI-extracted" (never "Creator instructions"), so a new backend origin never breaks a recipe.
+- Changing the server URL while signed in signs the user out and clears the recipe cache
+  (token must never travel to a different host).
+- Screenshots of the gate run live in `docs/product/screenshots/slice0/` for the PM.
+- A live XCUITest smoke (`make ios-smoke`, scheme `SousLensSmoke`) is the PRD Slice 0 gate: fresh
+  install → email → one-time code read from the backend log → Explore → seeded recipe detail. It is
+  not part of `make ios-check` or CI because it needs a running backend.
+- Capture adapters use a start-gate/generation pattern so a stop during an awaited permission
+  prompt always wins; the camera indicator follows AVCaptureSession notifications, not a flag.
+- `summary` is optional on cards and detail (backend declares it nullable).
 
 ## Risks / what could go wrong for users
 - Simulator cannot test real camera/mic; capture sources must degrade to "unavailable" cleanly.

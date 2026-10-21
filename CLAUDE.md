@@ -44,6 +44,7 @@ fixtures/                   seeded_recipes/, pantry_images/ (permissioned only),
 make check          # everything below; must pass before any PR
 make backend-check  # ruff + pytest (needs docker: make db-up)
 make ios-check      # xcodegen generate + xcodebuild test on an iPhone simulator
+make ios-smoke      # live XCUITest: dev sign-in via logged code → seeded recipe (needs backend-dev)
 make db-up          # postgres 16 in docker compose
 make backend-dev    # uvicorn --reload on :8000, AI_PROVIDER=mock by default
 make seed           # load fixtures/seeded_recipes into the dev DB

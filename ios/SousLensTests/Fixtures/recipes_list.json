@@ -1,0 +1,28 @@
+{
+    "items": [
+        {
+            "recipe_id": "a185d1a4-2726-57b9-9b17-069262cbf492",
+            "slug": "gochujang-chicken-thighs",
+            "title": "Gochujang Chicken Thighs",
+            "summary": "Sticky, smoky-sweet pan-seared chicken thighs in a gochujang marinade. A weeknight Korean home-cooking staple that forgives beginners and rewards a hot pan.",
+            "tags": [
+                "korean",
+                "chicken",
+                "weeknight",
+                "spicy"
+            ],
+            "creator": {
+                "id": "f692d3b2-4d37-5232-8bdb-8c1b083bdf1e",
+                "display_name": "SousLens Kitchen"
+            },
+            "servings": 4,
+            "prep_minutes": 15,
+            "cook_minutes": 20,
+            "cover_image_url": null,
+            "published_at": "2026-10-15T00:00:00Z",
+            "recipe_version_id": "383cfbdd-6896-5db0-89e0-a539f6bbdd0e",
+            "version_number": 1
+        }
+    ],
+    "next_cursor": null
+}
