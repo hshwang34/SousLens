@@ -2,12 +2,15 @@
 SHELL := /bin/bash
 SIM ?= iPhone 15
 
-.PHONY: check backend-check ios-check db-up db-down backend-dev seed ios-project
+.PHONY: check backend-check ios-check env db-up db-down backend-dev seed ios-project
 
 check: backend-check ios-check
 
 backend-check:
 	$(MAKE) -C backend check
+
+env:
+	$(MAKE) -C backend env
 
 db-up:
 	$(MAKE) -C backend db-up

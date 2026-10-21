@@ -12,7 +12,7 @@ cooks with a stateful assistant on iPhone — or through Meta AI glasses camera/
 ## Run it
 
 ```bash
-cp .env.example backend/.env       # fill nothing for mock mode
+make env                           # backend/.env with a generated secret; mock AI needs nothing else
 make db-up && make seed            # postgres 16 in docker + demo recipes
 make backend-dev                   # http://localhost:8000/v1/health
 make ios-project && open ios/SousLens.xcodeproj   # run on an iPhone simulator
