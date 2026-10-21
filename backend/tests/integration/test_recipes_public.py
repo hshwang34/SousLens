@@ -1,4 +1,4 @@
-"""REC-01: public feed + canonical detail from the seeded fixture."""
+"""REC-01/02: public feed, canonical detail and search over the five seeded fixtures."""
 
 from __future__ import annotations
 
@@ -16,7 +16,31 @@ from app.scripts.seed import SEED_CREATOR_EMAIL, seed_fixtures
 from tests.conftest import FIXTURES_DIR
 
 GOCHUJANG = "gochujang-chicken-thighs"
+SEED_SLUGS_NEWEST_FIRST = [
+    GOCHUJANG,
+    "kimchi-fried-rice",
+    "garlic-pasta",
+    "egg-and-tomato-stir-fry",
+    "cucumber-salad",
+]
 EXPECTED_DETAIL = FIXTURES_DIR / "expected_outputs" / "recipe_detail.json"
+EXPECTED_LIST = FIXTURES_DIR / "expected_outputs" / "recipes_list.json"
+CARD_KEYS = {
+    "recipe_id",
+    "slug",
+    "title",
+    "summary",
+    "tags",
+    "creator",
+    "servings",
+    "prep_minutes",
+    "cook_minutes",
+    "cover_image_url",
+    "published_at",
+    "recipe_version_id",
+    "version_number",
+    "saved",
+}
 
 
 async def seed(db_session: AsyncSession) -> dict[str, uuid.UUID]:
@@ -49,6 +73,7 @@ async def add_recipe(
         ingredient_json=[],
         step_json=[],
         warning_json={},
+        search_text=title.lower(),
     )
     db_session.add(version)
     await db_session.flush()
@@ -59,7 +84,11 @@ async def add_recipe(
     return recipe
 
 
-async def test_list_returns_seeded_recipe_card(
+def slugs(response) -> list[str]:
+    return [c["slug"] for c in response.json()["items"]]
+
+
+async def test_list_returns_five_seeded_cards_newest_first(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     ids = await seed(db_session)
@@ -67,29 +96,23 @@ async def test_list_returns_seeded_recipe_card(
     assert response.status_code == 200
     body = response.json()
     assert body["next_cursor"] is None
-    assert len(body["items"]) == 1
+    assert slugs(response) == SEED_SLUGS_NEWEST_FIRST
     card = body["items"][0]
     assert card["recipe_id"] == str(ids[GOCHUJANG])
-    assert card["slug"] == GOCHUJANG
     assert card["title"] == "Gochujang Chicken Thighs"
     assert card["creator"]["display_name"] == "SousLens Kitchen"
     assert card["version_number"] == 1
     assert card["tags"] == ["korean", "chicken", "weeknight", "spicy"]
-    assert set(card) == {
-        "recipe_id",
-        "slug",
-        "title",
-        "summary",
-        "tags",
-        "creator",
-        "servings",
-        "prep_minutes",
-        "cook_minutes",
-        "cover_image_url",
-        "published_at",
-        "recipe_version_id",
-        "version_number",
-    }
+    assert card["saved"] is None  # anonymous
+    assert set(card) == CARD_KEYS
+
+
+async def test_list_matches_expected_output_fixture_exactly(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await seed(db_session)
+    body = (await client.get("/v1/recipes")).json()
+    assert body == json.loads(EXPECTED_LIST.read_text(encoding="utf-8"))
 
 
 async def test_detail_matches_expected_output_fixture_exactly(
@@ -103,6 +126,8 @@ async def test_detail_matches_expected_output_fixture_exactly(
     assert body == expected
 
     assert body["schema_version"] == "1.0"
+    assert body["saved"] is None
+    assert body["share_url"] == f"https://souslens.app/r/{ids[GOCHUJANG]}"
     assert len(body["steps"]) >= 6
     assert any(s["creator_note"] for s in body["steps"])
     assert any("thermometer" in w.lower() for s in body["steps"] for w in s["warnings"])
@@ -110,6 +135,23 @@ async def test_detail_matches_expected_output_fixture_exactly(
     assert body["creator_notes"] and body["dietary_warnings"]
     ingredient_ids = {i["id"] for i in body["ingredients"]}
     assert all(ref in ingredient_ids for s in body["steps"] for ref in s["ingredient_refs"])
+
+
+async def test_every_seeded_recipe_meets_appendix_b(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    ids = await seed(db_session)
+    assert len(ids) == 5
+    for slug, recipe_id in ids.items():
+        body = (await client.get(f"/v1/recipes/{recipe_id}")).json()
+        assert body["slug"] == slug
+        assert len(body["steps"]) >= 5, slug
+        assert all(s["success_cues"] for s in body["steps"]), slug
+        assert body["creator_notes"], slug
+        assert body["tags"], slug
+        assert [s["order"] for s in body["steps"]] == list(range(len(body["steps"]))), slug
+        ingredient_ids = {i["id"] for i in body["ingredients"]}
+        assert all(r in ingredient_ids for s in body["steps"] for r in s["ingredient_refs"]), slug
 
 
 async def test_detail_requires_no_auth_but_is_404_for_unknown(client: AsyncClient) -> None:
@@ -124,31 +166,56 @@ async def test_seed_is_idempotent_and_never_rewrites_published_version(
 ) -> None:
     first = await seed_fixtures(db_session, FIXTURES_DIR)
     second = await seed_fixtures(db_session, FIXTURES_DIR)
+    assert len(first) == 5
     assert [r.recipe_id for r in first] == [r.recipe_id for r in second]
     assert [r.version_id for r in first] == [r.version_id for r in second]
     assert all(r.created_recipe and r.created_version for r in first)
     assert not any(r.created_recipe or r.created_version for r in second)
-    assert len((await client.get("/v1/recipes")).json()["items"]) == 1
+    assert len((await client.get("/v1/recipes")).json()["items"]) == 5
+    count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
+    assert count == 5
 
 
-async def test_query_filters_title_case_insensitively(
+async def test_query_matches_title_case_insensitively(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await seed(db_session)
-    await add_recipe(db_session, slug="kimchi-fried-rice", title="Kimchi Fried Rice")
-    hit = await client.get("/v1/recipes", params={"query": "GOCHU"})
-    assert [c["slug"] for c in hit.json()["items"]] == [GOCHUJANG]
-    miss = await client.get("/v1/recipes", params={"query": "zzz"})
-    assert miss.json()["items"] == []
-    wildcard = await client.get("/v1/recipes", params={"query": "%"})
-    assert wildcard.json()["items"] == []
+    assert slugs(await client.get("/v1/recipes", params={"query": "GOCHUJANG CHICKEN"})) == [
+        GOCHUJANG
+    ]
+    assert slugs(await client.get("/v1/recipes", params={"query": "zzz"})) == []
+    assert slugs(await client.get("/v1/recipes", params={"query": "%"})) == []
+    assert slugs(await client.get("/v1/recipes", params={"query": "   "})) == (
+        SEED_SLUGS_NEWEST_FIRST
+    )
+
+
+async def test_query_matches_any_ingredient_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await seed(db_session)
+    # gochujang is an ingredient of the chicken (title) and of the fried rice (optional).
+    assert slugs(await client.get("/v1/recipes", params={"query": "Gochujang"})) == [
+        GOCHUJANG,
+        "kimchi-fried-rice",
+    ]
+    assert slugs(await client.get("/v1/recipes", params={"query": "CUCUMBER"})) == [
+        "cucumber-salad"
+    ]
+    assert slugs(await client.get("/v1/recipes", params={"query": "spaghetti"})) == ["garlic-pasta"]
+    # scallion is an ingredient, never a title, in three recipes
+    assert slugs(await client.get("/v1/recipes", params={"query": "scallion"})) == [
+        GOCHUJANG,
+        "kimchi-fried-rice",
+        "egg-and-tomato-stir-fry",
+    ]
 
 
 async def test_tag_filter(client: AsyncClient, db_session: AsyncSession) -> None:
     await seed(db_session)
-    await add_recipe(db_session, slug="cucumber-salad", title="Cucumber Salad", tags=["no-cook"])
     response = await client.get("/v1/recipes", params={"tag": "korean"})
-    assert [c["slug"] for c in response.json()["items"]] == [GOCHUJANG]
+    assert slugs(response) == [GOCHUJANG, "kimchi-fried-rice"]
+    assert slugs(await client.get("/v1/recipes", params={"tag": "no-cook"})) == ["cucumber-salad"]
 
 
 async def test_cursor_pagination_walks_every_page_once(
@@ -165,17 +232,17 @@ async def test_cursor_pagination_walks_every_page_once(
         )
     seen: list[str] = []
     cursor: str | None = None
-    for _ in range(10):
-        params: dict[str, str | int] = {"limit": 1}
+    for _ in range(20):
+        params: dict[str, str | int] = {"limit": 2}
         if cursor:
             params["cursor"] = cursor
         page = (await client.get("/v1/recipes", params=params)).json()
-        assert len(page["items"]) == 1
-        seen.append(page["items"][0]["slug"])
+        assert 1 <= len(page["items"]) <= 2
+        seen.extend(c["slug"] for c in page["items"])
         cursor = page["next_cursor"]
         if cursor is None:
             break
-    assert seen == ["extra-2", "extra-1", "extra-0", GOCHUJANG]
+    assert seen == ["extra-2", "extra-1", "extra-0", *SEED_SLUGS_NEWEST_FIRST]
 
 
 async def test_pagination_tie_breaks_on_id_for_equal_published_at(
@@ -188,9 +255,9 @@ async def test_pagination_tie_breaks_on_id_for_equal_published_at(
     second = (
         await client.get("/v1/recipes", params={"limit": 2, "cursor": first["next_cursor"]})
     ).json()
-    slugs = [c["slug"] for c in first["items"] + second["items"]]
-    assert sorted(slugs) == ["tie-0", "tie-1", "tie-2"]
-    assert len(set(slugs)) == 3
+    found = [c["slug"] for c in first["items"] + second["items"]]
+    assert sorted(found) == ["tie-0", "tie-1", "tie-2"]
+    assert len(set(found)) == 3
     assert second["next_cursor"] is None
 
 
@@ -211,8 +278,7 @@ async def test_unpublished_and_private_recipes_are_hidden(
     unlisted = await add_recipe(
         db_session, slug="unlisted-one", title="Unlisted", visibility=Visibility.UNLISTED
     )
-    feed = (await client.get("/v1/recipes")).json()
-    assert [c["slug"] for c in feed["items"]] == [GOCHUJANG]
+    assert slugs(await client.get("/v1/recipes")) == SEED_SLUGS_NEWEST_FIRST
     for hidden in (draft, private, unlisted):
         response = await client.get(f"/v1/recipes/{hidden.id}")
         assert response.status_code == 404
@@ -265,6 +331,8 @@ async def test_additive_stored_fields_never_break_public_get(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     ids = await seed(db_session)
+    # Versions are append-only; simulating a future additive column needs the operator unlock.
+    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
     await db_session.execute(
         text(
             """
@@ -299,5 +367,5 @@ async def test_reseed_does_not_republish_an_unpublished_seeded_recipe(
     )
     await db_session.commit()
     await seed_fixtures(db_session, FIXTURES_DIR)
-    assert (await client.get("/v1/recipes")).json()["items"] == []
+    assert slugs(await client.get("/v1/recipes")) == SEED_SLUGS_NEWEST_FIRST[1:]
     assert (await client.get(f"/v1/recipes/{ids[GOCHUJANG]}")).status_code == 404

@@ -106,3 +106,18 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def get_optional_user(
+    session: DbSession,
+    settings: SettingsDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> User | None:
+    """Anonymous callers get ``None``; a *presented* token must still be valid (401 otherwise),
+    so a client with an expired token learns about it instead of silently losing ``saved``."""
+    if credentials is None:
+        return None
+    return await get_current_user(session, settings, credentials)
+
+
+OptionalUser = Annotated[User | None, Depends(get_optional_user)]

@@ -18,7 +18,9 @@ async def _session(db_session: AsyncSession) -> CookingSession:
     user = await users_service.get_or_create_by_email(
         db_session, email="c@example.com", display_name=None, auth_provider="dev"
     )
-    version_id = (await db_session.execute(text("select id from recipe_versions"))).scalar_one()
+    version_id = (
+        await db_session.execute(text("select id from recipe_versions limit 1"))
+    ).scalar_one()
     session = CookingSession(owner_user_id=user.id, recipe_version_id=version_id)
     db_session.add(session)
     await db_session.flush()

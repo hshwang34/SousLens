@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -176,8 +177,13 @@ class Recipe(TimestampMixin, Base):
 class RecipeVersion(CreatedAtMixin, Base):
     """Immutable once published (PRD §10.1 versioning rule).
 
-    TODO(brief 003 / Slice 1): add DB-level immutability (UPDATE/DELETE trigger on published
-    versions) when the publish flow lands; Slice 0 relies on the seed/service never rewriting.
+    Append-only at the database level: migration 0002 installs a ``BEFORE UPDATE OR DELETE``
+    trigger that raises on every row. The only escape hatch is an explicit
+    ``SET LOCAL souslens.unlock_versions = 'on'`` in the same transaction (operator repairs,
+    account deletion flows); application code never sets it.
+
+    ``search_text`` is a denormalised, lowercased ``title + ingredient names`` string written at
+    publish time so the public search can match ingredients with a plain ILIKE (REC-02).
     """
 
     __tablename__ = "recipe_versions"
@@ -194,6 +200,9 @@ class RecipeVersion(CreatedAtMixin, Base):
     ingredient_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     step_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     warning_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    search_text: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=text("''")
+    )
     source_video_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_media.id", use_alter=True, ondelete="SET NULL")
     )
