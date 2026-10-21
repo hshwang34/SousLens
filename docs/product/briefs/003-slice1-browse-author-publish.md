@@ -38,7 +38,27 @@ Video import/extraction (Slice 5), forks/follows (P1), ratings.
    **Recommendation:** A, pilot is 5–10 known people. → *Answer:* A (default; raise if you disagree).
 
 ## Engineering decisions
-- (filled in while building)
+- Built as two PRs (backend, iOS) stacked on the Slice 0 branches (DECISIONS #8); shared contract in
+  `003-api-contract.md`.
+- **Backend**: title/summary/tags/cover stay mutable recipe metadata (PRD §10); a version snapshot
+  owns servings, times, ingredients, steps, notes, warnings. So an old version shows the recipe's
+  *current* title. Historical titles would need columns on `recipe_versions` (not done; raise if
+  wanted).
+- `recipe_versions` is append-only via a DB trigger (migration 0002) with a transaction-local operator
+  escape hatch (`SET LOCAL souslens.unlock_versions='on'`) for future account-deletion flows; FK
+  cascades from `recipes`/`users` hit the trigger, so PRIV-02 deletion must unlock explicitly.
+- Search is `recipes.title ILIKE` OR `recipe_versions.search_text ILIKE` (lowercased title +
+  ingredient names written at publish/seed; backfilled by 0002). No full-text engine.
+- Publish is one transaction with the draft and recipe rows locked; `version_number = max+1`;
+  `published_at` set on first publish only (republishing doesn't bump feed position). Slug = slugified
+  title with `-2`, `-3` suffixes; never changes on republish.
+- `/recipe-versions/{id}` is readable only by the public, the owner, or a user who saved the recipe
+  (security review); Slice 3 adds "caller has a session pinning this version".
+- `cover_image_url` must be an absolute https URL without credentials (≤ 2048); real uploads with
+  media ids arrive in Slice 5.
+- Draft arrays are size-limited (≤200 ingredients, ≤100 steps, ≤50 notes, ≤20 tags, text ≤2000) as a
+  denial-of-service guard. Step `order` is derived from array position.
+- A presented-but-invalid bearer on a public route is a 401, never silently anonymous.
 
 ## Risks
 - Validation too strict blocks creators; too loose publishes junk. Keep required set minimal and
