@@ -74,12 +74,11 @@ final class AppEnvironment {
             Task { @MainActor in auth.handleUnauthorized(event) }
         }
         settings.onEffectiveBaseURLChanged = { [weak auth] _, newValue in
-            try? recipeCache.clear()
-            guard let auth else { return }
-            // A sign-in code challenge belongs to the old server too.
-            auth.cancelPendingChallenge()
-            if auth.isSignedIn {
-                auth.signOut(reason: "Server changed to \(newValue). Sign in again.")
+            // Token, cached user, recipe cache, pending sign-in code: all belong to the old server.
+            if let auth {
+                auth.serverChanged(to: newValue)
+            } else {
+                try? recipeCache.clear()
             }
         }
     }

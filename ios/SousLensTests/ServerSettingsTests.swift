@@ -120,10 +120,13 @@ final class ServerSettingsTests: XCTestCase {
         let settings = ServerSettings(defaults: defaults)
         AppEnvironment.bind(api: client, auth: auth, settings: settings, recipeCache: cache)
         try cache.save([])
+        // A token can linger while signed out (e.g. restore() failed on a network error).
+        try tokenStore.save(token: "stale-token-for-old-server")
 
         settings.baseURLText = "http://10.0.0.9:8000"
         XCTAssertNil(cache.load())
         XCTAssertEqual(cache.clearCount, 1)
+        XCTAssertNil(tokenStore.currentToken(), "a stale token must never reach the new server")
         XCTAssertNil(auth.banner, "nothing to sign out of")
     }
 }

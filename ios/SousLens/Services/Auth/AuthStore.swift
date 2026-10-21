@@ -129,6 +129,15 @@ final class AuthStore {
         forceSignOut(reason: "Your session ended. Please sign in again.")
     }
 
+    /// The server address changed: every credential belonged to the old server, so drop them all
+    /// whatever `state` says (a token can linger in the Keychain while signed out after a failed
+    /// restore). Only a user who was actually signed in sees a banner.
+    func serverChanged(to newValue: String) {
+        let wasSignedIn = isSignedIn
+        cancelPendingChallenge()
+        forceSignOut(reason: wasSignedIn ? "Server changed to \(newValue). Sign in again." : nil)
+    }
+
     private func forceSignOut(reason: String?) {
         generation.advance()
         clearCredentials()
