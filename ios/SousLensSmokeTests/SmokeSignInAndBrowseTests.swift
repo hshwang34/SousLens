@@ -22,6 +22,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["-serverBaseURL", "http://localhost:8000"]
         app.launch()
+        signOutIfNeeded(app)
 
         // Step 1: email
         let emailField = app.textFields.firstMatch
@@ -54,6 +55,21 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         )
         XCTAssertTrue(app.staticTexts["by SousLens Kitchen"].firstMatch.exists)
         attach(app, "4-detail")
+    }
+
+    /// A previous run may have left a session behind (Keychain survives reinstall when the
+    /// uninstall step is skipped). Start every smoke from the sign-in screen.
+    private func signOutIfNeeded(_ app: XCUIApplication) {
+        let profileTab = app.tabBars.buttons["Profile"]
+        guard profileTab.waitForExistence(timeout: 5) else { return }
+        profileTab.tap()
+        let signOut = app.buttons["Sign out"].firstMatch
+        if signOut.waitForExistence(timeout: 5) {
+            signOut.tap()
+            let confirm = app.buttons["Sign out"].firstMatch  // confirmation sheet, if any
+            if confirm.waitForExistence(timeout: 2) { confirm.tap() }
+        }
+        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 10), "could not sign out")
     }
 
     /// Polls the backend log for the most recent `dev sign-in code` line for our email.

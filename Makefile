@@ -40,8 +40,9 @@ ios-check: ios-project
 # Live smoke: fresh install → two-step dev sign-in (code read from the backend log) → seeded
 # recipe. Needs `make backend-dev` running with its log at SMOKE_LOG (default below).
 SMOKE_LOG ?= $(CURDIR)/backend/dev.log
+SMOKE_UDID = $$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print([x['udid'] for k,v in d['devices'].items() if k.endswith('iOS-$(subst .,-,$(SIM_OS))') for x in v if x['name']=='$(SIM)'][0])")
 ios-smoke: ios-project
-	cd ios && xcrun simctl uninstall "$$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print([x['udid'] for k,v in d['devices'].items() if k.endswith('iOS-$(subst .,-,$(SIM_OS))') for x in v if x['name']=='$(SIM)'][0])")" com.souslens.ios 2>/dev/null; \
+	cd ios && UDID=$(SMOKE_UDID); xcrun simctl boot "$$UDID" 2>/dev/null; xcrun simctl uninstall "$$UDID" com.souslens.ios 2>/dev/null; \
 	xcodebuild test -project SousLens.xcodeproj -scheme SousLensSmoke \
 		-destination 'platform=iOS Simulator,name=$(SIM),OS=$(SIM_OS)' \
 		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
