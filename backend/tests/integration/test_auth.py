@@ -3,6 +3,7 @@ non-dev mode hides both routes."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -334,3 +335,89 @@ async def test_first_login_race_loser_reuses_winners_row(
     assert loser.display_name == "Winner"
     assert calls["n"] == 2
     assert await users_service.get_by_id(db_session, winner.id) is not None
+
+
+# --- brute-force budget (lockout, cooldown, purge, concurrency) --------------------------------
+
+
+async def test_lockout_after_budget_spent_across_challenges(
+    client: AsyncClient, settings: Settings
+) -> None:
+    """Fresh challenges must not reset the guess budget: 10 failures → 429 on the next challenge."""
+    email = "victim@example.com"
+    budget = settings.dev_login_max_failures_per_window
+    spent = 0
+    while spent < budget:
+        challenge = await start_dev_sign_in(client, email)
+        for _ in range(min(dev_login_service.MAX_ATTEMPTS, budget - spent)):
+            assert_invalid_code(
+                await verify(client, challenge["challenge_id"], wrong_code(challenge))
+            )
+            spent += 1
+    locked = await client.post("/v1/auth/dev-login", json={"email": email})
+    assert locked.status_code == 429
+    body = locked.json()["error"]
+    assert body["code"] == "RATE_LIMITED" and body["retryable"] is True
+    # Another email is unaffected.
+    assert (
+        await client.post("/v1/auth/dev-login", json={"email": "bystander@example.com"})
+    ).status_code == 202
+
+
+async def test_lockout_lifts_after_window(
+    client: AsyncClient, db_session: AsyncSession, settings: Settings
+) -> None:
+    email = "later@example.com"
+    challenge = await start_dev_sign_in(client, email)
+    for _ in range(dev_login_service.MAX_ATTEMPTS):
+        await verify(client, challenge["challenge_id"], wrong_code(challenge))
+    challenge = await start_dev_sign_in(client, email)
+    for _ in range(dev_login_service.MAX_ATTEMPTS):
+        await verify(client, challenge["challenge_id"], wrong_code(challenge))
+    assert (await client.post("/v1/auth/dev-login", json={"email": email})).status_code == 429
+    # Age every challenge out of the lockout window.
+    stale = datetime.now(UTC) - timedelta(minutes=settings.dev_login_lockout_window_minutes + 1)
+    await db_session.execute(
+        update(DevLoginChallenge).where(DevLoginChallenge.email == email).values(created_at=stale)
+    )
+    await db_session.commit()
+    assert (await client.post("/v1/auth/dev-login", json={"email": email})).status_code == 202
+
+
+async def test_cooldown_between_challenges(settings: Settings, clean_tables: None) -> None:
+    app = create_app(settings.model_copy(update={"dev_login_cooldown_seconds": 30}))
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.post("/v1/auth/dev-login", json={"email": "cool@example.com"})
+            assert first.status_code == 202
+            second = await client.post("/v1/auth/dev-login", json={"email": "cool@example.com"})
+            assert second.status_code == 429
+            assert second.json()["error"]["code"] == "RATE_LIMITED"
+            # Cooldown is per email.
+            other = await client.post("/v1/auth/dev-login", json={"email": "warm@example.com"})
+            assert other.status_code == 202
+
+
+async def test_long_expired_challenges_are_purged(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    old = await start_dev_sign_in(client, "old@example.com")
+    ancient = datetime.now(UTC) - dev_login_service.PURGE_AFTER - timedelta(hours=1)
+    await db_session.execute(
+        update(DevLoginChallenge)
+        .where(DevLoginChallenge.id == uuid.UUID(old["challenge_id"]))
+        .values(expires_at=ancient, created_at=ancient - dev_login_service.TTL)
+    )
+    await db_session.commit()
+    await start_dev_sign_in(client, "new@example.com")  # any create purges
+    assert await db_session.get(DevLoginChallenge, uuid.UUID(old["challenge_id"])) is None
+
+
+async def test_concurrent_verifies_mint_exactly_one_token(client: AsyncClient) -> None:
+    challenge = await start_dev_sign_in(client, "race@example.com")
+    responses = await asyncio.gather(
+        *(verify(client, challenge["challenge_id"], challenge["code"]) for _ in range(10))
+    )
+    statuses = sorted(r.status_code for r in responses)
+    assert statuses.count(200) == 1 and statuses.count(401) == 9

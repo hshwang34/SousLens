@@ -57,6 +57,12 @@ class StateConflict(AppError):
     status_code = 409
 
 
+class RateLimited(AppError):
+    code = "RATE_LIMITED"
+    status_code = 429
+    retryable = True
+
+
 class ConfirmationRequired(AppError):
     code = "CONFIRMATION_REQUIRED"
     status_code = 422

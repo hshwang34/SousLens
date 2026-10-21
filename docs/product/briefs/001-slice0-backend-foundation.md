@@ -85,6 +85,13 @@ None blocking — defaults from DECISIONS #4–#6 apply.
 - Mock photo fixtures at `fixtures/expected_outputs/pantry_observations/<stem>.json`, stem
   validated against `[A-Za-z0-9_.-]+`.
 - `make check` uses `uv run --locked`; run `uv lock` after any dependency edit.
+- Dev sign-in is two-step (email → 6-digit code in the server log → token), per DECISIONS #5 and
+  the security review of the first commit. Codes are stored as HMAC, compared in constant time,
+  single use, 10-minute expiry, 5 tries per challenge. Because fresh challenges would otherwise
+  reset that budget, there is also a per-email budget: 10 failed tries per 15 minutes locks the
+  email (429), and a 30-second cooldown between challenges. Rows older than a day are purged.
+- `AUTH_MODE` has no default and dev mode only starts in a dev/test environment. The
+  `.env.example` secret is a placeholder the app refuses; `make env` writes a real one.
 
 ## Risks / what could go wrong for users
 - Dev login is intentionally weak; it must be impossible to enable outside `AUTH_MODE=dev`.

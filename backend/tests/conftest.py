@@ -49,6 +49,7 @@ def settings() -> Settings:
         environment="test",
         auth_mode="dev",
         dev_login_echo_code=True,
+        dev_login_cooldown_seconds=0,
         ai_provider="mock",
         jwt_secret=TEST_JWT_SECRET,
         log_level="WARNING",

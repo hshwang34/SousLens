@@ -6,7 +6,7 @@ FastAPI + SQLAlchemy 2 (async, asyncpg) + Postgres 16, managed with `uv` on Pyth
 ## Run
 
 ```bash
-cp ../.env.example .env        # defaults work for the compose DB (host port 5433); AUTH_MODE and
+make env                       # .env from ../.env.example with a random JWT_SECRET; AUTH_MODE and
                                # JWT_SECRET are required (the app refuses to start without them)
 make db-up                     # postgres:16 in docker, creates souslens + souslens_test
 make seed                      # alembic upgrade head, then fixtures/seeded_recipes/*.json

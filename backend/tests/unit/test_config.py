@@ -93,7 +93,10 @@ def test_env_example_sets_auth_mode_and_a_long_enough_secret() -> None:
         if "=" in line and not line.startswith("#")
     )
     assert values["AUTH_MODE"] == "dev"
-    assert Settings(_env_file=None, jwt_secret=values["JWT_SECRET"], auth_mode="dev")
+    # The committed placeholder is long enough but is refused *as a placeholder*, so copying
+    # .env.example verbatim never yields a working (and therefore shared) secret.
+    with pytest.raises(ValidationError, match="placeholder"):
+        Settings(_env_file=None, jwt_secret=values["JWT_SECRET"], auth_mode="dev")
 
 
 def test_ci_workflow_sets_auth_mode_and_secret() -> None:
@@ -103,3 +106,8 @@ def test_ci_workflow_sets_auth_mode_and_secret() -> None:
         line.split(":", 1)[1].strip() for line in workflow.splitlines() if "JWT_SECRET:" in line
     )
     assert Settings(_env_file=None, jwt_secret=secret, auth_mode="dev")
+
+
+def test_placeholder_secret_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        Settings(jwt_secret="change-me-dev-only-32-bytes-minimum-please", auth_mode="dev")

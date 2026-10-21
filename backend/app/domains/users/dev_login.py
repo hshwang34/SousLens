@@ -23,11 +23,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import Unauthorized
+from app.core.errors import RateLimited, Unauthorized
 from app.db.models import DevLoginChallenge
 
 log = logging.getLogger("souslens.devlogin")
@@ -37,6 +37,9 @@ MAX_ATTEMPTS = 5
 MAX_OPEN_PER_EMAIL = 5
 CODE_DIGITS = 6
 INVALID_MESSAGE = "Invalid or expired sign-in code"
+LOCKED_MESSAGE = "Too many sign-in attempts for this email; try again later"
+COOLDOWN_MESSAGE = "A sign-in code was just issued for this email; wait before requesting another"
+PURGE_AFTER = timedelta(days=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +68,12 @@ async def create_challenge(
 ) -> IssuedChallenge:
     normalized = normalize_email(email)
     now = _now()
+    # Serialise everything below per email (cap, lockout, cooldown) for this transaction.
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:email))"), {"email": normalized}
+    )
+    await _purge_stale(session, now)
+    await _enforce_budget(session, settings, normalized, now)
     await _cap_open_challenges(session, normalized, now)
 
     challenge_id = uuid.uuid4()
@@ -86,6 +95,45 @@ async def create_challenge(
     return IssuedChallenge(
         challenge_id=challenge_id, email=normalized, code=code, expires_at=challenge.expires_at
     )
+
+
+async def _purge_stale(session: AsyncSession, now: datetime) -> None:
+    """Drop challenges that expired more than ``PURGE_AFTER`` ago (unbounded-growth guard)."""
+    await session.execute(
+        delete(DevLoginChallenge).where(DevLoginChallenge.expires_at < now - PURGE_AFTER)
+    )
+
+
+async def _enforce_budget(
+    session: AsyncSession, settings: Settings, email: str, now: datetime
+) -> None:
+    """Bound guesses per email across challenges (the per-challenge cap alone is bypassable).
+
+    * lockout: once ``dev_login_max_failures_per_window`` attempts have been spent on this email
+      within ``dev_login_lockout_window_minutes``, no new challenge until the window passes;
+    * cooldown: no new challenge within ``dev_login_cooldown_seconds`` of the previous one.
+    """
+    window_start = now - timedelta(minutes=settings.dev_login_lockout_window_minutes)
+    spent = (
+        await session.execute(
+            select(func.coalesce(func.sum(DevLoginChallenge.attempts), 0)).where(
+                DevLoginChallenge.email == email, DevLoginChallenge.created_at >= window_start
+            )
+        )
+    ).scalar_one()
+    if spent >= settings.dev_login_max_failures_per_window:
+        raise RateLimited(LOCKED_MESSAGE)
+    if settings.dev_login_cooldown_seconds > 0:
+        latest = (
+            await session.execute(
+                select(func.max(DevLoginChallenge.created_at)).where(
+                    DevLoginChallenge.email == email
+                )
+            )
+        ).scalar_one()
+        cooldown = timedelta(seconds=settings.dev_login_cooldown_seconds)
+        if latest is not None and latest > now - cooldown:
+            raise RateLimited(COOLDOWN_MESSAGE)
 
 
 async def _cap_open_challenges(session: AsyncSession, email: str, now: datetime) -> None:

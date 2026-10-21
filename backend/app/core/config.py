@@ -50,6 +50,10 @@ class Settings(BaseSettings):
 
     auth_mode: Literal["dev", "apple"]
     dev_login_echo_code: bool = False
+    # Brute-force budget for the dev sign-in code (per email, across challenges).
+    dev_login_cooldown_seconds: int = 30
+    dev_login_lockout_window_minutes: int = 15
+    dev_login_max_failures_per_window: int = 10
     ai_provider: Literal["mock", "gemini"] = "mock"
 
     gemini_api_key: str | None = None
@@ -69,6 +73,10 @@ class Settings(BaseSettings):
         if len(self.jwt_secret.encode("utf-8")) < MIN_JWT_SECRET_BYTES:
             raise ValueError(
                 f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes (RFC 7518 §3.2)"
+            )
+        if self.jwt_secret.lower().startswith("change-me"):
+            raise ValueError(
+                "JWT_SECRET is the .env.example placeholder; run `make env` to generate one"
             )
         if self.auth_mode == "dev" and self.environment not in ("dev", "test"):
             raise ValueError("AUTH_MODE=dev is only allowed when ENVIRONMENT is dev or test")
