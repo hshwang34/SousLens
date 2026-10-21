@@ -65,7 +65,26 @@ None blocking — defaults from DECISIONS #4–#6 apply.
 - JWT HS256 (`pyjwt`) with `JWT_SECRET`; 30-day tokens for the pilot; `AuthProvider` interface so
   Apple can slot in (DECISIONS #5).
 - Cursor pagination = opaque base64 of `(published_at, id)`.
-- Fixture recipes are hand-authored JSON matching PRD §10.1; seed is upsert-by-slug.
+- Fixture recipes are hand-authored JSON matching PRD §10.1; seed is upsert-by-slug with
+  deterministic uuid5 ids and a fixed `published_at`, so `fixtures/expected_outputs/recipe_detail.json`
+  is the literal API response. Seed never rewrites an existing published version.
+- Postgres host port is **5433** (brew `postgresql@16` owns 5432 on the dev Mac); CI stays on 5432
+  via env. `.env.example` defaults updated.
+- Oracle no-op rule: `back` at step 0 and `jump_to_step` to the current step return the same state
+  with **revision unchanged** and `Result.changed=False`; the Slice 3 endpoint must not write an
+  event for them. Guard order: confirmation → revision conflict (carries latest) → terminal →
+  invalid transition. `next` on the last step is refused (needs `complete`). Idempotency-key replay
+  is an endpoint concern, not the oracle's.
+- Dev-login outside `AUTH_MODE=dev` and non-UUID recipe ids both return the NOT_FOUND envelope
+  (no shape leak). 500s carry the correlation id via `scope["state"]` because Starlette's error
+  middleware wraps ours.
+- Users keyed by `(auth_provider, auth_subject)` with nullable unique email; enums stored as
+  VARCHAR(32) (no `ALTER TYPE` churn); deferred FKs (`recipes.latest_version_id`,
+  `recipe_versions.source_video_id`) hand-added in migration 0001.
+- Safety resolver: highest precedence wins; on ties a blocking verdict beats an allowing one.
+- Mock photo fixtures at `fixtures/expected_outputs/pantry_observations/<stem>.json`, stem
+  validated against `[A-Za-z0-9_.-]+`.
+- `make check` uses `uv run --locked`; run `uv lock` after any dependency edit.
 
 ## Risks / what could go wrong for users
 - Dev login is intentionally weak; it must be impossible to enable outside `AUTH_MODE=dev`.
