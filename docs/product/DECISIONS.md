@@ -52,3 +52,10 @@ build. *Lives in:* brief 003, backend publish endpoint (no role check).
 branch, iOS on PR #2's) so work continues while the PM is away; GitHub retargets them to `main`
 when the parents merge. PRs #1/#2 only received security-review fixes after their gates. *Why:*
 the PM pre-approved Slices 0–3 and is not watching in real time.
+
+#9 · 2026-10-20 · **Merges of PRs #1/#2 may be performed by the orchestrator session (`projects-ee`),
+which states it holds merge authority delegated by the PM.** Recorded as stated by that session,
+not confirmed by the PM in this conversation; the PM should strike this entry if it is wrong.
+Standing rule from the same session: a confirmed security finding in an open, unmerged PR is
+fixed in that PR immediately with a one-line note in the PR body; non-security changes to a
+gated PR still wait. *Lives in:* PR bodies #1/#2.
