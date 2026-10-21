@@ -1,6 +1,6 @@
 # 002 — Slice 0: iOS foundation
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
 
 ## Problem
 No app exists. Slice 0 must prove the SwiftUI shell, API client, dev sign-in, and the device
