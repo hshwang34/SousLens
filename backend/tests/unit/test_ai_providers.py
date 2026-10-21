@@ -37,8 +37,12 @@ from tests.conftest import TEST_JWT_SECRET
 FIXTURES_DIR = Path(__file__).resolve().parents[2].parent / "fixtures"
 
 
+def mock_settings() -> Settings:
+    return Settings(ai_provider="mock", jwt_secret=TEST_JWT_SECRET, auth_mode="dev")
+
+
 def gemini_settings() -> Settings:
-    return Settings(ai_provider="gemini", jwt_secret=TEST_JWT_SECRET)
+    return Settings(ai_provider="gemini", jwt_secret=TEST_JWT_SECRET, auth_mode="dev")
 
 
 @pytest.fixture
@@ -285,7 +289,8 @@ async def test_gemini_stub_raises_provider_not_configured() -> None:
 
 def test_registry_picks_by_env() -> None:
     assert isinstance(
-        build_provider(Settings(ai_provider="mock", jwt_secret=TEST_JWT_SECRET)), MockAIProvider
+        build_provider(mock_settings()),
+        MockAIProvider,
     )
     assert isinstance(build_provider(gemini_settings()), GeminiProvider)
 

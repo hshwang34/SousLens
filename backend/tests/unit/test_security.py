@@ -12,7 +12,9 @@ from app.core.config import Settings
 from app.core.errors import Unauthorized
 from app.core.security import create_access_token, verify_access_token
 
-SETTINGS = Settings(jwt_secret="unit-test-secret-0123456789abcdefghij", jwt_ttl_days=30)
+SETTINGS = Settings(
+    jwt_secret="unit-test-secret-0123456789abcdefghij", jwt_ttl_days=30, auth_mode="dev"
+)
 
 
 def _claims(**overrides: object) -> dict[str, object]:
@@ -42,7 +44,9 @@ def test_expired_token_is_unauthorized() -> None:
 def test_wrong_secret_is_unauthorized() -> None:
     token = create_access_token(SETTINGS, uuid.uuid4())
     with pytest.raises(Unauthorized):
-        verify_access_token(Settings(jwt_secret="another-secret-0123456789abcdefghijk"), token)
+        verify_access_token(
+            Settings(jwt_secret="another-secret-0123456789abcdefghijk", auth_mode="dev"), token
+        )
 
 
 def test_garbage_token_is_unauthorized() -> None:

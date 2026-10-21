@@ -1,6 +1,15 @@
 """Application settings: environment variables first, then backend/.env (PRD §9.1).
 
 Model names and provider keys are pinned here from the environment, never in business code.
+
+Fail-closed rules (enforced by the validator below, the process refuses to start otherwise):
+
+* ``JWT_SECRET`` is required and must be at least 32 bytes.
+* ``AUTH_MODE`` is required (no default). ``dev`` is only allowed when ``ENVIRONMENT`` is ``dev``
+  or ``test``. **Production deploys must set ``ENVIRONMENT=prod`` and ``AUTH_MODE=apple``.**
+  ``ENVIRONMENT`` defaults to ``dev`` because an unset value means a local checkout.
+* ``DEV_LOGIN_ECHO_CODE`` (returns the sign-in code in the API response) is only allowed when
+  ``ENVIRONMENT=test``; it exists so integration tests can drive the two-step dev login.
 """
 
 from __future__ import annotations
@@ -39,7 +48,8 @@ class Settings(BaseSettings):
     jwt_algorithm: Literal["HS256"] = "HS256"
     jwt_ttl_days: int = 30
 
-    auth_mode: Literal["dev", "apple"] = "dev"
+    auth_mode: Literal["dev", "apple"]
+    dev_login_echo_code: bool = False
     ai_provider: Literal["mock", "gemini"] = "mock"
 
     gemini_api_key: str | None = None
@@ -60,8 +70,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"JWT_SECRET must be at least {MIN_JWT_SECRET_BYTES} bytes (RFC 7518 §3.2)"
             )
-        if self.environment == "prod" and self.auth_mode == "dev":
-            raise ValueError("AUTH_MODE=dev is forbidden when ENVIRONMENT=prod")
+        if self.auth_mode == "dev" and self.environment not in ("dev", "test"):
+            raise ValueError("AUTH_MODE=dev is only allowed when ENVIRONMENT is dev or test")
+        if self.dev_login_echo_code and self.environment != "test":
+            raise ValueError("DEV_LOGIN_ECHO_CODE=true is only allowed when ENVIRONMENT=test")
         return self
 
 

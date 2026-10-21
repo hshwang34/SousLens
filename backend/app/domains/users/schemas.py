@@ -33,13 +33,31 @@ _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 
 class DevLoginRequest(BaseModel):
+    """Step 1: ask for a one-time code. The code is written to the server log only."""
+
     email: str = Field(min_length=3, max_length=320, pattern=_EMAIL_PATTERN)
-    display_name: str | None = Field(default=None, max_length=120)
 
     @field_validator("email")
     @classmethod
     def _normalize_email(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class DevLoginChallengeResponse(BaseModel):
+    challenge_id: uuid.UUID
+    expires_in_seconds: int
+    hint: str = "Check the server log for your sign-in code."
+    code: str | None = Field(
+        default=None,
+        description="Only present when DEV_LOGIN_ECHO_CODE=true in the test environment.",
+    )
+
+
+class DevLoginVerifyRequest(BaseModel):
+    """Step 2: prove possession of the logged code."""
+
+    challenge_id: uuid.UUID
+    code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
 
 
 class TokenResponse(BaseModel):

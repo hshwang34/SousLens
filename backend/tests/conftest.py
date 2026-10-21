@@ -48,6 +48,7 @@ def settings() -> Settings:
         database_url=_test_database_url(),
         environment="test",
         auth_mode="dev",
+        dev_login_echo_code=True,
         ai_provider="mock",
         jwt_secret=TEST_JWT_SECRET,
         log_level="WARNING",
@@ -108,9 +109,22 @@ async def apple_mode_client(settings: Settings, clean_tables: None) -> AsyncIter
             yield client
 
 
-async def dev_login(client: AsyncClient, email: str, display_name: str | None = None) -> str:
+async def start_dev_sign_in(client: AsyncClient, email: str) -> dict[str, str]:
+    """Step 1 of dev login. Returns the 202 body (with the echoed code in the test env)."""
+    response = await client.post("/v1/auth/dev-login", json={"email": email})
+    assert response.status_code == 202, response.text
+    return response.json()
+
+
+async def dev_sign_in(client: AsyncClient, email: str) -> str:
+    """Full two-step dev login (challenge → verify with the echoed code) → access token."""
+    challenge = await start_dev_sign_in(client, email)
     response = await client.post(
-        "/v1/auth/dev-login", json={"email": email, "display_name": display_name}
+        "/v1/auth/dev-login/verify",
+        json={"challenge_id": challenge["challenge_id"], "code": challenge["code"]},
     )
     assert response.status_code == 200, response.text
     return response.json()["access_token"]
+
+
+dev_login = dev_sign_in  # backwards-compatible name used by earlier gate probes

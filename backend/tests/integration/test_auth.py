@@ -1,60 +1,247 @@
-"""AUTH-01: dev login, /me, 401 envelope, non-dev mode hides the route."""
+"""AUTH-01 / DECISIONS #5: two-step dev login (code in the server log), /me, 401 envelope,
+non-dev mode hides both routes."""
 
 from __future__ import annotations
 
+import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import delete
+from httpx import ASGITransport, AsyncClient, Response
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.security import create_access_token
-from app.db.models import User
+from app.db.models import DevLoginChallenge, User
+from app.domains.users import dev_login as dev_login_service
 from app.domains.users import service as users_service
-from tests.conftest import dev_login
+from app.main import create_app
+from tests.conftest import dev_sign_in, start_dev_sign_in
+
+VERIFY = "/v1/auth/dev-login/verify"
+INVALID = "Invalid or expired sign-in code"
 
 
-async def test_dev_login_creates_user_and_me_returns_it(client: AsyncClient) -> None:
-    response = await client.post(
-        "/v1/auth/dev-login", json={"email": "Tester@Example.com", "display_name": None}
-    )
-    assert response.status_code == 200
+async def verify(client: AsyncClient, challenge_id: str, code: str) -> Response:
+    return await client.post(VERIFY, json={"challenge_id": challenge_id, "code": code})
+
+
+async def user_count(db_session: AsyncSession) -> int:
+    return (await db_session.execute(select(func.count()).select_from(User))).scalar_one()
+
+
+def wrong_code(challenge: dict[str, str]) -> str:
+    return "000000" if challenge["code"] != "000000" else "111111"
+
+
+def assert_invalid_code(response: Response) -> None:
+    assert response.status_code == 401, response.text
+    body = response.json()["error"]
+    assert body["code"] == "UNAUTHORIZED"
+    assert body["message"] == INVALID
+    assert body["retryable"] is False
+
+
+# --- happy path ---------------------------------------------------------------------------
+
+
+async def test_challenge_then_verify_creates_user_and_me_returns_it(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    challenge = await start_dev_sign_in(client, "Tester@Example.com")
+    assert set(challenge) == {"challenge_id", "expires_in_seconds", "hint", "code"}
+    assert challenge["expires_in_seconds"] == 600
+    assert challenge["hint"] == "Check the server log for your sign-in code."
+    assert len(challenge["code"]) == 6 and challenge["code"].isdigit()
+    uuid.UUID(challenge["challenge_id"])
+    assert await user_count(db_session) == 0, "no user until the code is verified"
+
+    response = await verify(client, challenge["challenge_id"], challenge["code"])
+    assert response.status_code == 200, response.text
     body = response.json()
+    assert set(body) == {"access_token", "token_type", "user"}
     assert body["token_type"] == "bearer"
     assert set(body["user"]) == {"id", "display_name", "preference_units", "created_at"}
     assert body["user"]["display_name"] == "tester"
     assert body["user"]["preference_units"] == "us"
+    assert await user_count(db_session) == 1
 
     me = await client.get("/v1/me", headers={"Authorization": f"Bearer {body['access_token']}"})
     assert me.status_code == 200
     assert me.json() == body["user"]
 
 
-async def test_dev_login_is_idempotent_per_email(client: AsyncClient) -> None:
-    first = await client.post(
-        "/v1/auth/dev-login", json={"email": "same@example.com", "display_name": "Sam"}
-    )
-    second = await client.post(
-        "/v1/auth/dev-login", json={"email": "SAME@example.com", "display_name": "Other"}
-    )
-    assert first.json()["user"]["id"] == second.json()["user"]["id"]
-    assert second.json()["user"]["display_name"] == "Sam"
+async def test_code_is_logged_once_on_the_devlogin_logger(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="souslens.devlogin"):
+        challenge = await start_dev_sign_in(client, "logged@example.com")
+    records = [r for r in caplog.records if r.name == "souslens.devlogin"]
+    assert len(records) == 1
+    record = records[0]
+    logged = {"email": record.email, "code": record.code, "challenge_id": record.challenge_id}  # type: ignore[attr-defined]
+    assert record.getMessage() == "dev sign-in code"
+    assert logged == {
+        "email": "logged@example.com",
+        "code": challenge["code"],
+        "challenge_id": challenge["challenge_id"],
+    }
+    # the logged code is the one that works
+    assert (await verify(client, challenge["challenge_id"], logged["code"])).status_code == 200
 
 
-async def test_dev_login_rejects_bad_email(client: AsyncClient) -> None:
-    response = await client.post("/v1/auth/dev-login", json={"email": "not-an-email"})
+async def test_code_is_not_echoed_unless_test_env_opts_in(settings: Settings) -> None:
+    app = create_app(settings.model_copy(update={"dev_login_echo_code": False}))
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/v1/auth/dev-login", json={"email": "quiet@example.com"})
+    assert response.status_code == 202
+    assert set(response.json()) == {"challenge_id", "expires_in_seconds", "hint"}
+
+
+async def test_sign_in_is_idempotent_per_email_and_case_insensitive(client: AsyncClient) -> None:
+    token_a = await dev_sign_in(client, "same@example.com")
+    token_b = await dev_sign_in(client, "SAME@example.com")
+    me_a = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_a}"})
+    me_b = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_b}"})
+    assert me_a.json()["id"] == me_b.json()["id"]
+
+
+async def test_two_users_get_distinct_identities(client: AsyncClient) -> None:
+    token_a = await dev_sign_in(client, "a@example.com")
+    token_b = await dev_sign_in(client, "b@example.com")
+    me_a = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_a}"})
+    me_b = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_b}"})
+    assert me_a.json()["id"] != me_b.json()["id"]
+
+
+async def test_code_hash_is_keyed_and_never_the_plain_code(
+    client: AsyncClient, db_session: AsyncSession, settings: Settings
+) -> None:
+    challenge = await start_dev_sign_in(client, "hash@example.com")
+    row = await db_session.get(DevLoginChallenge, uuid.UUID(challenge["challenge_id"]))
+    assert row is not None
+    assert challenge["code"] not in row.code_hash
+    assert row.code_hash == dev_login_service.hash_code(settings, row.id, challenge["code"])
+    assert row.attempts == 0 and row.consumed_at is None
+
+
+# --- validation ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("payload", [{"email": "not-an-email"}, {}, {"email": ""}])
+async def test_challenge_rejects_bad_email(client: AsyncClient, payload: dict[str, str]) -> None:
+    response = await client.post("/v1/auth/dev-login", json=payload)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-async def test_two_users_get_distinct_identities(client: AsyncClient) -> None:
-    token_a = await dev_login(client, "a@example.com")
-    token_b = await dev_login(client, "b@example.com")
-    me_a = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_a}"})
-    me_b = await client.get("/v1/me", headers={"Authorization": f"Bearer {token_b}"})
-    assert me_a.json()["id"] != me_b.json()["id"]
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"challenge_id": "not-a-uuid", "code": "123456"},
+        {"challenge_id": str(uuid.uuid4()), "code": "12345"},
+        {"challenge_id": str(uuid.uuid4()), "code": "1234567"},
+        {"challenge_id": str(uuid.uuid4()), "code": "12a456"},
+        {"challenge_id": str(uuid.uuid4())},
+    ],
+)
+async def test_verify_rejects_malformed_payload(
+    client: AsyncClient, payload: dict[str, str]
+) -> None:
+    response = await client.post(VERIFY, json=payload)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+# --- refusals: all identical 401s ----------------------------------------------------------
+
+
+async def test_wrong_code_is_401_and_does_not_create_user(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    challenge = await start_dev_sign_in(client, "wrong@example.com")
+    assert_invalid_code(await verify(client, challenge["challenge_id"], wrong_code(challenge)))
+    assert await user_count(db_session) == 0
+    # the right code still works afterwards (attempt 2 of 5)
+    assert (await verify(client, challenge["challenge_id"], challenge["code"])).status_code == 200
+
+
+async def test_unknown_challenge_is_401(client: AsyncClient) -> None:
+    assert_invalid_code(await verify(client, str(uuid.uuid4()), "123456"))
+
+
+async def test_expired_challenge_is_401(client: AsyncClient, db_session: AsyncSession) -> None:
+    challenge = await start_dev_sign_in(client, "late@example.com")
+    await db_session.execute(
+        update(DevLoginChallenge)
+        .where(DevLoginChallenge.id == uuid.UUID(challenge["challenge_id"]))
+        .values(expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    )
+    await db_session.commit()
+    assert_invalid_code(await verify(client, challenge["challenge_id"], challenge["code"]))
+
+
+async def test_challenge_is_single_use(client: AsyncClient) -> None:
+    challenge = await start_dev_sign_in(client, "once@example.com")
+    assert (await verify(client, challenge["challenge_id"], challenge["code"])).status_code == 200
+    assert_invalid_code(await verify(client, challenge["challenge_id"], challenge["code"]))
+
+
+async def test_sixth_attempt_is_refused_even_with_the_right_code(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    challenge = await start_dev_sign_in(client, "brute@example.com")
+    for _ in range(dev_login_service.MAX_ATTEMPTS):
+        assert_invalid_code(await verify(client, challenge["challenge_id"], wrong_code(challenge)))
+    row = await db_session.get(DevLoginChallenge, uuid.UUID(challenge["challenge_id"]))
+    assert row is not None and row.attempts == dev_login_service.MAX_ATTEMPTS
+    assert_invalid_code(await verify(client, challenge["challenge_id"], challenge["code"]))
+    assert await user_count(db_session) == 0
+
+
+async def test_failed_attempts_are_persisted_across_requests(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    challenge = await start_dev_sign_in(client, "count@example.com")
+    await verify(client, challenge["challenge_id"], wrong_code(challenge))
+    await verify(client, challenge["challenge_id"], wrong_code(challenge))
+    row = await db_session.get(DevLoginChallenge, uuid.UUID(challenge["challenge_id"]))
+    assert row is not None and row.attempts == 2
+
+
+async def test_sixth_open_challenge_invalidates_the_oldest(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    email = "many@example.com"
+    challenges = [await start_dev_sign_in(client, email) for _ in range(6)]
+    open_count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(DevLoginChallenge)
+            .where(DevLoginChallenge.email == email, DevLoginChallenge.consumed_at.is_(None))
+        )
+    ).scalar_one()
+    assert open_count == dev_login_service.MAX_OPEN_PER_EMAIL
+    oldest, second, newest = challenges[0], challenges[1], challenges[-1]
+    assert_invalid_code(await verify(client, oldest["challenge_id"], oldest["code"]))
+    assert (await verify(client, newest["challenge_id"], newest["code"])).status_code == 200
+    # challenges 2..5 are still open and independent of each other
+    assert (await verify(client, second["challenge_id"], second["code"])).status_code == 200
+
+
+async def test_challenge_cap_is_per_email(client: AsyncClient) -> None:
+    other = await start_dev_sign_in(client, "other@example.com")
+    for _ in range(6):
+        await start_dev_sign_in(client, "noisy@example.com")
+    assert (await verify(client, other["challenge_id"], other["code"])).status_code == 200
+
+
+# --- bearer verification ------------------------------------------------------------------
 
 
 async def test_missing_token_is_401_envelope(client: AsyncClient) -> None:
@@ -78,29 +265,6 @@ async def test_non_bearer_scheme_is_401(client: AsyncClient) -> None:
     assert response.status_code == 401
 
 
-async def test_dev_login_404_outside_dev_mode(apple_mode_client: AsyncClient) -> None:
-    response = await apple_mode_client.post(
-        "/v1/auth/dev-login", json={"email": "tester@example.com"}
-    )
-    assert response.status_code == 404
-    assert response.json()["error"]["code"] == "NOT_FOUND"
-
-
-async def test_dev_login_route_does_not_exist_outside_dev_mode(
-    apple_mode_client: AsyncClient,
-) -> None:
-    # Invalid body: a mounted route would answer 422; the path must not exist at all.
-    bad_body = await apple_mode_client.post("/v1/auth/dev-login", json={"email": "nope"})
-    assert bad_body.status_code == 404
-    assert bad_body.json()["error"]["code"] == "NOT_FOUND"
-    # GET: a mounted POST-only route would answer 405.
-    get = await apple_mode_client.get("/v1/auth/dev-login")
-    assert get.status_code == 404
-    assert get.json()["error"]["code"] == "NOT_FOUND"
-    # The rest of the API is unaffected.
-    assert (await apple_mode_client.get("/v1/health")).status_code == 200
-
-
 async def test_token_for_unknown_user_is_401(client: AsyncClient, settings: Settings) -> None:
     token = create_access_token(settings, uuid.uuid4())
     response = await client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
@@ -109,7 +273,7 @@ async def test_token_for_unknown_user_is_401(client: AsyncClient, settings: Sett
 
 
 async def test_token_for_deleted_user_is_401(client: AsyncClient, db_session: AsyncSession) -> None:
-    token = await dev_login(client, "gone@example.com")
+    token = await dev_sign_in(client, "gone@example.com")
     headers = {"Authorization": f"Bearer {token}"}
     assert (await client.get("/v1/me", headers=headers)).status_code == 200
     await db_session.execute(delete(User).where(User.email == "gone@example.com"))
@@ -119,10 +283,36 @@ async def test_token_for_deleted_user_is_401(client: AsyncClient, db_session: As
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
+# --- non-dev mode: neither route exists ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("POST", "/v1/auth/dev-login", {"email": "tester@example.com"}),
+        ("POST", "/v1/auth/dev-login", {"email": "nope"}),  # invalid body: still 404, not 422
+        ("GET", "/v1/auth/dev-login", None),  # not 405
+        ("POST", VERIFY, {"challenge_id": str(uuid.uuid4()), "code": "123456"}),
+        ("POST", VERIFY, {}),
+        ("GET", VERIFY, None),
+    ],
+)
+async def test_dev_login_routes_do_not_exist_outside_dev_mode(
+    apple_mode_client: AsyncClient, method: str, path: str, payload: dict[str, str] | None
+) -> None:
+    response = await apple_mode_client.request(method, path, json=payload)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert (await apple_mode_client.get("/v1/health")).status_code == 200
+
+
+# --- first-use race -----------------------------------------------------------------------
+
+
 async def test_first_login_race_loser_reuses_winners_row(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two concurrent first logins: the loser's SELECT misses, then its INSERT conflicts."""
+    """Two concurrent first verifications: the loser's SELECT misses, then its INSERT conflicts."""
     winner = await users_service.get_or_create_by_email(
         db_session, email="race@example.com", display_name="Winner", auth_provider="dev"
     )
@@ -143,5 +333,4 @@ async def test_first_login_race_loser_reuses_winners_row(
     assert loser.id == winner.id
     assert loser.display_name == "Winner"
     assert calls["n"] == 2
-    # the session is still usable after the savepoint rollback
     assert await users_service.get_by_id(db_session, winner.id) is not None

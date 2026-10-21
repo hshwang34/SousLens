@@ -2,6 +2,12 @@
 
 The middleware logs method, path, status and duration only. Request and response bodies are
 never logged (PRD §13.3, §16.2).
+
+One deliberate exception: the ``souslens.devlogin`` logger (``app/domains/users/dev_login.py``)
+emits the tester's email and one-time sign-in code at INFO. That logger only runs when
+``AUTH_MODE=dev`` (dev/test environments, DECISIONS #5): the server log *is* the delivery
+channel for the code, which is what makes dev sign-in a proof of possession rather than
+"anyone on the LAN who knows an email". No other logger may include PII.
 """
 
 from __future__ import annotations
@@ -59,10 +65,13 @@ class JsonFormatter(logging.Formatter):
 def configure_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.setLevel(level.upper())
+    # Replace only our own handler; foreign handlers (pytest's caplog, uvicorn) stay attached.
     for handler in list(root.handlers):
-        root.removeHandler(handler)
+        if getattr(handler, "_souslens_json", False):
+            root.removeHandler(handler)
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler._souslens_json = True  # type: ignore[attr-defined]
     root.addHandler(handler)
     for noisy in ("uvicorn.access",):
         logging.getLogger(noisy).disabled = True

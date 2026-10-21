@@ -127,6 +127,23 @@ class User(TimestampMixin, Base):
     )
 
 
+class DevLoginChallenge(CreatedAtMixin, Base):
+    """One-time sign-in code for the dev auth provider (DECISIONS #5). Dev mode only.
+
+    The code itself is never stored: ``code_hash`` is an HMAC keyed with the server secret.
+    """
+
+    __tablename__ = "dev_login_challenges"
+    __table_args__ = (CheckConstraint("attempts >= 0", name="attempts_non_negative"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Recipe(TimestampMixin, Base):
     """Mutable recipe metadata. Content lives in immutable ``recipe_versions``."""
 

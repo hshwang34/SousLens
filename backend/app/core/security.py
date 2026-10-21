@@ -1,7 +1,10 @@
 """JWT issuance/verification and the ``CurrentUser`` dependency (AUTH-01, SEC-01).
 
-``AuthProvider`` is the seam where Sign in with Apple slots in later (DECISIONS #5). Dev login is
-only reachable when ``AUTH_MODE=dev``; the router enforces that, this module just signs tokens.
+``AuthProvider`` is the seam where Sign in with Apple slots in later (DECISIONS #5). The dev
+provider is only mounted when ``AUTH_MODE=dev`` (never in prod, see ``app/core/config.py``) and
+only resolves an identity *after* ``app/domains/users/dev_login.py`` has verified the one-time
+code that was printed to the server log. This module signs and verifies tokens; it never
+decides who may sign in.
 """
 
 from __future__ import annotations
@@ -63,7 +66,11 @@ class AuthProvider(Protocol):
 
 
 class DevAuthProvider:
-    """Email-only sign-in for the pilot. Creates the user on first use."""
+    """Pilot sign-in: email proven via a one-time code in the server log.
+
+    ``authenticate`` must only be called with an email returned by
+    :func:`app.domains.users.dev_login.verify_challenge`. Creates the user on first use.
+    """
 
     name = "dev"
 

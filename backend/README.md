@@ -6,20 +6,34 @@ FastAPI + SQLAlchemy 2 (async, asyncpg) + Postgres 16, managed with `uv` on Pyth
 ## Run
 
 ```bash
-cp ../.env.example .env        # defaults work for the compose DB (host port 5433)
+cp ../.env.example .env        # defaults work for the compose DB (host port 5433); AUTH_MODE and
+                               # JWT_SECRET are required (the app refuses to start without them)
 make db-up                     # postgres:16 in docker, creates souslens + souslens_test
 make seed                      # alembic upgrade head, then fixtures/seeded_recipes/*.json
 make dev                       # http://localhost:8000/v1/health  (docs at /docs)
 curl -s localhost:8000/v1/recipes | python3 -m json.tool
 ```
 
-Dev sign-in (only when `AUTH_MODE=dev`):
+Dev sign-in (only when `AUTH_MODE=dev`; DECISIONS #5) is a two-step proof of possession: the
+one-time code is printed to the **server log**, never returned by the API.
 
 ```bash
+# 1. ask for a code (202). Watch the `make dev` terminal for a JSON line like
+#    {"logger":"souslens.devlogin","message":"dev sign-in code","email":"tester@example.com","code":"483920",...}
 curl -s -X POST localhost:8000/v1/auth/dev-login \
   -H 'content-type: application/json' -d '{"email":"tester@example.com"}'
-# → {"access_token": "...", "token_type": "bearer", "user": {...}}; use it as `Authorization: Bearer`.
+# → {"challenge_id":"<uuid>","expires_in_seconds":600,"hint":"Check the server log for your sign-in code."}
+
+# 2. exchange challenge id + code for a token (200)
+curl -s -X POST localhost:8000/v1/auth/dev-login/verify \
+  -H 'content-type: application/json' -d '{"challenge_id":"<uuid>","code":"483920"}'
+# → {"access_token":"...","token_type":"bearer","user":{...}}; use it as `Authorization: Bearer`.
 ```
+
+Codes expire after 10 minutes, are single use, allow 5 attempts, and at most 5 open challenges
+per email (a sixth invalidates the oldest). Wrong, expired, reused or unknown → `401
+UNAUTHORIZED` "Invalid or expired sign-in code". Tests set `DEV_LOGIN_ECHO_CODE=true`
+(allowed only when `ENVIRONMENT=test`) so the 202 body also carries `code`.
 
 ## Check
 
