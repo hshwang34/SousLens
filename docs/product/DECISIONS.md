@@ -43,3 +43,12 @@ Engineering call by the lead, surfaced here because it is what testers see. *Liv
 #6 · 2026-10-20 · **Units: US-customary display with metric toggle per user preference** (PRD §0).
 Seed recipes are the five in PRD Appendix B, authored as original fixtures. *Lives in:*
 `fixtures/seeded_recipes/`.
+
+#7 · 2026-10-20 · **Any signed-in tester may publish recipes in the pilot** (no creator allowlist).
+Brief 003's default, adopted because the pilot is 5–10 known people; revisit before any public
+build. *Lives in:* brief 003, backend publish endpoint (no role check).
+
+#8 · 2026-10-20 · **Slice 1 is built as two PRs stacked on the Slice 0 branches** (backend on PR #1's
+branch, iOS on PR #2's) so work continues while the PM is away; GitHub retargets them to `main`
+when the parents merge. PRs #1/#2 only received security-review fixes after their gates. *Why:*
+the PM pre-approved Slices 0–3 and is not watching in real time.
