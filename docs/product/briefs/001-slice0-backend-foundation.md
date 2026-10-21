@@ -1,6 +1,6 @@
 # 001 — Slice 0: backend foundation
 
-**Status:** in review (PR #1) · **Owner:** PM · **PR:** https://github.com/hshwang34/SousLens/pull/1 · **Updated:** 2026-10-20
+**Status:** shipped (PR #1 merged 2026-10-20) · **Owner:** PM · **PR:** https://github.com/hshwang34/SousLens/pull/1 · **Updated:** 2026-10-20
 
 ## Problem
 Nothing exists yet. Every later slice (authoring, pantry, cooking engine) needs an owned, versioned,
