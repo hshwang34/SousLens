@@ -24,12 +24,12 @@ final class SystemAudioOutput: AudioOutput {
     }
 
     /// A new utterance interrupts the one in flight (the coach says one thing at a time).
-    func speak(_ text: String) async {
+    func speak(_ text: String, pace: SpeechPace) async {
         guard isAvailable, !text.isEmpty else { return }
         interrupt()
 
         let utterance = AVSpeechUtterance(string: text)
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * (pace == .slow ? 0.7 : 0.95)
         let id = ObjectIdentifier(utterance)
         current = id
         isSpeaking = true

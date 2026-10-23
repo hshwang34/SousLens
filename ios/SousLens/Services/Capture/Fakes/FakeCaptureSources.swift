@@ -90,16 +90,19 @@ final class FakeAudioOutput: AudioOutput {
     var isAvailable: Bool
     private(set) var isSpeaking = false
     private(set) var spoken: [String] = []
+    /// Pace of each entry in `spoken`.
+    private(set) var paces: [SpeechPace] = []
     private(set) var stopCount = 0
 
     init(isAvailable: Bool = true) {
         self.isAvailable = isAvailable
     }
 
-    func speak(_ text: String) async {
+    func speak(_ text: String, pace: SpeechPace) async {
         guard isAvailable else { return }
         isSpeaking = true
         spoken.append(text)
+        paces.append(pace)
         isSpeaking = false
     }
 

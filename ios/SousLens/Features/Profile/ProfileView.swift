@@ -15,6 +15,7 @@ struct ProfileView: View {
             List {
                 myRecipesSection
                 draftsSection
+                foodSection
                 accountSection
                 deviceSection
                 Section {
@@ -183,6 +184,24 @@ struct ProfileView: View {
             } footer: {
                 if !model.drafts.isEmpty { Text("Tap to continue. Swipe to delete.") }
             }
+        }
+    }
+
+    // MARK: - Food preferences (brief 005)
+
+    private var foodSection: some View {
+        Section {
+            NavigationLink {
+                PreferencesView()
+            } label: {
+                Label("Allergies & foods to avoid", systemImage: "allergens")
+                    .frame(minHeight: Metrics.minTapTarget)
+            }
+            .accessibilityIdentifier("profile.preferences")
+        } header: {
+            Text("Cooking")
+        } footer: {
+            Text("Allergies block swaps; foods to avoid are skipped when possible.")
         }
     }
 

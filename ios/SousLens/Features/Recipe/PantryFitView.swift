@@ -8,6 +8,14 @@ struct PantryFitView: View {
 
     @State private var model: PantryFitViewModel?
     @State private var editor: PantryItemEditorModel?
+    @State private var swapSheet: SwapTarget?
+
+    /// The ingredient line a "Find a swap" sheet is open for.
+    private struct SwapTarget: Identifiable {
+        let ingredientRef: String
+        let name: String
+        var id: String { ingredientRef }
+    }
 
     var body: some View {
         Group {
@@ -24,6 +32,15 @@ struct PantryFitView: View {
             let model = self.model ?? makeModel()
             self.model = model
             await model.load()
+            await model.loadVariation()
+        }
+        .sheet(item: $swapSheet) { target in
+            SubstitutionSheet(
+                model: SubstitutionSheetViewModel(recipeVersionId: recipeVersionId, ingredientRef: target.ingredientRef,
+                                                  ingredientName: target.name, service: environment.api),
+                onApprove: { swap in model?.approve(swap) },
+                onFindAnotherRecipe: { environment.showExplore() }
+            )
         }
         .sheet(item: $editor) { editor in
             PantryItemEditorView(model: editor) { _ in
@@ -34,7 +51,8 @@ struct PantryFitView: View {
     }
 
     private func makeModel() -> PantryFitViewModel {
-        let model = PantryFitViewModel(recipeVersionId: recipeVersionId, recipeTitle: recipeTitle, service: environment.api)
+        let model = PantryFitViewModel(recipeVersionId: recipeVersionId, recipeTitle: recipeTitle,
+                                       service: environment.api, cooking: environment.api)
         model.onPantryChanged = { [environment] in environment.notePantryChanged() }
         return model
     }
@@ -73,6 +91,7 @@ struct PantryFitView: View {
                     ForEach(section.rows) { row in
                         FitRowView(
                             row: row,
+                            identifier: "fit.\(section.kind.rawValue)",
                             isBusy: row.pantryItemId.map(model.busyItemIds.contains) ?? false,
                             onAdd: {
                                 editor = PantryItemEditorModel(mode: .add, form: model.addForm(for: row), service: environment.api)
@@ -84,9 +103,10 @@ struct PantryFitView: View {
                                 if let item = model.pantryItem(for: row) {
                                     editor = PantryItemEditorModel(mode: .edit(item), service: environment.api)
                                 }
-                            }
+                            },
+                            onFindSwap: { swapSheet = SwapTarget(ingredientRef: row.id, name: row.name) },
+                            onUndoSwap: { model.revertSwap(ingredientRef: row.id) }
                         )
-                        .accessibilityIdentifier("fit.\(section.kind.rawValue)")
                     }
                 } header: {
                     Label("\(section.kind.title) · \(section.rows.count)", systemImage: section.kind.systemImage)
@@ -97,6 +117,62 @@ struct PantryFitView: View {
         }
         .scrollContentBackground(.hidden)
         .refreshable { await model.load() }
+        .safeAreaInset(edge: .bottom) {
+            startBar(model)
+        }
+    }
+
+    /// Adaptations preview + Start cooking (J3 step 6).
+    private func startBar(_ model: PantryFitViewModel) -> some View {
+        VStack(spacing: Spacing.sm) {
+            if model.canUseVariation {
+                Button {
+                    model.useVariation()
+                } label: {
+                    Label("Use my changes from last time", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(SLButtonStyle(prominent: false))
+                .accessibilityIdentifier("fit.useVariation")
+            }
+            if !model.approvedSwapList.isEmpty {
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text("Your swaps for this cook")
+                        .font(SLFont.caption)
+                        .foregroundStyle(SLColor.textSecondary)
+                    ForEach(model.approvedSwapList) { swap in
+                        Text("\(swap.ingredientName) → \(swap.candidate) · \(swap.label)")
+                            .font(SLFont.footnote)
+                            .foregroundStyle(SLColor.textPrimary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("fit.swapSummary")
+            }
+            if let error = model.startError {
+                Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger)
+            }
+            Button {
+                Task {
+                    if let session = await model.startCooking() {
+                        environment.cooking.present(newSession: session)
+                    }
+                }
+            } label: {
+                if model.isStarting {
+                    ProgressView().tint(.white)
+                } else {
+                    Label("Start cooking", systemImage: "flame")
+                }
+            }
+            .buttonStyle(SLButtonStyle(prominent: true))
+            .disabled(model.isStarting || model.fit == nil)
+            .accessibilityIdentifier("fit.startCooking")
+            .accessibilityHint(model.approvedSwapList.isEmpty ? "Starts the recipe as written" : "Starts the recipe with your swaps")
+        }
+        .padding(.horizontal, Spacing.screen)
+        .padding(.vertical, Spacing.sm)
+        .background(.regularMaterial)
     }
 
     private func header(_ model: PantryFitViewModel) -> some View {
@@ -140,12 +216,39 @@ struct PantryFitView: View {
 
 private struct FitRowView: View {
     let row: FitRowPresentation
+    /// On the summary element only ("fit.missing"), so the buttons keep their own identifiers.
+    let identifier: String
     let isBusy: Bool
     let onAdd: () -> Void
     let onStillHave: () -> Void
     let onFixAmount: () -> Void
+    let onFindSwap: () -> Void
+    let onUndoSwap: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            summary
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(row.accessibilityLabel)
+                .accessibilityIdentifier(identifier)
+            if !row.actions.isEmpty {
+                HStack(spacing: Spacing.sm) {
+                    ForEach(row.actions, id: \.self) { action in
+                        Button(action.title) { perform(action) }
+                            .buttonStyle(.bordered)
+                            .tint(SLColor.accent)
+                            .frame(minHeight: Metrics.minTapTarget)
+                            .disabled(action == .stillHaveIt && isBusy)
+                            .accessibilityLabel(row.name.isEmpty ? action.title : "\(action.title): \(row.name)")
+                            .accessibilityIdentifier("fit.action.\(action.rawValue)")
+                    }
+                }
+            }
+        }
+        .padding(.vertical, Spacing.xs)
+    }
+
+    private var summary: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(row.name)
@@ -167,44 +270,25 @@ private struct FitRowView: View {
                     .italic()
                     .foregroundStyle(SLColor.textSecondary)
             }
-            if !row.actions.isEmpty {
-                HStack(spacing: Spacing.sm) {
-                    ForEach(row.actions, id: \.self) { action in
-                        Button(action.title) { perform(action) }
-                            .buttonStyle(.bordered)
-                            .tint(SLColor.accent)
-                            .frame(minHeight: Metrics.minTapTarget)
-                            .disabled(action == .stillHaveIt && isBusy)
-                    }
+            if let swap = row.swap {
+                Label {
+                    Text("Swap: \(swap.candidate)\(swap.ratioOrAmount.map { " (\($0))" } ?? "") · \(swap.label)")
+                } icon: {
+                    Image(systemName: "arrow.triangle.swap")
                 }
+                .font(SLFont.callout.weight(.semibold))
+                .foregroundStyle(SLColor.accent)
             }
         }
-        .padding(.vertical, Spacing.xs)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(row.accessibilityLabel)
-        // The combined element swallows the buttons; expose each one as a named action.
-        .modifier(FitRowActions(row: row, perform: perform))
     }
 
     private func perform(_ action: FitRowPresentation.Action) {
         switch action {
+        case .findSwap: onFindSwap()
+        case .undoSwap: onUndoSwap()
         case .addToPantry: onAdd()
         case .stillHaveIt: if !isBusy { onStillHave() }
         case .fixAmount: onFixAmount()
         }
-    }
-}
-
-private struct FitRowActions: ViewModifier {
-    let row: FitRowPresentation
-    let perform: (FitRowPresentation.Action) -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .accessibilityActions {
-                ForEach(row.actions, id: \.self) { action in
-                    Button(row.name.isEmpty ? action.title : "\(action.title): \(row.name)") { perform(action) }
-                }
-            }
     }
 }

@@ -25,6 +25,8 @@ final class AppEnvironment {
     let camera: any CameraSource
     let speech: any SpeechInput
     let audio: any AudioOutput
+    /// Brief 005: open cooking session (resume banner, floating pill, full-screen cooking view).
+    let cooking: CookingSessionStore
 
     var selectedTab: Tab = .explore
     /// Explore's navigation stack. Deep links push onto it from any tab.
@@ -60,7 +62,8 @@ final class AppEnvironment {
          captureFlags: CaptureFeatureFlags,
          camera: any CameraSource,
          speech: any SpeechInput,
-         audio: any AudioOutput) {
+         audio: any AudioOutput,
+         sessionCache: SessionCaching = InMemorySessionCache()) {
         self.serverSettings = serverSettings
         self.api = api
         self.auth = auth
@@ -69,6 +72,7 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
+        cooking = CookingSessionStore(service: api, cache: sessionCache)
         // Recipe ids belong to one server: a link (or an open stack) from the old server is stale.
         let previous = serverSettings.onEffectiveBaseURLChanged
         serverSettings.onEffectiveBaseURLChanged = { [weak self] oldValue, newValue in
@@ -79,6 +83,13 @@ final class AppEnvironment {
 
     func discardNavigationState() {
         pendingDeepLink = nil
+        exploreRoutes = []
+        cooking.reset()
+    }
+
+    /// "Find another recipe" from a dead-end swap: back to the Explore root.
+    func showExplore() {
+        selectedTab = .explore
         exploreRoutes = []
     }
 
@@ -141,7 +152,8 @@ final class AppEnvironment {
             captureFlags: flags,
             camera: flags.phoneCamera ? PhoneCameraSource() : FakeCameraSource(isAvailable: false),
             speech: flags.phoneSpeech ? PhoneSpeechInput() : FakeSpeechInput(isAvailable: false),
-            audio: flags.systemAudio ? SystemAudioOutput() : FakeAudioOutput(isAvailable: false)
+            audio: flags.systemAudio ? SystemAudioOutput() : FakeAudioOutput(isAvailable: false),
+            sessionCache: SessionCache()
         )
     }
 
