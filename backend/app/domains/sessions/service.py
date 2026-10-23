@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -45,8 +45,10 @@ from app.db.models import (
     TimerStatus,
     User,
 )
+from app.domains import usage
 from app.domains.matching.dictionary import IngredientDictionary, load_dictionary
 from app.domains.matching.normalize import conjuncts
+from app.domains.pantry.service import lock_user
 from app.domains.recipes import service as recipes_service
 from app.domains.recipes.versions import version_meta
 from app.domains.safety.content import StructuralContext, conflicts, structural_verdict
@@ -79,6 +81,8 @@ LABELS = {"rule": "Common swap", "ai": "AI suggested adaptation"}
 ACTIVE_STATUSES = (SessionStatus.CREATED, SessionStatus.ACTIVE, SessionStatus.PAUSED)
 MAX_RUNNING_TIMERS = 10
 MAX_NOTES = 50
+MAX_OPEN_SESSIONS = 3  # created/active/paused per user
+SESSIONS_PER_HOUR = 30  # per user, counted in usage_events (survives deletion)
 LIST_LIMIT = 50
 
 
@@ -145,6 +149,8 @@ def timer_status(timer: Timer, now: datetime) -> str:
 async def build_view(
     session: AsyncSession, row: CookingSession, settings_share_base: str, now: datetime
 ) -> SessionOut:
+    if "updated_at" in inspect(row).unloaded:  # server onupdate expired it on flush
+        await session.refresh(row, ["updated_at"])
     version, recipe = await _pinned(session, row)
     ctx = context_from(version, recipe)
     adaptations = await active_adaptations(session, row.id)
@@ -333,6 +339,33 @@ async def create(
 ) -> SessionOut:
     now = _now()
     ctx = await version_context(session, user, body.recipe_version_id)
+    await lock_user(session, user.id, "sessions")
+    open_ids = list(
+        (
+            await session.execute(
+                select(CookingSession.id)
+                .where(
+                    CookingSession.owner_user_id == user.id,
+                    CookingSession.status.in_(ACTIVE_STATUSES),
+                )
+                .order_by(CookingSession.updated_at.desc(), CookingSession.id.desc())
+            )
+        ).scalars()
+    )
+    if len(open_ids) >= MAX_OPEN_SESSIONS:
+        raise StateConflict(
+            f"You already have {len(open_ids)} sessions in progress; resume or abandon one first",
+            extra={"details": {"open_session_ids": [str(i) for i in open_ids]}},
+        )
+    await usage.reserve(
+        session,
+        user.id,
+        usage.SESSION_CREATED,
+        limit=SESSIONS_PER_HOUR,
+        window=timedelta(hours=1),
+        now=now,
+        message="Too many new cooking sessions in the last hour; try again later",
+    )
     dictionary = await load_dictionary(session)
     prof = await preferences.profile(session, user)
     specs = [
@@ -648,6 +681,9 @@ async def save_variation(
         return False
     payload = [
         {
+            "id": str(a.id),
+            "approved_at": a.approved_at.isoformat(),
+            "label": LABELS[a.source],
             "ingredient_ref": a.ingredient_ref,
             "original": a.original,
             "replacement": a.replacement,

@@ -100,6 +100,13 @@ pantry > preference > creativity):
 
 `SessionSummary` = `{id, recipe_version_id, recipe_id, title, status, step_index, steps_count, updated_at}`.
 
+Limits (security review, brief 005):
+- **Open sessions:** at most 3 open (`created|active|paused`) sessions per user; a 4th `POST /sessions`
+  → **409 `STATE_CONFLICT`** with `details.open_session_ids` (newest first) so the app can offer
+  to resume or abandon one.
+- **Session creation:** at most 30 new sessions per user per hour → **429 `RATE_LIMITED`**
+  (counted in a durable ledger; deleting sessions does not refund it).
+
 ### Commands (§11.1)
 
 ```jsonc
@@ -152,11 +159,18 @@ pantry > preference > creativity):
 - Mock coach: answers from the current step's instruction, cues, warnings and creator notes; food
   safety questions ("is this chicken done?") always return a thermometer/verified-guidance notice
   and never certify doneness.
-- `query` ≤ 500 chars; 60 asks per session per hour → 429.
+- `query` ≤ 500 chars. Ask limits: **120 asks per user per hour across all sessions** (durable ledger; new or deleted sessions never reset it) and 60 per session per hour → **429 `RATE_LIMITED`**.
 
 ## Private variation (COOK-08)
 
-`GET /recipe-versions/{id}/my-variation` → `{"adaptations": [...], "saved_at": "iso"}` or 404.
+`GET /recipe-versions/{id}/my-variation` → `{"adaptations": [...], "saved_at": "iso", "recipe_version_id": "uuid"}`
+or 404. Each `adaptations` element is exactly the Session adaptation shape
+`{id, ingredient_ref, original, replacement, ratio_or_amount, source, label, reason, approved_at}`;
+only swaps whose ingredient (same id and name) still exists in the requested version are returned.
+`POST /sessions` accepts them back as `{ingredient_ref, replacement, ratio_or_amount, source, reason}`,
+re-validated against the version and the caller's current allergies. `complete` with
+`save_changes: true` but no active swaps leaves any existing variation untouched
+(`saved_changes: false`).
 `DELETE /recipe-versions/{id}/my-variation` → 204. The fit/start screen may offer "Use my changes
 from last time", which sends those adaptations in `POST /sessions`.
 
@@ -164,3 +178,12 @@ from last time", which sends those adaptations in `POST /sessions`.
 
 `GET /recipe-versions/{id}` and fit/substitution calls are also allowed when the caller owns a
 session pinning that version (the Slice 1 TODO).
+
+## Notes (backend, brief 005)
+
+- UUIDs are accepted in any case (iOS sends uppercase) in paths and bodies; responses use lowercase.
+- `approve_adaptation` for an ingredient that already has an active swap replaces it (the old one is
+  reverted in the same command). An allergy conflict or a not-recommended structural swap → 422.
+- `cancel_timer` on an unknown timer → 404; on an already cancelled timer → 409 `INVALID_TRANSITION`.
+  `revert_adaptation` on an unknown id → 404; already reverted → 409 `INVALID_TRANSITION`.
+- `GET /sessions` without `status` lists all of the caller's sessions (newest first, max 50).

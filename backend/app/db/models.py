@@ -626,6 +626,26 @@ class SubstitutionSuggestionRecord(CreatedAtMixin, Base):
     )
 
 
+class UsageEvent(Base):
+    """Durable per-user usage ledger for rate limits (``ask``, ``session_created``).
+
+    Deliberately not linked to sessions: deleting or recreating a session must never reset a
+    budget (brief 005 security review).
+    """
+
+    __tablename__ = "usage_events"
+    __table_args__ = (Index("ix_usage_events_user_kind_created", "user_id", "kind", "created_at"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
 class MediaConsent(Base):
     __tablename__ = "media_consents"
 

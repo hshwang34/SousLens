@@ -12,6 +12,8 @@ Create Date: 2026-10-23
   ``session_notes``; ``cooking_sessions.outcome_json``.
 * ``recipe_variations``: one private change set per user + recipe (COOK-08).
 * ``session_events.request_hash`` / ``response_json``: idempotent command replay.
+* ``usage_events``: durable per-user ledger for the ask / session-creation rate limits (not
+  linked to sessions, so deleting a session never resets a budget).
 """
 from __future__ import annotations
 
@@ -106,6 +108,15 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_session_notes'))
     )
     op.create_index(op.f('ix_session_notes_session_id'), 'session_notes', ['session_id'], unique=False)
+    op.create_table('usage_events',
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('user_id', sa.UUID(), nullable=False),
+    sa.Column('kind', sa.String(length=32), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], name=op.f('fk_usage_events_user_id_users'), ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_usage_events'))
+    )
+    op.create_index('ix_usage_events_user_kind_created', 'usage_events', ['user_id', 'kind', 'created_at'], unique=False)
     op.add_column('cooking_sessions', sa.Column('outcome_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
     op.add_column('session_events', sa.Column('request_hash', sa.String(length=64), nullable=True))
     op.add_column('session_events', sa.Column('response_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
@@ -115,6 +126,8 @@ def downgrade() -> None:
     op.drop_column('session_events', 'response_json')
     op.drop_column('session_events', 'request_hash')
     op.drop_column('cooking_sessions', 'outcome_json')
+    op.drop_index('ix_usage_events_user_kind_created', table_name='usage_events')
+    op.drop_table('usage_events')
     op.drop_index(op.f('ix_session_notes_session_id'), table_name='session_notes')
     op.drop_table('session_notes')
     op.drop_index('uq_session_adaptations_active_ref', table_name='session_adaptations', postgresql_where=sa.text('reverted_at IS NULL'))

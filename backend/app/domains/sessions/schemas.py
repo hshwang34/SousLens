@@ -237,13 +237,9 @@ class AskOut(BaseModel):
     requires_confirmation: bool
 
 
-class VariationAdaptation(BaseModel):
-    ingredient_ref: str
-    original: str
-    replacement: str
-    ratio_or_amount: str | None
-    source: AdaptationSource
-    reason: str | None
+class VariationAdaptation(AdaptationOut):
+    """Exactly the Session adaptation shape (iOS reuses one decoder); ``id``/``approved_at``
+    are those of the session adaptation that was saved."""
 
 
 class VariationOut(BaseModel):

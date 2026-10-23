@@ -9,8 +9,9 @@
   now, and it always ``requires_confirmation``.
 * Deterministic safety wins over the coach: a doneness / safety question always carries the
   thermometer notice and never a certification; tasting anything raw is refused.
-* Rate limit: 60 asks per session per hour (the user turn is the slot, reserved and committed
-  before the provider call so the lock never spans it).
+* Rate limits: 120 asks per user per hour across all sessions (``usage_events``, survives
+  session deletion) and 60 per session per hour; both reserved and committed before the
+  provider call so no lock spans it.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ from app.core.errors import (
     RateLimited,
 )
 from app.db.models import CookingSession, MessageRole, SessionMessage, User
+from app.domains import usage
 from app.domains.recipes.schemas import IngredientOut, StepOut
 from app.domains.safety.content import (
     RAW_TASTING_NOTICE,
@@ -63,7 +65,8 @@ from app.domains.users import preferences
 
 log = logging.getLogger("souslens.sessions.ask")
 
-RATE_LIMIT_PER_HOUR = 60
+RATE_LIMIT_PER_HOUR = 60  # per session (secondary cap)
+USER_ASKS_PER_HOUR = 120  # per user, across sessions (primary)
 RECENT_TURNS = 10
 PROVIDER_TIMEOUT_SECONDS = 20.0
 MAX_TIMER_SECONDS = 24 * 3600
@@ -153,6 +156,17 @@ async def ask(
     )
     if (asked or 0) >= RATE_LIMIT_PER_HOUR:
         raise RateLimited("Too many questions in the last hour for this session; try again later")
+    # The primary budget is per user across all sessions, in a ledger that session deletion
+    # cannot touch (brief 005 security review). Rolled back if anything below fails.
+    await usage.reserve(
+        session,
+        user.id,
+        usage.ASK,
+        limit=USER_ASKS_PER_HOUR,
+        window=timedelta(hours=1),
+        now=now,
+        message="Too many questions in the last hour; try again later",
+    )
 
     version, recipe = await service._pinned(session, row)
     ctx = context_from(version, recipe)
