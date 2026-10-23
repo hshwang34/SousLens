@@ -116,3 +116,25 @@ are human-readable sentences.
   sweetened/unsweetened, ground/whole. `gochujang ≠ gochugaru`.
 - Units: count; mass g, kg, oz, lb; volume ml, l, tsp, tbsp, cup, fl_oz. Convert within a family
   only. No mass↔volume conversion → `uncertain` with a `conversion_note`.
+
+## Clarifications (backend fix round 1)
+
+- **Same ingredient twice in one `POST /pantry`** (and no existing pantry match) → **422**
+  `VALIDATION_ERROR` with `fields: ["items.N.raw_label"]`, unless the later item has
+  `{"keep_both": true}`.
+- **`merge_into`** must name one of *my* pantry items with the *same normalised name*, otherwise
+  422. Two items in one request may not merge into the same row (422). A merge with no quantity
+  keeps the existing amount together with its `source`, `confidence` and `quantity_is_estimate`.
+- **`quantity`** must be > 0 when present (422 otherwise); send `null` (PATCH) to clear it.
+- **`quantity_is_estimate`** is forced to `false` unless `source` is `photo` and a quantity is
+  present. Any PATCH that sets `quantity` (a number or `null`) sets it to `false`;
+  `/confirm` does not.
+- **Estimates never make a fit line `available`**: an estimated amount caps the line at
+  `uncertain` ("The amount is an estimate from a photo, so check it.") and is never summed.
+- **Expired observation** (`expires_at` passed) in `POST /pantry` → **404** "Observation not
+  found" and nothing is written; resend without `observation_id`.
+- **Re-linking a confirmed observation** → **409** `STATE_CONFLICT` "These items were already
+  added", nothing written.
+- **Provider failures** on `POST /pantry/observations`: **503** `PROVIDER_UNAVAILABLE`
+  (retryable) for timeouts/outages, **502** `AI_OUTPUT_INVALID` (retryable) when the output is
+  malformed twice. Failed attempts count toward the 30/hour limit.
