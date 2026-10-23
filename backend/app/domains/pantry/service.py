@@ -13,10 +13,10 @@ from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import DuplicatePantryItem, NotFound, ValidationError
+from app.core.errors import DuplicatePantryItem, NotFound, StateConflict, ValidationError
 from app.db.models import (
     ObservationStatus,
     PantryItem,
@@ -61,7 +61,13 @@ def _confidence(item: NewItem) -> float | None:
     return None if item.source == "manual" else item.confidence
 
 
-async def list_items(session: AsyncSession, user: User) -> list[PantryItem]:
+async def purge_expired_observations(session: AsyncSession, now: datetime) -> None:
+    """Opportunistic TTL purge (PRIV-01): every pantry read/write and every new scan runs it."""
+    await session.execute(delete(PantryObservation).where(PantryObservation.expires_at <= now))
+
+
+async def list_items(session: AsyncSession, user: User, now: datetime) -> list[PantryItem]:
+    await purge_expired_observations(session, now)
     stmt = (
         select(PantryItem)
         .where(PantryItem.owner_user_id == user.id)
@@ -80,8 +86,10 @@ async def _link_observation(
     obs = await get_owned_or_404(
         session, PantryObservation, observation_id, user.id, label="Observation"
     )
-    if obs.expires_at <= now:
-        raise NotFound("Observation not found")
+    if obs.expires_at <= now or obs.status != ObservationStatus.PENDING:
+        if obs.expires_at > now and obs.status == ObservationStatus.CONFIRMED:
+            raise StateConflict("These items were already added")
+        raise NotFound("Observation not found")  # expired, failed or still reserved
     obs.status = ObservationStatus.CONFIRMED
 
 
@@ -112,6 +120,7 @@ async def create_items(
 
     conflicts: list[Conflict] = []
     first_index: dict[str, int] = {}
+    merge_targets: dict[uuid.UUID, int] = {}
     for i, (item, norm) in enumerate(zip(body.items, norms, strict=True)):
         matches = existing_by_key.get(norm.key, [])
         if isinstance(item.resolution, MergeInto):
@@ -120,6 +129,14 @@ async def create_items(
                     "merge_into must name an existing pantry item with the same name",
                     extra={"fields": [f"items.{i}.resolution.merge_into"]},
                 )
+            target = item.resolution.merge_into
+            if target in merge_targets:
+                raise ValidationError(
+                    f"items.{i} and items.{merge_targets[target]} merge into the same item; "
+                    "combine them first",
+                    extra={"fields": [f"items.{i}.resolution.merge_into"]},
+                )
+            merge_targets[target] = i
         elif item.resolution is None:
             if matches:
                 conflicts.append(Conflict(index=i, existing=PantryItemOut.of(matches[0])))
@@ -138,6 +155,7 @@ async def create_items(
 
     if body.observation_id is not None:
         await _link_observation(session, user, body.observation_id, now)
+    await purge_expired_observations(session, now)
 
     by_id = {m.id: m for group in existing_by_key.values() for m in group}
     out: list[PantryItem] = []
@@ -145,18 +163,20 @@ async def create_items(
         if isinstance(item.resolution, MergeInto):
             row = by_id[item.resolution.merge_into]
             if item.quantity is not None:
+                # Provenance travels with the amount it describes: a new amount brings its own
+                # source/confidence/estimate flag; no new amount keeps all of the old ones.
                 row.quantity = _quantity(item.quantity)
                 row.unit = item.unit
                 row.quantity_is_estimate = item.quantity_is_estimate
+                row.source = PantrySource(item.source)
+                row.confidence = _confidence(item)
+                if body.observation_id is not None:
+                    row.source_observation_id = body.observation_id
             if item.storage_location is not None:
                 row.storage_location = item.storage_location
             if item.note is not None:
                 row.note = item.note
-            row.source = PantrySource(item.source)
-            row.confidence = _confidence(item)
             row.last_confirmed_at = now
-            if body.observation_id is not None:
-                row.source_observation_id = body.observation_id
         else:
             assert item.resolution is None or isinstance(item.resolution, KeepBoth)
             row = PantryItem(

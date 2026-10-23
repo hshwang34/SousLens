@@ -26,7 +26,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.domains.matching.dictionary import IngredientDictionary, clean, singularize_word
-from app.domains.matching.normalize import Normalized, alternatives, normalize
+from app.domains.matching.normalize import Normalized, alternatives, conjuncts, normalize
 from app.domains.matching.units import (
     canonical_unit,
     convert,
@@ -91,6 +91,8 @@ class PantryEntry:
     quantity: float | None
     unit: str | None
     last_confirmed_at: datetime | None
+    # A photo count (PRD §8.3, DECISIONS #13): never enough on its own to call a line available.
+    quantity_is_estimate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +154,9 @@ def _stale_days(item: PantryEntry, now: datetime) -> int | None:
     return age.days if age > STALE_AFTER else None
 
 
+ESTIMATE_NOTE = " The amount is an estimate from a photo, so check it."
+
+
 def _assess(ing: RecipeIngredient, name: str, p: _Pantry, now: datetime) -> _Assessment:
     item = p.item
     status: FitStatus
@@ -181,6 +186,10 @@ def _assess(ing: RecipeIngredient, name: str, p: _Pantry, now: datetime) -> _Ass
                 )
             status = "available" if converted + _EPSILON >= ing.quantity else "uncertain"
             reason = f"You have {have}; the recipe needs {need}."
+        if item.quantity_is_estimate:
+            # DECISIONS #13: an estimated (photo) amount caps the line at uncertain.
+            status = "uncertain"
+            reason += ESTIMATE_NOTE
     days = _stale_days(item, now)
     if days is not None:
         status = "uncertain"
@@ -194,15 +203,21 @@ def _assess(ing: RecipeIngredient, name: str, p: _Pantry, now: datetime) -> _Ass
 def _sum_if_enough(
     ing: RecipeIngredient, name: str, matches: list[_Pantry], now: datetime
 ) -> _Assessment | None:
-    """Several confirmed entries of one ingredient (keep_both) may add up to enough."""
+    """Several confirmed entries of *one* ingredient (keep_both) may add up to enough.
+
+    ``matches`` must share one normalised key: alternatives of an "X or Y" line are never
+    summed together. Stale and estimated amounts never count."""
     if ing.quantity is None or len(matches) < 2:
         return None
     need_unit = canonical_unit(ing.unit)
     total, used = 0.0, []
     for p in matches:
-        if p.item.quantity is None or _stale_days(p.item, now) is not None:
+        item = p.item
+        if item.quantity is None or item.quantity_is_estimate:
             continue
-        converted = convert(p.item.quantity, canonical_unit(p.item.unit), need_unit)
+        if _stale_days(item, now) is not None:
+            continue
+        converted = convert(item.quantity, canonical_unit(item.unit), need_unit)
         if converted is None:
             continue
         total += converted
@@ -214,6 +229,77 @@ def _sum_if_enough(
         f"the recipe needs {_need(ing.quantity, need_unit)}."
     )
     return _Assessment(status="available", reason=reason, note=None, pantry=used[0])
+
+
+_RANK: dict[str, int] = {"available": 0, "uncertain": 1, "optional_missing": 2, "missing": 3}
+
+
+def _evaluate(
+    ing: RecipeIngredient,
+    phrase: str,
+    pantry: list[_Pantry],
+    dictionary: IngredientDictionary,
+    now: datetime,
+) -> tuple[FitStatus, str, _Assessment | None]:
+    """One requirement (possibly "X or Y") against the pantry."""
+    name = clean(phrase)
+    norms = [normalize(alt, dictionary) for alt in alternatives(phrase)]
+    keys = [n.key for n in norms if n.key]
+    matches = sorted((p for p in pantry if p.keys & set(keys)), key=_recency, reverse=True)
+    if matches:
+        assessed = [_assess(ing, name, p, now) for p in matches]
+        best = next((a for a in assessed if a.status == "available"), None)
+        if best is None:
+            for key in keys:  # sum within one alternative only
+                group = [p for p in matches if key in p.keys]
+                best = _sum_if_enough(ing, name, group, now)
+                if best is not None:
+                    break
+        best = best or assessed[0]
+        return best.status, best.reason, best
+
+    key_set = set(keys)
+    ambiguous = next(
+        (
+            p
+            for p in pantry
+            if key_set & set(p.norm.ambiguous_with)
+            or any(set(n.ambiguous_with) & p.keys for n in norms)
+        ),
+        None,
+    )
+    if ambiguous is not None:
+        reason = (
+            f"Your pantry has “{ambiguous.item.raw_label}”, which may or may not be "
+            f"{name}; check before you start."
+        )
+        return "uncertain", reason, _Assessment("uncertain", reason, None, ambiguous)
+    if ing.optional:
+        return "optional_missing", f"Optional: {name} isn't in your pantry.", None
+    return "missing", f"You don't have {name} in your pantry.", None
+
+
+def _evaluate_line(
+    ing: RecipeIngredient,
+    pantry: list[_Pantry],
+    dictionary: IngredientDictionary,
+    now: datetime,
+) -> tuple[FitStatus, str, _Assessment | None]:
+    parts = conjuncts(ing.name, dictionary)
+    if len(parts) == 1:
+        return _evaluate(ing, ing.name, pantry, dictionary, now)
+    # "salt and pepper": every part is needed; the line is as good as its worst part. A shared
+    # amount can't be split between the parts, so each part is checked for presence only.
+    part_ing = RecipeIngredient(id=ing.id, name=ing.name, optional=ing.optional)
+    results = [_evaluate(part_ing, part, pantry, dictionary, now) for part in parts]
+    status = max((r[0] for r in results), key=lambda st: _RANK[st])
+    if status == "available" and ing.quantity is not None:
+        status = "uncertain"
+    reason = " ".join(r[1] for r in results)
+    if ing.quantity is not None:
+        reason += " The amount is for both together, so check you have enough."
+    first = next((r[2] for r in results if r[2] is not None), None)
+    return status, reason, first
 
 
 def _recency(p: _Pantry) -> float:
@@ -250,39 +336,7 @@ def fit(
     counts = FitCounts()
     required_total = required_available = 0
     for ing in ingredients:
-        name = clean(ing.name)
-        norms = [normalize(alt, dictionary) for alt in alternatives(ing.name)]
-        keys = {n.key for n in norms if n.key}
-        matches = sorted((p for p in pantry if p.keys & keys), key=_recency, reverse=True)
-
-        status: FitStatus
-        assessment: _Assessment | None = None
-        if matches:
-            assessed = [_assess(ing, name, p, now) for p in matches]
-            assessment = next((a for a in assessed if a.status == "available"), None)
-            assessment = assessment or _sum_if_enough(ing, name, matches, now) or assessed[0]
-            status, reason = assessment.status, assessment.reason
-        else:
-            ambiguous = next(
-                (
-                    p
-                    for p in pantry
-                    if keys & set(p.norm.ambiguous_with)
-                    or any(set(n.ambiguous_with) & p.keys for n in norms)
-                ),
-                None,
-            )
-            if ambiguous is not None:
-                status = "uncertain"
-                reason = (
-                    f"Your pantry has “{ambiguous.item.raw_label}”, which may or may not be "
-                    f"{name}; check before you start."
-                )
-                assessment = _Assessment(status, reason, None, ambiguous)
-            elif ing.optional:
-                status, reason = "optional_missing", f"Optional: {name} isn't in your pantry."
-            else:
-                status, reason = "missing", f"You don't have {name} in your pantry."
+        status, reason, assessment = _evaluate_line(ing, pantry, dictionary, now)
 
         if not ing.optional:
             required_total += 1

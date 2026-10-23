@@ -95,6 +95,11 @@ class ObservationMode(enum.StrEnum):
 
 
 class ObservationStatus(enum.StrEnum):
+    # pending_provider: rate-limit slot reserved, provider call in flight (no candidates yet).
+    # failed: the provider call failed; the row still counts toward the hourly limit and is
+    # purged by the 24 h TTL like any other.
+    PENDING_PROVIDER = "pending_provider"
+    FAILED = "failed"
     PENDING = "pending"
     CONFIRMED = "confirmed"
     DISCARDED = "discarded"

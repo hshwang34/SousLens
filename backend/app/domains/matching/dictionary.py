@@ -216,5 +216,9 @@ async def load_dictionary(session: AsyncSession) -> IngredientDictionary:
     """The seeded dictionary from the database (≈130 rows; read per request, no cache to go
     stale). An unseeded database yields an empty dictionary: matching still works on exact
     names, just without aliases."""
-    rows = (await session.execute(select(Ingredient))).scalars().all()
+    rows = (
+        (await session.execute(select(Ingredient).order_by(Ingredient.canonical_name)))
+        .scalars()
+        .all()
+    )
     return IngredientDictionary.build((entry_from_row(r) for r in rows), strict=False)

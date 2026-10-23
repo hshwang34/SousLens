@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta
 
@@ -28,7 +30,7 @@ from app.ai.providers.base import (
     PantryObservation,
     PantryObservationRequest,
 )
-from app.core.errors import ProviderOutputInvalid, RateLimited
+from app.core.errors import AppError, ProviderOutputInvalid, ProviderUnavailable, RateLimited
 from app.db.models import ObservationMode, ObservationStatus, PantryItem, User
 from app.db.models import PantryObservation as ObservationRow
 from app.domains.matching.dictionary import IngredientDictionary
@@ -37,7 +39,10 @@ from app.domains.matching.units import pantry_unit
 from app.domains.pantry.schemas import CandidateOut, ConfidenceBin, ObservationOut
 from app.domains.pantry.service import lock_user
 
+log = logging.getLogger("souslens.pantry.observations")
+
 OBSERVATION_TTL = timedelta(hours=24)
+PROVIDER_TIMEOUT_SECONDS = 30.0
 RATE_LIMIT_PER_HOUR = 30
 HIGH_ABOVE = 0.85
 MEDIUM_FROM = 0.6
@@ -96,9 +101,13 @@ async def _observe_validated(
 ) -> PantryObservation:
     for attempt in (1, 2):
         try:
-            result = await provider.observe(request)
+            result = await asyncio.wait_for(
+                provider.observe(request), timeout=PROVIDER_TIMEOUT_SECONDS
+            )
             return PantryObservation.model_validate(
-                result.model_dump() if isinstance(result, pydantic.BaseModel) else result
+                result.model_dump(warnings=False)
+                if isinstance(result, pydantic.BaseModel)
+                else result
             )
         except pydantic.ValidationError as exc:
             if attempt == 2:
@@ -123,15 +132,11 @@ async def purge_expired(session: AsyncSession, now: datetime) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
-async def create_observation(
-    session: AsyncSession,
-    user: User,
-    provider: PantryExtractor,
-    provider_name: str,
-    request: PantryObservationRequest,
-    dictionary: IngredientDictionary,
-    now: datetime,
-) -> ObservationOut:
+async def _reserve_slot(
+    session: AsyncSession, user: User, mode: str, provider_name: str, now: datetime
+) -> ObservationRow:
+    """Count + insert under the per-user advisory lock, then commit at once so the lock (and the
+    transaction) never spans the provider call. The reserved row is the rate-limit slot."""
     await lock_user(session, user.id, "observations")
     await purge_expired(session, now)
     recent = await session.scalar(
@@ -144,23 +149,53 @@ async def create_observation(
     )
     if (recent or 0) >= RATE_LIMIT_PER_HOUR:
         raise RateLimited("Too many pantry scans in the last hour; try again later")
+    row = ObservationRow(
+        owner_user_id=user.id,
+        mode=ObservationMode(mode),
+        provider=provider_name,
+        candidate_json=[],
+        unknowns_json=[],
+        status=ObservationStatus.PENDING_PROVIDER,
+        expires_at=now + OBSERVATION_TTL,
+    )
+    session.add(row)
+    await session.flush()
+    await session.commit()
+    return row
 
-    observation = await _observe_validated(provider, request)
+
+async def create_observation(
+    session: AsyncSession,
+    user: User,
+    provider: PantryExtractor,
+    provider_name: str,
+    request: PantryObservationRequest,
+    dictionary: IngredientDictionary,
+    now: datetime,
+) -> ObservationOut:
+    row = await _reserve_slot(session, user, request.mode, provider_name, now)
+
+    # Outside any transaction: a slow or failing provider never holds a lock or connection.
+    try:
+        observation = await _observe_validated(provider, request)
+    except Exception as exc:
+        row.status = ObservationStatus.FAILED
+        await session.commit()  # the attempt still counts toward the hourly limit
+        if isinstance(exc, AppError):
+            raise
+        log.warning("pantry provider failed", extra={"error_type": type(exc).__name__})
+        raise ProviderUnavailable(
+            "The pantry scan service is unavailable; try again or add items by hand"
+        ) from exc
+
     pantry_keys = await _pantry_keys(session, user)
     candidates = [
         finalize_candidate(c, request.mode, dictionary, pantry_keys) for c in observation.candidates
     ]
     unknowns = unknowns_for(observation, candidates)
-    row = ObservationRow(
-        owner_user_id=user.id,
-        mode=ObservationMode(request.mode),
-        provider=provider_name,
-        candidate_json=[c.model_dump(mode="json") for c in candidates],
-        unknowns_json=unknowns,
-        status=ObservationStatus.PENDING,
-        expires_at=now + OBSERVATION_TTL,
-    )
-    session.add(row)
+    row.candidate_json = [c.model_dump(mode="json") for c in candidates]
+    row.unknowns_json = unknowns
+    row.status = ObservationStatus.PENDING
     await session.flush()
     return ObservationOut(
         observation_id=row.id,

@@ -39,6 +39,7 @@ async def fit_version(
             quantity=float(r.quantity) if r.quantity is not None else None,
             unit=r.unit,
             last_confirmed_at=r.last_confirmed_at,
+            quantity_is_estimate=r.quantity_is_estimate,
         )
         for r in rows
     ]

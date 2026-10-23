@@ -19,7 +19,7 @@ The resulting ``key`` is the matching key stored as ``pantry_items.normalized_na
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.domains.matching.dictionary import (
     IDENTITY_QUALIFIERS,
@@ -58,7 +58,13 @@ DESCRIPTORS = frozenset(
         "frozen",
     }
 )
+# Non-identity modifiers that are worth keeping (reported, never part of the key): low-sodium
+# soy sauce still satisfies "soy sauce", but the caller can show what the user actually has.
+MODIFIERS = frozenset(
+    {"low-sodium", "reduced-sodium", "less-sodium", "low-salt", "no-salt-added", "lite"}
+)
 _PAREN_RE = re.compile(r"\([^)]*\)")
+_SODIUM_RE = re.compile(r"\b(low|reduced|less) sodium\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +72,7 @@ class Normalized:
     key: str
     entry: DictEntry | None
     qualifiers: frozenset[str] = frozenset()
+    modifiers: frozenset[str] = frozenset()
 
     @property
     def ingredient_id(self):
@@ -85,6 +92,14 @@ def _words(text: str) -> list[str]:
 
 
 def normalize(text: str, dictionary: IngredientDictionary) -> Normalized:
+    result = _normalize(text, dictionary)
+    modifiers = frozenset(
+        w for w in _words(_SODIUM_RE.sub(r"\1-sodium", clean(text))) if w in MODIFIERS
+    )
+    return replace(result, modifiers=modifiers) if modifiers else result
+
+
+def _normalize(text: str, dictionary: IngredientDictionary) -> Normalized:
     phrase = clean(text)
     if not phrase:
         return Normalized(key="", entry=None)
@@ -96,7 +111,9 @@ def normalize(text: str, dictionary: IngredientDictionary) -> Normalized:
         return _hit(entry)
     phrase = without_paren or phrase
 
-    words = [w for w in _words(phrase) if w not in DESCRIPTORS] or _words(phrase)
+    phrase = _SODIUM_RE.sub(r"\1-sodium", phrase)
+    skip = DESCRIPTORS | MODIFIERS
+    words = [w for w in _words(phrase) if w not in skip] or _words(phrase)
     stripped = " ".join(words)
     if (entry := dictionary.lookup(stripped)) is not None:
         return _hit(entry)
@@ -125,7 +142,46 @@ def normalize(text: str, dictionary: IngredientDictionary) -> Normalized:
     return Normalized(key=stripped[:NAME_KEY_MAX], entry=None, qualifiers=q_set)
 
 
+def _split_top_level(text: str, separator: re.Pattern[str]) -> list[str]:
+    """Split on ``separator`` only outside parentheses ("roasted seaweed (gim or nori)")."""
+    parts: list[str] = []
+    depth = start = 0
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif depth == 0 and (m := separator.match(text, i)):
+            parts.append(text[start:i])
+            start = i = m.end()
+            continue
+        i += 1
+    parts.append(text[start:])
+    return [p.strip() for p in parts if p.strip()]
+
+
+_OR_RE = re.compile(r"\s+or\s+")
+_AND_RE = re.compile(r"\s+(?:and|&)\s+")
+
+
 def alternatives(name: str) -> list[str]:
     """Recipe names like "spam or bacon" list interchangeable alternatives."""
-    parts = [p.strip() for p in re.split(r"\s+or\s+", clean(name)) if p.strip()]
-    return parts or [name]
+    return _split_top_level(clean(name), _OR_RE) or [name]
+
+
+def conjuncts(name: str, dictionary: IngredientDictionary) -> list[str]:
+    """A recipe line naming several required items ("salt and pepper").
+
+    Split only when the whole phrase is not itself a dictionary entry and every part (or each
+    of its alternatives) is one, so "macaroni and cheese" or an unknown "X and Y" stays whole.
+    """
+    phrase = clean(name)
+    parts = _split_top_level(phrase, _AND_RE)
+    if len(parts) < 2 or normalize(phrase, dictionary).entry is not None:
+        return [name]
+    for part in parts:
+        if any(normalize(alt, dictionary).entry is None for alt in alternatives(part)):
+            return [name]
+    return parts

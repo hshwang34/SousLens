@@ -99,6 +99,14 @@ class ProviderOutputInvalid(AppError):
     retryable = True
 
 
+class ProviderUnavailable(AppError):
+    """The AI provider call failed (timeout, 5xx, network): nothing was produced."""
+
+    code = "PROVIDER_UNAVAILABLE"
+    status_code = 503
+    retryable = True
+
+
 class Internal(AppError):
     code = "INTERNAL"
     status_code = 500

@@ -49,7 +49,8 @@ Transcript = Annotated[
     BeforeValidator(partial(check_text, multiline=True, trim=True)),
     StringConstraints(min_length=1, max_length=TRANSCRIPT_MAX),
 ]
-Quantity = Annotated[float, Field(ge=0, le=QUANTITY_MAX, allow_inf_nan=False)]
+# > 0 when present: "none left" is a delete, not a zero (fix round 1).
+Quantity = Annotated[float, Field(gt=0, le=QUANTITY_MAX, allow_inf_nan=False)]
 
 
 class _Strict(BaseModel):

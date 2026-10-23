@@ -45,7 +45,7 @@ def _item_id(value: str) -> uuid.UUID:
 
 @router.get("", response_model=PantryList)
 async def list_pantry(session: DbSession, user: CurrentUser) -> PantryList:
-    rows = await service.list_items(session, user)
+    rows = await service.list_items(session, user, _now())
     return PantryList(items=[PantryItemOut.of(r) for r in rows])
 
 
