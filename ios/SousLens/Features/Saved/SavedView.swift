@@ -84,7 +84,6 @@ private struct SavedContent: View {
             .padding(.vertical, Spacing.lg)
         }
         .refreshable { await model.refresh() }
-        .onAppear { Task { await model.refresh() } }
     }
 }
 
