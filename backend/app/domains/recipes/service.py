@@ -201,9 +201,9 @@ async def get_detail(
     )
 
 
-async def get_version_detail(
-    session: AsyncSession, version_id: uuid.UUID, *, user: User, share_url_base: str
-) -> RecipeDetail:
+async def get_accessible_version(
+    session: AsyncSession, version_id: uuid.UUID, *, user: User
+) -> tuple[RecipeVersion, Recipe, bool]:
     """That exact version, even after the recipe was unpublished (REC-05), but only for a
     caller with a *prior reference* to it. Allowed when at least one holds:
 
@@ -215,7 +215,9 @@ async def get_version_detail(
     ``recipe_version_id`` (``cooking_sessions.recipe_version_id == version.id``); sessions
     must keep reading their pinned version after an unpublish.
 
-    Anything else is a 404 indistinguishable from an unknown id.
+    Anything else is a 404 indistinguishable from an unknown id. Returns
+    ``(version, recipe, saved_by_caller)``. Shared by ``GET /recipe-versions/{id}`` and
+    ``POST /recipe-versions/{id}/fit`` so both always apply the same rule.
     """
     stmt = (
         select(RecipeVersion, Recipe)
@@ -232,6 +234,13 @@ async def get_version_detail(
     is_public = recipe.visibility == Visibility.PUBLIC and recipe.latest_version_id is not None
     if not (is_public or recipe.owner_user_id == user.id or is_saved):
         raise NotFound("Recipe version not found")
+    return version, recipe, is_saved
+
+
+async def get_version_detail(
+    session: AsyncSession, version_id: uuid.UUID, *, user: User, share_url_base: str
+) -> RecipeDetail:
+    version, recipe, is_saved = await get_accessible_version(session, version_id, user=user)
     return to_detail(recipe, version, saved=is_saved, share_url_base=share_url_base)
 
 

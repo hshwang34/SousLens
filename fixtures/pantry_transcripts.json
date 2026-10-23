@@ -1,0 +1,90 @@
+{
+  "note": "PRD §17.3 voice-transcript evaluation subset (brief 004). `expected` is the contract candidate shape after server post-processing: canonical_name from the ingredient dictionary, quantity only when spoken, unit from the contract list (packaging words like 'can' or 'bunch' mean amount unknown).",
+  "transcripts": [
+    {"id": "t01", "tags": ["journey_j2"],
+     "transcript": "I have chicken thighs, two onions, gochujang and honey",
+     "expected": [
+       {"canonical_name": "chicken thigh", "quantity": null, "unit": null},
+       {"canonical_name": "onion", "quantity": 2, "unit": "count"},
+       {"canonical_name": "gochujang", "quantity": null, "unit": null},
+       {"canonical_name": "honey", "quantity": null, "unit": null}]},
+    {"id": "t02", "tags": ["prd_17_2_scenario_1", "units"],
+     "transcript": "I have half an onion, 3 pounds of chicken, gochujang",
+     "expected": [
+       {"canonical_name": "onion", "quantity": 0.5, "unit": "count"},
+       {"canonical_name": "chicken", "quantity": 3, "unit": "lb"},
+       {"canonical_name": "gochujang", "quantity": null, "unit": null}]},
+    {"id": "t03", "tags": ["noise", "synonyms", "number_words"],
+     "transcript": "um, so I've got like a dozen eggs and uh some green onions",
+     "expected": [
+       {"canonical_name": "egg", "quantity": 12, "unit": "count"},
+       {"canonical_name": "scallion", "quantity": null, "unit": null}]},
+    {"id": "t04", "tags": ["correction"],
+     "transcript": "two onions, no wait, three onions, and garlic",
+     "expected": [
+       {"canonical_name": "onion", "quantity": 3, "unit": "count"},
+       {"canonical_name": "garlic", "quantity": null, "unit": null}]},
+    {"id": "t05", "tags": ["units", "digits"],
+     "transcript": "500g of rice, 2 cups of milk, and a tablespoon of honey",
+     "expected": [
+       {"canonical_name": "rice", "quantity": 500, "unit": "g"},
+       {"canonical_name": "milk", "quantity": 2, "unit": "cup"},
+       {"canonical_name": "honey", "quantity": 1, "unit": "tbsp"}]},
+    {"id": "t06", "tags": ["synonyms", "gochujang_vs_gochugaru"],
+     "transcript": "spring onions, scallions and Korean chili flakes",
+     "expected": [
+       {"canonical_name": "scallion", "quantity": null, "unit": null},
+       {"canonical_name": "gochugaru", "quantity": null, "unit": null}]},
+    {"id": "t07", "tags": ["number_words", "units", "location_noise"],
+     "transcript": "I've got four eggs, a pound of ground beef, and some kimchi in the fridge",
+     "expected": [
+       {"canonical_name": "egg", "quantity": 4, "unit": "count"},
+       {"canonical_name": "ground beef", "quantity": 1, "unit": "lb"},
+       {"canonical_name": "kimchi", "quantity": null, "unit": null}]},
+    {"id": "t08", "tags": ["synonyms", "number_words"],
+     "transcript": "soy sauce, toasted sesame oil, rice vinegar, plus a couple of limes",
+     "expected": [
+       {"canonical_name": "soy sauce", "quantity": null, "unit": null},
+       {"canonical_name": "sesame oil", "quantity": null, "unit": null},
+       {"canonical_name": "rice vinegar", "quantity": null, "unit": null},
+       {"canonical_name": "lime", "quantity": 2, "unit": "count"}]},
+    {"id": "t09", "tags": ["negation"],
+     "transcript": "I have eggs but no milk",
+     "expected": [
+       {"canonical_name": "egg", "quantity": null, "unit": null}]},
+    {"id": "t10", "tags": ["correction", "noise"],
+     "transcript": "three tomatoes, uh, actually make that five",
+     "expected": [
+       {"canonical_name": "tomato", "quantity": 5, "unit": "count"}]},
+    {"id": "t11", "tags": ["units", "digits", "plural"],
+     "transcript": "1.5 kg of potatoes and 250 ml of heavy cream",
+     "expected": [
+       {"canonical_name": "potato", "quantity": 1.5, "unit": "kg"},
+       {"canonical_name": "heavy cream", "quantity": 250, "unit": "ml"}]},
+    {"id": "t12", "tags": ["packaging_units"],
+     "transcript": "a bunch of cilantro, two cans of chickpeas and a jar of gochujang",
+     "expected": [
+       {"canonical_name": "cilantro", "quantity": null, "unit": null},
+       {"canonical_name": "chickpeas", "quantity": null, "unit": null},
+       {"canonical_name": "gochujang", "quantity": null, "unit": null}]},
+    {"id": "t13", "tags": ["noise", "raw_vs_cooked", "number_words"],
+     "transcript": "Hmm, there's leftover rice, butter, and one and a half pounds of chicken breast",
+     "expected": [
+       {"canonical_name": "cooked rice", "quantity": null, "unit": null},
+       {"canonical_name": "butter", "quantity": null, "unit": null},
+       {"canonical_name": "chicken breast", "quantity": 1.5, "unit": "lb"}]},
+    {"id": "t14", "tags": ["qualifiers", "fresh_vs_dried"],
+     "transcript": "fresh ginger, garlic cloves, and dried basil",
+     "expected": [
+       {"canonical_name": "ginger", "quantity": null, "unit": null},
+       {"canonical_name": "garlic", "quantity": null, "unit": null},
+       {"canonical_name": "dried basil", "quantity": null, "unit": null}]},
+    {"id": "t15", "tags": ["vague_amount", "noise", "digits"],
+     "transcript": "I've got 6 eggs, 2 lbs of salmon, a few lemons, and um, olive oil",
+     "expected": [
+       {"canonical_name": "egg", "quantity": 6, "unit": "count"},
+       {"canonical_name": "salmon", "quantity": 2, "unit": "lb"},
+       {"canonical_name": "lemon", "quantity": null, "unit": null},
+       {"canonical_name": "olive oil", "quantity": null, "unit": null}]}
+  ]
+}
