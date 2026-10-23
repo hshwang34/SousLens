@@ -149,17 +149,20 @@ protocol CameraPreviewProviding: AnyObject {
 private actor CameraPipeline {
     /// Touched by this actor (configuration), by `sessionQueue` (start/stop, which block) and by
     /// `attach` (main thread, preview layer only), the split Apple's AVCam sample uses.
-    nonisolated(unsafe) private let session = AVCaptureSession()
+    /// Held in a Sendable box rather than `nonisolated(unsafe)`: older Swift 6 compilers (CI's
+    /// Xcode) reject a non-Sendable value leaving a nonisolated(unsafe) context in `attach`.
+    private let box = SessionBox(session: AVCaptureSession())
+    private var session: AVCaptureSession { box.session }
     /// `startRunning()` / `stopRunning()` block for a noticeable time; they run here instead of on
     /// the actor's cooperative thread.
     private let sessionQueue = DispatchQueue(label: "com.souslens.ios.camera.session")
 
     nonisolated func attach(_ layer: AVCaptureVideoPreviewLayer) {
-        layer.session = session
+        layer.session = box.session
     }
 
     private func onSessionQueue(_ work: @escaping @Sendable (AVCaptureSession) -> Void) async {
-        let box = SessionBox(session: session)
+        let box = self.box
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             sessionQueue.async {
                 work(box.session)
