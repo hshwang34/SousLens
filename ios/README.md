@@ -116,10 +116,66 @@ cues and warnings.
   pantry** (manual sheet, name prefilled only); stale matches offer **Still have it**; a match
   whose amount is a photo estimate offers **Fix amount** (opens the editor). Every change re-runs
   the fit once (via `pantryRevision`; the last request wins). VoiceOver reads each row's status
-  and exposes its buttons as named actions. Edits PATCH only the fields that changed; an
+  as one element; its buttons follow as separate buttons named "<action>: <ingredient>". Edits PATCH only the fields that changed; an
   unrecognised storage location is kept as is.
 - Debug builds only: launch with `-pantry.photoFixture gochujang_jar` to send `fixture=<stem>` with
   photos (honoured by the backend only when `AI_PROVIDER=mock`).
+
+## Slice 3: substitutions and cooking (brief 005)
+
+All state lives on the server (Step Oracle). The app sends commands and renders whatever Session
+comes back; it never moves a step, starts a timer or applies a swap on its own.
+
+- **Allergies & foods to avoid** (Profile → Cooking): chips with add/remove, saved on each tap
+  (`PUT /v1/me/preferences`, rolled back on failure; the server's normalised names replace
+  ours). Allergies block swaps; "avoid" is a preference. The copy never says anything is "safe".
+- **Find a swap** (Pantry fit, required Missing and Uncertain lines): `POST /v1/substitutions/suggest`
+  → up to three cards with candidate, amount, why, flavour/texture impact, confidence in words,
+  risks, allergy warning and a label derived from `source` (**Common swap** = vetted rule,
+  **AI suggested adaptation** = anything else, including unknown sources). **Use this swap** is
+  the only approval; **No thanks** closes. `cannot_substitute` (or no suggestions) shows the reason
+  with **Keep it missing** / **Find another recipe** (Explore). Approved swaps are held on the fit
+  screen, shown on their row with **Undo swap**, summarised above **Start cooking**, and sent only
+  in `POST /v1/sessions`. **Use my changes from last time** appears when
+  `GET /recipe-versions/{id}/my-variation` returns one; tapping it fills the swaps (still undoable).
+- **Start cooking** (fit screen with swaps, or recipe detail as written) creates the session and
+  opens the full-screen cooking view, which sends `start` on that same tap.
+- **Cooking** (`Features/Cooking`): step N of M, the session's step text in large Dynamic Type,
+  **Adapted · Common swap / AI suggested adaptation** badge with **Show original**, success cues,
+  warnings with a safety icon, creator note, "No clip for this step", oversized **Back / Pause /
+  Next** (Next becomes **Finish** on the last step), **Repeat**, **Slower**, **Ask**, and a disabled
+  **Look** ("coming with camera help"). The menu has *Read steps aloud*, *Undo a swap* (sends
+  `revert_adaptation`) and *Stop cooking…* (confirmation → `abandon`).
+- **Commands**: each tap is one `POST /v1/sessions/{id}/commands` with `user_confirmed: true`,
+  the current `revision` as `expected_revision`, and a fresh `Idempotency-Key`
+  (`SessionCommandSender`). If the outcome is unknown (no response, 5xx) the key and body are kept
+  and **Reconnect** re-sends them unchanged, so a lost response never advances twice. 409
+  `STATE_CONFLICT` adopts `details.session` and shows "Updated from your other device"; 409
+  `INVALID_TRANSITION` adopts it too. Nothing is re-sent automatically.
+- **Read aloud** (`SystemAudioOutput`) only after an explicit Start / Next / Back / Repeat /
+  Slower (Slower reads at a lower rate). Opening, resuming, pausing and timers never speak.
+- **Timers**: a step's `suggested_timer` is offered as "Start a 10-min simmer timer?" with
+  **Start / Skip**; Start sends `start_timer`. Running timers count down from the server's absolute
+  `target_at` every second, so they are right after a relaunch; past-target timers read **Done**.
+  Cancel sends `cancel_timer`.
+- **Assistant drawer** (Ask): typed questions (≤ 500 chars) → `POST /sessions/{id}/ask` with
+  `grounded_revision`. Answers split "The recipe says … / My suggestion" as returned, grounding
+  badges (Step N, Creator note, Ingredient, Your swap), uncertainty in words, safety notice styling,
+  **Based on previous step** when the server says stale or the step has moved, and **Read aloud**.
+  A `proposed_action` is a button ("Go to next step?"); only a tap sends it, as a confirmed
+  command with `client_source: ios_assistant`. 429 says to try again later.
+- **Session end**: Cooked it / Partly / Didn't work, a private note (`POST /notes`), and **Save my
+  changes** (only when the session has swaps; off by default). **Done** sends the note, then
+  `complete` with the outcome.
+- **Resume**: on launch and every return to the foreground, `GET /v1/sessions?status=active` →
+  banner "Continue cooking <title> — Step N" (dismissible), then a floating pill while browsing.
+  Tapping reopens the cooking view at the server's step. Offline, the last cached Session is shown
+  read-only with **Reconnect to continue**.
+- **Account isolation**: the cached Session (`Persistence/SessionCache`) is stamped with the owner
+  (user id + server) and deleted if anyone else reads it. Every AuthStore path that drops
+  credentials (sign-out, 401, server change, fresh install, a restore that ends signed out, a
+  different user signing in) resets `CookingSessionStore`, which bumps an epoch so late results are
+  dropped and invalidates the open cooking view model.
 
 ### Permissions
 
@@ -136,12 +192,17 @@ make ios-check                   # xcodegen generate + xcodebuild test on "iPhon
 make ios-smoke                   # live XCUITests (needs `make backend-dev` + `make seed`); not in ios-check
 ```
 
-`SousLensSmoke` (separate scheme, never in `SousLens`) has three tests: sign in → open the seeded
+`SousLensSmoke` (separate scheme, never in `SousLens`) has five tests: sign in → open the seeded
 recipe; `testAuthorPublishAndSave` (Profile → Create recipe → title, one ingredient, one step →
 Publish → confirm → find it via Explore search → Save → see it in Saved); and
 `testTypeIntoPantryAndCheckFit` (Pantry → Speak → Type instead → "chicken thighs, two onions,
 gochujang and honey" → Find items → Add → Explore → Gochujang Chicken Thighs → Check my pantry →
-gochujang is matched, something is Missing/Uncertain). Each signs in with its own email (the
+gochujang is matched, something is Missing/Uncertain); `testSwapAndCookToCompletion` (type
+"3 tbsp gochujang, 2 lb chicken thighs" → Gochujang Chicken Thighs → Check my pantry → Find a swap
+on rice vinegar → Use this swap → Start cooking → Next through every step, seeing the Adapted badge
+→ ask "what does this step mean?" and see a step badge → Finish → Cooked it + Save my changes →
+Done); and `testResumeAfterRelaunch` (Start cooking → Next twice → terminate → relaunch → the
+banner says Step 3 → tap → cooking screen at step 3). Each signs in with its own email (the
 pantry test uses a fresh timestamped one so its pantry starts empty) and only accepts a code
 logged after it tapped Continue.
 
@@ -178,14 +239,16 @@ On a device, the app starts with **no** server configured and asks for one; the 
 SousLens/
   App/            SousLensApp, AppEnvironment (composition root), RootView (sign-in vs tabs)
   App/DeepLink    souslens:// and souslens.app/r/{id} parsing (`DeepLink`, `ShareLinks`)
-  Features/       Explore, Recipe (detail + view model), Creator (draft editor, ingredient/step
+  Features/       Explore, Recipe (detail, pantry fit, swap sheet), Cooking (cooking screen,
+                  assistant drawer, session end, resume banner/pill), Creator (draft editor, ingredient/step
                   editors, publish confirmation, preview), Saved, Pantry, Profile (my recipes,
                   drafts, sign-in, server settings)
   Models/         Codable DTOs mirroring the backend's snake_case JSON
   Services/API    APIClient (async/await, PRD error envelope, X-Correlation-Id logging), ServerSettings
   Services/Auth   AuthStore (@Observable), KeychainTokenStore (Security framework)
   Services/Capture CameraSource / SpeechInput / AudioOutput protocols, phone adapters, fakes
-  Persistence/    RecipeCache (JSON file; Explore shows cached cards offline)
+  Persistence/    RecipeCache (Explore offline), SessionCache (owner-stamped last Session)
+  Services/Cooking SessionCommandSender (idempotency keys), CookingSessionStore (resume, epoch)
   DesignSystem/   SLColor / SLFont / Spacing tokens, RecipeCard, MetadataPill, EmptyStateView
   Resources/      Assets.xcassets (light/dark color tokens), generated Info.plist, entitlements
 SousLensTests/    unit tests + Fixtures/ (recipe_detail.json, recipes_list.json)
