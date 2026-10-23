@@ -330,9 +330,20 @@ async def _insert_recipe_with_unique_slug(session: AsyncSession, user: User, tit
     raise StateConflict("Could not allocate a unique link for this recipe; please retry")
 
 
-def search_text_for(title: str, ingredients: list[dict[str, Any]]) -> str:
-    names = " ".join(str(i.get("name", "")).strip() for i in ingredients)
-    return " ".join(part for part in (title.strip(), names) if part).lower()
+# ASCII whitespace only, so Python and Postgres ``btrim`` agree byte-for-byte (migration 0002).
+SEARCH_TEXT_TRIM = " \t\n\r\x0b\x0c"
+
+
+def search_text_for(title: str | None, ingredients: list[dict[str, Any]]) -> str:
+    """Lowercased ``title + ingredient names`` for the ILIKE search (REC-02).
+
+    Each part is trimmed of ASCII whitespace, empty parts are dropped, parts are joined with a
+    single space. Migration 0002's ``SEARCH_TEXT_SQL`` implements the same rule for backfill;
+    ``tests/integration/test_search_text_backfill.py`` keeps the two in lockstep.
+    """
+    parts = [title or "", *(str(i.get("name") or "") for i in ingredients)]
+    trimmed = (part.strip(SEARCH_TEXT_TRIM) for part in parts)
+    return " ".join(part for part in trimmed if part).lower()
 
 
 async def publish(

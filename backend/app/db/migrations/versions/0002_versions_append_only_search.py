@@ -56,14 +56,23 @@ END
 $$ LANGUAGE plpgsql;
 """
 
-BACKFILL_SEARCH_TEXT = """
-UPDATE recipe_versions AS v
-SET search_text = lower(
-    concat_ws(' ', r.title, (
-        SELECT string_agg(i->>'name', ' ' ORDER BY ord)
+# Same rule as app.domains.recipes.drafts.search_text_for: trim each part of ASCII whitespace,
+# drop empty parts, join with one space, lowercase. Kept as an expression over ``r`` (recipes)
+# and ``v`` (recipe_versions) so the lockstep test can SELECT it without touching rows.
+SEARCH_TEXT_SQL = r"""
+lower(array_to_string(array_remove(
+    ARRAY[btrim(coalesce(r.title, ''), E' \t\n\r\x0b\x0c')]
+    || coalesce((
+        SELECT array_agg(btrim(coalesce(i->>'name', ''), E' \t\n\r\x0b\x0c') ORDER BY ord)
         FROM jsonb_array_elements(v.ingredient_json) WITH ORDINALITY AS t(i, ord)
-    ))
-)
+    ), ARRAY[]::text[]),
+    ''
+), ' '))
+"""
+
+BACKFILL_SEARCH_TEXT = f"""
+UPDATE recipe_versions AS v
+SET search_text = {SEARCH_TEXT_SQL}
 FROM recipes AS r
 WHERE r.id = v.recipe_id
 """

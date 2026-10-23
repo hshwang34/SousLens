@@ -13,7 +13,7 @@ error envelope on every failure. Additive to the Slice 0 contract; nothing there
 | PATCH | `/recipes/drafts/{id}` | partial Draft fields (any subset; arrays replace whole) → Draft |
 | DELETE | `/recipes/drafts/{id}` | → 204 |
 | POST | `/recipes/drafts/{id}/publish` | `{}` → **201 PublishResult**; 422 `VALIDATION_ERROR` with `details` when not publishable |
-| POST | `/recipes/{recipe_id}/edit` | `{}` → **201 Draft** pre-filled from the latest published version, `recipe_id` set (REC-06). 409 `STATE_CONFLICT` if an open draft for that recipe already exists (body `details.draft_id`) |
+| POST | `/recipes/{recipe_id}/edit` | `{}` → **201 Draft** pre-filled from the latest published version, `recipe_id` set (REC-06). 409 `STATE_CONFLICT` if an open draft for that recipe already exists (body `details.draft_id`); at most one open draft per recipe, also under concurrent calls |
 | POST | `/recipes/{recipe_id}/unpublish` | `{}` → 200 `{"recipe_id", "visibility":"private"}` (owner only) |
 
 ```jsonc
@@ -48,11 +48,26 @@ Draft field notes (as implemented):
   can show the inline problem). Ingredient `name` / step `instruction` may be `""` while drafting.
 - Step `order` is rewritten from the array position on every save (`0..n-1`); send steps in the
   order you want them. A step's `order` in the body is ignored.
-- `cover_image_url`: absolute `https://` URL only (scheme + host, no credentials, ≤ 2048 chars);
-  anything else → 422 `VALIDATION_ERROR` with `fields: ["body.cover_image_url"]`. Uploads with media
-  ids arrive in Slice 5.
+- `cover_image_url`: absolute `https://` URL only (scheme + host, valid port if any, no
+  credentials, ≤ 2048 chars, no whitespace/control characters/backslashes anywhere in the raw
+  value; not trimmed, stored exactly as sent); anything else → 422 `VALIDATION_ERROR` with
+  `fields: ["body.cover_image_url"]`. Uploads with media ids arrive in Slice 5.
 - PATCH tolerates the read-only keys (`id`, `recipe_id`, `status`, `validation`, `created_at`,
   `updated_at`) so a client may echo a whole Draft; any other unknown key → 422.
+- **`null` in PATCH:** `null` for a *scalar* (`title`, `summary`, `cover_image_url`, `servings`,
+  `prep_minutes`, `cook_minutes`, and nullable item fields like `unit`) clears it. `null` for an
+  *array* (`tags`, `ingredients`, `steps`, `creator_notes`, `dietary_warnings`, and item arrays
+  like `ingredient_refs`) → 422 `VALIDATION_ERROR` naming the field; send `[]` to empty it.
+- **Text limits and hygiene (422 names the field, e.g. `body.steps.0.instruction`):**
+  `title` ≤ 120 after trimming (stored trimmed); `summary` ≤ 1000; each tag 1–40 after trimming,
+  stored lowercased (≤ 20 tags); each `creator_notes` / `dietary_warnings` / `success_cues` /
+  `warnings` item ≤ 500; ingredient/step `id`, `ingredient_refs` items and `source_clip_id` ≤ 64;
+  ingredient `name` ≤ 200, `unit` ≤ 32, `preparation` ≤ 200, `notes` ≤ 500; step `instruction`
+  ≤ 2000, `creator_note` ≤ 500. Every text field rejects control characters (U+0000–U+0008,
+  U+000B, U+000C, U+000E–U+001F, U+007F) and bidi controls (U+202A–U+202E, U+2066–U+2069).
+  Line breaks (`\n`, `\r`) are allowed only in `instruction`, `summary`, ingredient `notes`,
+  step `creator_note`, and the notes/warnings/cues list items. `GET /recipes` `query`/`tag`
+  apply the same single-line check (422, never 500).
 - `GET /recipes/drafts` lists every draft of mine including `status: "published"` ones
   (newest `updated_at` first); filter client-side for the "Drafts" section.
 - Error `details` for 409 on `PATCH`/`publish` of a published draft: `{"recipe_id"}`.
@@ -63,7 +78,9 @@ Draft field notes (as implemented):
 - `RecipeCard` and `RecipeDetail` gain `"saved": true|false|null` (null when unauthenticated) and
   `RecipeDetail` gains `"share_url"`.
 - `GET /recipe-versions/{version_id}` (auth) → RecipeDetail for that exact version (REC-05: prior
-  references keep working after an unpublish). Returned only when at least one holds: the recipe is
+  references keep working after an unpublish). The body is immutable: title, summary, tags and
+  cover are snapshotted on the version too, so it is byte-identical after later versions and
+  after an unpublish (only the caller-dependent `saved` can differ between callers). Returned only when at least one holds: the recipe is
   currently public, **or** the caller owns it, **or** the caller has a Save on it. Otherwise 404,
   indistinguishable from an unknown id (so a leaked version id alone reveals nothing). Slice 3 adds
   "caller owns a cooking session pinning this version" to the allow-list.
