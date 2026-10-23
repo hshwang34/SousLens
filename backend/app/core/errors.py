@@ -74,6 +74,39 @@ class ProviderNotConfigured(AppError):
     retryable = False
 
 
+class DuplicatePantryItem(AppError):
+    """PAN-04: a new pantry item matches an existing one and carries no resolution."""
+
+    code = "DUPLICATE_PANTRY_ITEM"
+    status_code = 409
+
+
+class PayloadTooLarge(AppError):
+    code = "PAYLOAD_TOO_LARGE"
+    status_code = 413
+
+
+class UnsupportedMediaType(AppError):
+    code = "UNSUPPORTED_MEDIA_TYPE"
+    status_code = 415
+
+
+class ProviderOutputInvalid(AppError):
+    """The AI provider returned output that failed its schema twice (retry once, then this)."""
+
+    code = "AI_OUTPUT_INVALID"
+    status_code = 502
+    retryable = True
+
+
+class ProviderUnavailable(AppError):
+    """The AI provider call failed (timeout, 5xx, network): nothing was produced."""
+
+    code = "PROVIDER_UNAVAILABLE"
+    status_code = 503
+    retryable = True
+
+
 class Internal(AppError):
     code = "INTERNAL"
     status_code = 500

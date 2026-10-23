@@ -1,0 +1,23 @@
+{
+  "candidates": [
+    {"raw_label": "dark bottle, maybe soy sauce", "canonical_name": "soy sauce", "quantity": null,
+     "unit": null, "confidence": 0.63, "evidence": "dark liquid; label blurred", "action": "add"},
+    {"raw_label": "clear bottle of oil", "canonical_name": "neutral oil", "quantity": null,
+     "unit": null, "confidence": 0.61, "evidence": "pale yellow liquid; label unreadable",
+     "action": "add"},
+    {"raw_label": "red paste in a tub", "canonical_name": "gochujang", "quantity": null,
+     "unit": null, "confidence": 0.48,
+     "evidence": "red tub shape only; could be gochujang, doenjang or another paste",
+     "action": "ignore"},
+    {"raw_label": "green bunch", "canonical_name": "scallion", "quantity": null, "unit": null,
+     "confidence": 0.41, "evidence": "out-of-focus green stalks", "action": "ignore"},
+    {"raw_label": "white bag", "canonical_name": null, "quantity": null, "unit": null,
+     "confidence": 0.2, "evidence": "blurred white bag; could be flour, sugar or rice",
+     "action": "ignore"}
+  ],
+  "unknowns": [
+    "most labels are unreadable in this photo",
+    "contents of the white bag"
+  ],
+  "notes": ["Blurry image: nothing here is confident enough to trust without checking."]
+}

@@ -27,6 +27,7 @@ from app.ai.providers.base import (
 )
 
 PHOTO_FIXTURE_SUBDIR = "pantry_observations"
+DEFAULT_PHOTO_FIXTURE = "demo_counter"
 
 _NUMBER_WORDS: dict[str, float] = {
     "a": 1,
@@ -41,13 +42,23 @@ _NUMBER_WORDS: dict[str, float] = {
     "eight": 8,
     "nine": 9,
     "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
     "dozen": 12,
     "half": 0.5,
     "quarter": 0.25,
-    "couple": 2,
-    "few": 3,
 }
 
+# Parser-level units. Packaging words (can, jar, bunch, …) are kept here so the evidence reads
+# naturally; the API maps anything outside the contract unit list to "amount unknown".
 _UNITS: dict[str, str] = {
     "lb": "lb",
     "lbs": "lb",
@@ -70,8 +81,16 @@ _UNITS: dict[str, str] = {
     "cans": "can",
     "jar": "jar",
     "jars": "jar",
+    "bottle": "bottle",
+    "bottles": "bottle",
     "bag": "bag",
     "bags": "bag",
+    "box": "box",
+    "boxes": "box",
+    "pack": "pack",
+    "packs": "pack",
+    "packet": "pack",
+    "packets": "pack",
     "bunch": "bunch",
     "bunches": "bunch",
     "g": "g",
@@ -80,7 +99,11 @@ _UNITS: dict[str, str] = {
     "kg": "kg",
     "kilo": "kg",
     "kilos": "kg",
+    "kilogram": "kg",
+    "kilograms": "kg",
     "ml": "ml",
+    "milliliter": "ml",
+    "milliliters": "ml",
     "l": "l",
     "liter": "l",
     "liters": "l",
@@ -90,6 +113,7 @@ _UNITS: dict[str, str] = {
     "sticks": "stick",
     "head": "head",
     "heads": "head",
+    "fl_oz": "fl_oz",
 }
 
 _ALIASES: dict[str, str] = {
@@ -110,19 +134,76 @@ _ALIASES: dict[str, str] = {
     "cucumbers": "cucumber",
 }
 
-_FILLER = ("i have", "i've got", "i got", "we have", "we've got", "there is", "there are", "got")
-_SPLIT_RE = re.compile(r",|;|\band\b|\bplus\b|\balso\b", re.IGNORECASE)
+_LEADS = (
+    "i have",
+    "i've got",
+    "i got",
+    "i also have",
+    "we have",
+    "we've got",
+    "we got",
+    "there is",
+    "there's",
+    "there are",
+    "got",
+    "have",
+    "oh",
+    "and",
+    "also",
+    "plus",
+)
+_VAGUE_RE = re.compile(
+    r"\b(?:a little(?: bit of)?|a bit of|a lot of|lots of|plenty of|a few|a handful of|"
+    r"several|some|loads of|bit of)\b"
+)
+_FILLER_RE = re.compile(r"\b(?:um+|uh+|uhm+|erm+|er|hmm+|you know|like|okay|ok|so|well)\b")
+_CORRECTION_RE = re.compile(
+    r"\b(?:no wait|wait no|no no|scratch that|make that|actually|i mean|sorry|correction|wait)\b"
+)
+_NEGATION_RE = re.compile(
+    r"^(?:no more|no|not any|not|out of|ran out of|we're out of|i'm out of|don't have|"
+    r"do not have|without)\s+"
+)
+_LOCATION_RE = re.compile(
+    r"\b(?:in|on) (?:the|my) (?:fridge|freezer|pantry|cupboard|counter|shelf|cabinet)\b"
+)
+_SPLIT_RE = re.compile(r",|;|\.(?=\s|$)|\band\b(?! a half)|\bplus\b|\balso\b|\bbut\b|\bthen\b")
 _NUMERIC_RE = re.compile(r"^(\d+(?:\.\d+)?|\d+/\d+)$")
+_CORR = "@corr"
+_DROP_WORDS = frozenset({"some", "the", "of", "an", "a", "my", "our", "fresh-ish"})
 _SAFETY_WORDS = ("done", "safe", "cooked through", "raw", "undercooked", "temperature", "pink")
 
 
-def _strip_filler(text: str) -> str:
-    cleaned = text.strip().lower()
-    for prefix in _FILLER:
-        if cleaned.startswith(prefix + " "):
-            cleaned = cleaned[len(prefix) :].strip()
-            break
-    return cleaned
+def _strip_leads(text: str) -> str:
+    changed = True
+    while changed:
+        changed = False
+        for lead in _LEADS:
+            if text == lead:
+                return ""
+            if text.startswith(lead + " "):
+                text = text[len(lead) :].strip()
+                changed = True
+    return text
+
+
+def _preprocess(transcript: str) -> str:
+    text = transcript.strip().lower().replace("\u2019", "'")
+    text = re.sub(r"(\d)([a-z])", r"\1 \2", text)  # 500g → 500 g
+    text = re.sub(r"\bfl(?:uid)?\.? ?(?:oz|ounces?)\b", "fl_oz", text)
+    text = re.sub(r"\bhalf a dozen\b", "6", text)
+    text = re.sub(r"\ba dozen\b", "12", text)
+    text = re.sub(r"\ba couple(?: of)?\b", "2", text)
+    text = re.sub(r"\bcouple of\b", "2", text)
+    for word, value in _NUMBER_WORDS.items():
+        if word not in ("a", "an", "half", "quarter", "dozen") and value == int(value):
+            text = re.sub(rf"\b{word} and a half\b", f"{int(value)}.5", text)
+    text = re.sub(r"\b(\d+) and a half\b", r"\1.5", text)
+    text = re.sub(r"\b(\d+) (\d+)/(\d+)\b", lambda m: str(int(m[1]) + int(m[2]) / int(m[3])), text)
+    text = _LOCATION_RE.sub(" ", text)
+    text = _FILLER_RE.sub(" ", text)
+    text = _CORRECTION_RE.sub(f", {_CORR} ,", text)
+    return text
 
 
 def _parse_quantity(tokens: list[str]) -> tuple[float | None, list[str]]:
@@ -132,16 +213,21 @@ def _parse_quantity(tokens: list[str]) -> tuple[float | None, list[str]]:
     if _NUMERIC_RE.match(head):
         if "/" in head:
             num, den = head.split("/")
-            return float(num) / float(den), tokens[1:]
-        return float(head), tokens[1:]
-    if head in _NUMBER_WORDS:
+            qty = float(num) / float(den) if float(den) else None
+        else:
+            qty = float(head)
+        rest = tokens[1:]
+    elif head in _NUMBER_WORDS:
         qty = _NUMBER_WORDS[head]
         rest = tokens[1:]
-        # "half a cup", "a couple of"
+        # "half a cup", "half an onion"
         if rest and rest[0] in ("a", "an", "of"):
             rest = rest[1:]
-        return qty, rest
-    return None, tokens
+    else:
+        return None, tokens
+    if qty is not None and rest and rest[0] == "dozen":  # "two dozen eggs"
+        qty, rest = qty * 12, rest[1:]
+    return qty, rest
 
 
 def _parse_unit(tokens: list[str]) -> tuple[str | None, list[str]]:
@@ -153,32 +239,83 @@ def _parse_unit(tokens: list[str]) -> tuple[str | None, list[str]]:
     return None, tokens
 
 
+def _parse_chunk(chunk: str) -> tuple[str | None, float | None, str | None, bool]:
+    """→ (label, quantity, unit, vague). ``label`` is None for a bare amount ("make that two")."""
+    phrase = re.sub(r"[^\w\s/.'-]", " ", chunk)
+    phrase = re.sub(r"\s+", " ", phrase).strip(" .")
+    phrase = _strip_leads(phrase)
+    vague = bool(_VAGUE_RE.search(phrase))
+    phrase = _VAGUE_RE.sub(" ", phrase).strip()
+    phrase = _strip_leads(re.sub(r"\s+", " ", phrase))
+    tokens = phrase.split()
+    quantity, tokens = (None, tokens) if vague else _parse_quantity(tokens)
+    unit, tokens = _parse_unit(tokens)
+    tokens = [t for t in tokens if t not in _DROP_WORDS]
+    label = " ".join(tokens) or None
+    return label, quantity, unit, vague
+
+
+def _confidence(label: str) -> float:
+    # Identity comes from the user's own words; very long phrases are likely mis-heard.
+    return 0.65 if len(label.split()) > 4 else 0.9
+
+
 def parse_transcript(transcript: str) -> list[PantryCandidate]:
-    """Split on commas / "and", pull leading quantity words + units, normalize aliases."""
+    """Deterministic spoken-pantry parser (mock mode, PAN-02).
+
+    Splits on commas / "and" / "plus" / "but", drops fillers ("um", "like"), reads leading
+    quantities (digits, fractions, number words, "a dozen", "a couple", "one and a half") and
+    units, applies corrections ("no wait, three onions" replaces the earlier onions; "make that
+    two" fixes the last amount), drops negations ("no milk") and merges repeats. Vague amounts
+    ("some", "a few") are never turned into numbers.
+    """
     candidates: list[PantryCandidate] = []
-    for chunk in _SPLIT_RE.split(_strip_filler(transcript)):
-        phrase = re.sub(r"[^\w\s/.-]", " ", chunk).strip()
-        if not phrase:
+    correcting = False
+    for raw_chunk in _SPLIT_RE.split(_preprocess(transcript)):
+        chunk = raw_chunk.strip()
+        if not chunk:
             continue
-        tokens = phrase.split()
-        quantity, tokens = _parse_quantity(tokens)
-        unit, tokens = _parse_unit(tokens)
-        tokens = [t for t in tokens if t not in ("some", "the", "of", "an", "a")]
-        if not tokens:
+        if chunk == _CORR:
+            correcting = True
             continue
-        raw_label = " ".join(tokens)
-        canonical = _ALIASES.get(raw_label, raw_label)
-        candidates.append(
-            PantryCandidate(
-                raw_label=raw_label,
-                canonical_name=canonical,
-                quantity=quantity,
-                unit=unit,
-                confidence=0.9 if quantity is not None or unit is not None else 0.8,
-                evidence=f"transcript: '{chunk.strip()}'",
-                action="add",
-            )
+        negated = _NEGATION_RE.match(_strip_leads(chunk))
+        if negated:
+            label, *_ = _parse_chunk(_strip_leads(chunk)[negated.end() :])
+            if label:
+                canonical = _ALIASES.get(label, label)
+                candidates = [c for c in candidates if c.canonical_name != canonical]
+            correcting = False
+            continue
+        label, quantity, unit, _vague = _parse_chunk(chunk)
+        evidence = f"transcript: '{chunk}'"
+        if label is None:
+            # A bare amount only means something as a correction of the previous item.
+            if correcting and candidates and (quantity is not None or unit is not None):
+                last = candidates[-1]
+                candidates[-1] = last.model_copy(
+                    update={"quantity": quantity, "unit": unit, "evidence": evidence}
+                )
+            correcting = False
+            continue
+        canonical = _ALIASES.get(label, label)
+        candidate = PantryCandidate(
+            raw_label=label,
+            canonical_name=canonical,
+            quantity=quantity,
+            unit=unit,
+            confidence=_confidence(label),
+            evidence=evidence,
+            action="add",
         )
+        same = next((i for i, c in enumerate(candidates) if c.canonical_name == canonical), None)
+        if correcting and candidates:
+            candidates[same if same is not None else len(candidates) - 1] = candidate
+        elif same is not None:
+            if candidates[same].quantity is None and quantity is not None:
+                candidates[same] = candidate
+        else:
+            candidates.append(candidate)
+        correcting = False
     return candidates
 
 
@@ -234,7 +371,7 @@ class MockAIProvider:
         return self._observe_photo(request.image_ref)
 
     def _observe_photo(self, image_ref: str | None) -> PantryObservation:
-        fixture = self._photo_fixture(image_ref)
+        fixture = self._photo_fixture(image_ref or DEFAULT_PHOTO_FIXTURE)
         if fixture is not None:
             return PantryObservation.model_validate({"mode": "photo", **fixture})
         return PantryObservation(
@@ -249,6 +386,7 @@ class MockAIProvider:
                 )
             ],
             notes=["I can't confirm what this is from the image. Try a closer, labeled shot."],
+            unknowns=["what is in this photo"],
         )
 
     def _photo_fixture(self, image_ref: str | None) -> dict[str, Any] | None:

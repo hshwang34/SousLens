@@ -9,7 +9,8 @@ FastAPI + SQLAlchemy 2 (async, asyncpg) + Postgres 16, managed with `uv` on Pyth
 make env                       # .env from ../.env.example with a random JWT_SECRET; AUTH_MODE and
                                # JWT_SECRET are required (the app refuses to start without them)
 make db-up                     # postgres:16 in docker, creates souslens + souslens_test
-make seed                      # alembic upgrade head, then fixtures/seeded_recipes/*.json
+make seed                      # alembic upgrade head, then fixtures/ingredients.json (upsert)
+                               # and fixtures/seeded_recipes/*.json
 make dev                       # http://localhost:8000/v1/health  (docs at /docs)
 curl -s localhost:8000/v1/recipes | python3 -m json.tool
 ```
@@ -38,7 +39,7 @@ UNAUTHORIZED` "Invalid or expired sign-in code". Tests set `DEV_LOGIN_ECHO_CODE=
 ## API (`/v1`)
 
 Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
-`docs/product/briefs/003-api-contract.md`.
+`docs/product/briefs/003-api-contract.md` (recipes) and `004-api-contract.md` (pantry, fit).
 
 | Method | Path | Notes |
 |---|---|---|
@@ -56,6 +57,13 @@ Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
 | POST/GET | `/recipes/drafts` | create / list mine |
 | GET/PATCH/DELETE | `/recipes/drafts/{id}` | owner; PATCH merges top-level fields, arrays replace whole; published → 409 |
 | POST | `/recipes/drafts/{id}/publish` | 201 `PublishResult`; 422 with `details.problems` |
+| GET | `/pantry` | my confirmed pantry, sorted by `normalized_name` |
+| POST | `/pantry` | 201; selected items only (+ `observation_id` provenance); 409 `DUPLICATE_PANTRY_ITEM` with `details.conflicts` unless each duplicate has `resolution` (`merge_into` / `keep_both`) |
+| PATCH | `/pantry/{id}` | owner; `null` clears a field (not `raw_label`); setting `quantity` clears `quantity_is_estimate`; reconfirms |
+| POST | `/pantry/{id}/confirm` | owner; "still have it" → `last_confirmed_at` = now |
+| DELETE | `/pantry/{id}` | owner; 204 |
+| POST | `/pantry/observations` | 201 candidates only (24 h TTL, never pantry truth). JSON transcript, or multipart photo (`image` JPEG/PNG/HEIC ≤ 5,000,000 bytes, magic-byte checked → 415/413; processed in memory, never stored). Mock: `fixture=<stem>`, default `demo_counter`. 30/user/hour → 429 |
+| POST | `/recipe-versions/{version_id}/fit` | available / uncertain / missing / optional_missing per ingredient with reasons; same access rule as `GET /recipe-versions/{id}` |
 
 `recipe_versions` is append-only: a `BEFORE UPDATE OR DELETE` trigger (migration 0002) raises on
 every row. Operator repairs need `SET LOCAL souslens.unlock_versions = 'on'` in the same
@@ -75,12 +83,25 @@ alembic migration at session start and truncate every table between tests.
 ```
 app/core        config (env + .env), errors (PRD envelope), security (JWT, AuthProvider), logging
 app/db          models for every PRD §10 table, async engine, alembic migrations
-app/domains     users, recipes (public read side, drafts/publish), ownership, sessions/oracle, safety
+app/domains     users, recipes (public read side, drafts/publish), ownership, sessions/oracle, safety,
+                matching (dictionary, normalise, units, fit), pantry (CRUD, observations, upload)
 app/ai          provider Protocols + schemas, MockAIProvider, Gemini stub, registry
-app/api/v1      health, auth, me, recipes
+app/api/v1      health, auth, me, recipes (+ fit), pantry
 app/scripts     seed
 tests           unit/ (pure), integration/ (httpx + real Postgres)
 ```
 
 Migrations: edit models, then `uv run alembic revision --autogenerate -m "..."` and review the
 file (deferred `use_alter` foreign keys must be added by hand, see `0001_initial_schema.py`).
+
+## Pantry and matching notes (brief 004)
+
+- The ingredient dictionary lives in `../fixtures/ingredients.json` and is upserted into
+  `ingredients` by `make seed`; the API reads it from the DB per request. An alias claimed by two
+  entries fails the seed (and `tests/unit/test_matching_normalize.py`).
+- Pantry photos never touch disk: the request body is read into memory and parsed with
+  `python_multipart` callbacks (`app/domains/pantry/upload.py`), because Starlette's
+  `request.form()` spools files over 1 MB to a temp file. The test
+  `test_image_bytes_are_never_written_to_disk_or_db` guards it.
+- `uv run pytest tests/unit/test_pantry_transcripts_eval.py -s` prints transcript-parser
+  precision/recall over `../fixtures/pantry_transcripts.json`.

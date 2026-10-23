@@ -1,0 +1,22 @@
+{
+  "candidates": [
+    {"raw_label": "Gochujang", "canonical_name": "gochujang", "quantity": null, "unit": null,
+     "confidence": 0.92, "evidence": "package label: 'Gochujang' on a red tub", "action": "add"},
+    {"raw_label": "Soy sauce", "canonical_name": "soy sauce", "quantity": null, "unit": null,
+     "confidence": 0.9, "evidence": "bottle label: 'Soy Sauce'", "action": "add"},
+    {"raw_label": "Honey", "canonical_name": "honey", "quantity": null, "unit": null,
+     "confidence": 0.88, "evidence": "squeeze bottle label: 'Honey'", "action": "add"},
+    {"raw_label": "Yellow onions", "canonical_name": "onion", "quantity": 3, "unit": null,
+     "quantity_is_estimate": true, "confidence": 0.8,
+     "evidence": "three onions visible in a bowl; others may be hidden", "action": "add"},
+    {"raw_label": "Garlic", "canonical_name": "garlic", "quantity": null, "unit": null,
+     "confidence": 0.72, "evidence": "papery white bulb shape; could be a shallot", "action": "add"},
+    {"raw_label": "Egg carton", "canonical_name": "egg", "quantity": null, "unit": null,
+     "confidence": 0.66, "evidence": "closed carton; how many eggs are inside is not visible",
+     "action": "add"},
+    {"raw_label": "unlabeled jar", "canonical_name": null, "quantity": null, "unit": null,
+     "confidence": 0.17, "evidence": "glass jar with dark contents and no label", "action": "ignore"}
+  ],
+  "unknowns": ["contents of the unlabeled jar", "anything outside the frame or behind other items"],
+  "notes": ["Demo mode fixture: not a real detection (PRD Appendix C)."]
+}

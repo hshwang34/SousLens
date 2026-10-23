@@ -1,4 +1,10 @@
-"""Seed ``fixtures/seeded_recipes/*.json`` into the database, idempotently.
+"""Seed ``fixtures/ingredients.json`` and ``fixtures/seeded_recipes/*.json``, idempotently.
+
+* Ingredients (brief 004): upserted by ``canonical_name`` with deterministic uuid5 ids; aliases,
+  category, allergens, qualifiers and ambiguity links are refreshed on every run. Rows no longer
+  in the file are deleted (pantry items keep their ``normalized_name``; ``ingredient_id`` goes
+  null via ON DELETE SET NULL), so a stale alias can never collide with a current one. The
+  resulting table is then re-read and checked strictly for alias collisions.
 
 * Upsert by ``slug``; mutable metadata (title, summary, tags, cover) is refreshed. Visibility is
   set to public only when the recipe is first created.
@@ -28,7 +34,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.engine import make_engine, make_sessionmaker
-from app.db.models import Recipe, RecipeVersion, Visibility
+from app.db.models import Ingredient, Recipe, RecipeVersion, Visibility
+from app.domains.matching.dictionary import (
+    IngredientDictionary,
+    entries_from_file,
+    entry_from_row,
+    read_dictionary_file,
+)
 from app.domains.recipes.drafts import search_text_for
 from app.domains.recipes.schemas import IngredientOut, StepOut
 from app.domains.users import service as users_service
@@ -166,7 +178,67 @@ async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class IngredientSeedResult:
+    created: int
+    updated: int
+    unchanged: int
+    removed: int = 0
+
+
+async def seed_ingredients(session: AsyncSession, fixtures_dir: Path) -> IngredientSeedResult:
+    entries = entries_from_file(read_dictionary_file(fixtures_dir))
+    IngredientDictionary.build(entries)  # strict: refuses alias collisions before any write
+    existing = {
+        row.canonical_name: row for row in (await session.execute(select(Ingredient))).scalars()
+    }
+    created = updated = unchanged = 0
+    for entry in entries:
+        values = {
+            "aliases_json": list(entry.aliases),
+            "category": entry.category,
+            "allergen_flags": list(entry.allergens),
+            "qualifiers": sorted(entry.qualifiers),
+            "ambiguous_with": list(entry.ambiguous_with),
+        }
+        row = existing.get(entry.canonical_name)
+        if row is None:
+            session.add(
+                Ingredient(
+                    id=seed_uuid("ingredient", entry.canonical_name),
+                    canonical_name=entry.canonical_name,
+                    **values,
+                )
+            )
+            created += 1
+        elif any(getattr(row, k) != v for k, v in values.items()):
+            for k, v in values.items():
+                setattr(row, k, v)
+            updated += 1
+        else:
+            unchanged += 1
+    wanted = {e.canonical_name for e in entries}
+    stale = [row for name, row in existing.items() if name not in wanted]
+    for row in stale:
+        await session.delete(row)
+    await session.flush()
+    rows = (await session.execute(select(Ingredient))).scalars().all()
+    IngredientDictionary.build([entry_from_row(r) for r in rows])  # strict over the DB too
+    log.info(
+        "seeded ingredients",
+        extra={
+            "ingredients_created": created,
+            "ingredients_updated": updated,
+            "ingredients_unchanged": unchanged,
+        },
+    )
+    return IngredientSeedResult(
+        created=created, updated=updated, unchanged=unchanged, removed=len(stale)
+    )
+
+
 async def seed_fixtures(session: AsyncSession, fixtures_dir: Path) -> list[SeedResult]:
+    await seed_ingredients(session, fixtures_dir)
     results = [await seed_recipe(session, fixture) for fixture in load_fixtures(fixtures_dir)]
     await session.commit()
     return results
