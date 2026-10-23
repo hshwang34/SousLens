@@ -9,13 +9,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import delete, or_, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.errors import NotFound
-from app.db.models import Recipe, RecipeVersion, Save, User, Visibility
+from app.db.models import Recipe, RecipeDraft, RecipeVersion, Save, User, Visibility
 from app.domains.recipes import drafts
 from app.domains.recipes.pagination import FeedCursor
 from app.domains.recipes.schemas import (
@@ -254,15 +254,9 @@ async def save(session: AsyncSession, user: User, recipe_id: uuid.UUID) -> SaveS
 
 async def unsave(session: AsyncSession, user: User, recipe_id: uuid.UUID) -> SaveStatus:
     # Deliberately no visibility check: a learner may always drop a save, even after the
-    # recipe was unpublished; an unknown id is simply "not saved".
-    existing = (
-        await session.execute(
-            select(Save).where(Save.user_id == user.id, Save.recipe_id == recipe_id)
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        await session.delete(existing)
-        await session.flush()
+    # recipe was unpublished; an unknown id is simply "not saved". A single bulk DELETE (no
+    # ORM load-then-delete) so concurrent unsaves are all 200 with no stale-row warning.
+    await session.execute(delete(Save).where(Save.user_id == user.id, Save.recipe_id == recipe_id))
     return SaveStatus(recipe_id=recipe_id, saved=False)
 
 
@@ -284,18 +278,22 @@ async def list_mine(session: AsyncSession, user: User) -> list[MyRecipe]:
         .order_by(Recipe.published_at.desc(), Recipe.id.desc())
     )
     rows = list((await session.execute(stmt)).unique().scalars().all())
-    saved = await saved_ids(session, user, (r.id for r in rows)) or set()
-    items: list[MyRecipe] = []
-    for recipe in rows:
-        card = to_card(recipe, saved=recipe.id in saved)
-        items.append(
-            MyRecipe(
-                **card.model_dump(),
-                visibility=recipe.visibility.value,
-                has_open_draft=await drafts.open_draft_id(session, recipe.id) is not None,
-            )
+    ids = [r.id for r in rows]
+    saved = await saved_ids(session, user, ids) or set()
+    with_open_draft: set[uuid.UUID] = set()
+    if ids:
+        open_stmt = select(RecipeDraft.recipe_id).where(
+            RecipeDraft.recipe_id.in_(ids), RecipeDraft.status.in_(drafts.OPEN_DRAFT_STATUSES)
         )
-    return items
+        with_open_draft = {rid for rid in (await session.execute(open_stmt)).scalars() if rid}
+    return [
+        MyRecipe(
+            **to_card(recipe, saved=recipe.id in saved).model_dump(),
+            visibility=recipe.visibility.value,
+            has_open_draft=recipe.id in with_open_draft,
+        )
+        for recipe in rows
+    ]
 
 
 def _escape_like(value: str) -> str:

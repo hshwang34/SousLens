@@ -208,7 +208,6 @@ async def test_concurrent_first_publishes_with_same_title_never_500(
     assert len(slugs) == len(set(slugs)) and slugs
 
 
-@pytest.mark.filterwarnings("ignore::sqlalchemy.exc.SAWarning")
 async def test_concurrent_saves_by_one_user_leave_one_row(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
