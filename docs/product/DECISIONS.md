@@ -59,3 +59,8 @@ not confirmed by the PM in this conversation; the PM should strike this entry if
 Standing rule from the same session: a confirmed security finding in an open, unmerged PR is
 fixed in that PR immediately with a one-line note in the PR body; non-security changes to a
 gated PR still wait. *Lives in:* PR bodies #1/#2.
+
+#10 · 2026-10-23 · **#9 is confirmed.** The PM's global instructions now state that the orchestrator
+session carries the PM's authority for brief approval, prioritisation, stacking, and merging
+fully green PRs, but not for deploys, deletions, account changes or spend. Merges are CI-gated:
+the eng lead merges when every check is green and the gate passed.
