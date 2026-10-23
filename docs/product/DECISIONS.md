@@ -78,3 +78,8 @@ microphone or camera (and in the simulator). *Lives in:* `docs/product/briefs/00
 dictated text is "Voice" (also when edited after dictation), photos are "Photo" (PAN-05). Items from
 a mock (demo) photo scan start unticked so demo data never lands in a real pantry by default.
 *Lives in:* iOS ScanReviewViewModel; backend stores the client-sent source.
+
+#13 · 2026-10-23 · **A photo-estimated quantity never makes a recipe line "available".** It caps
+the line at "uncertain" with "the amount is an estimate from a photo — check it", and estimates
+are never added up. Typing your own amount removes the estimate. *Why:* PRD §8.3 ("mark estimates
+as such; ask the user to confirm") and FIT-03 (never claim "you can make it" on uncertain data).
