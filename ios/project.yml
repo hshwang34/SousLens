@@ -47,6 +47,9 @@ targets:
       properties:
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.souslens.ios
+        # Universal-link stub (brief 003): the domain is not live yet; `onOpenURL` handles the path.
+        com.apple.developer.associated-domains:
+          - applinks:souslens.app
     info:
       path: SousLens/Resources/Info.plist
       properties:
@@ -57,6 +60,12 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
+        # souslens://recipe/{id} share links (brief 003 REC-01).
+        CFBundleURLTypes:
+          - CFBundleURLName: com.souslens.ios.recipe
+            CFBundleURLSchemes:
+              - souslens
+            CFBundleTypeRole: Viewer
         NSCameraUsageDescription: >-
           SousLens uses the camera only when you tap to scan your pantry or ask the coach to look
           at a step. Nothing is recorded in the background.

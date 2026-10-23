@@ -3,8 +3,28 @@ import os
 
 /// What the recipe screens need. `APIClient` is the real implementation; tests inject a fake.
 protocol RecipeService: Sendable {
+    // Browse (Slice 0)
     func listRecipes(query: String?, tag: String?, cursor: String?, limit: Int) async throws -> RecipePage
     func recipe(id: UUID) async throws -> RecipeDetail
+
+    // Brief 003 — drafts (owner only)
+    func createDraft(_ patch: DraftPatch) async throws -> Draft
+    func listDrafts() async throws -> [DraftSummary]
+    func draft(id: UUID) async throws -> Draft
+    func updateDraft(id: UUID, _ patch: DraftPatch) async throws -> Draft
+    func deleteDraft(id: UUID) async throws
+    func publishDraft(id: UUID) async throws -> PublishResult
+    /// `POST /recipes/{id}/edit`; 409 `STATE_CONFLICT` → `APIError.conflictingDraftId`.
+    func editRecipe(id: UUID) async throws -> Draft
+    func unpublishRecipe(id: UUID) async throws -> UnpublishResult
+
+    // Brief 003 — saves and "mine"
+    func saveRecipe(id: UUID) async throws -> SaveResult
+    func unsaveRecipe(id: UUID) async throws -> SaveResult
+    func mySaved() async throws -> [RecipeCard]
+    func myRecipes() async throws -> [MyRecipe]
+    /// `GET /recipe-versions/{id}` — an exact version, whatever the recipe's current visibility.
+    func recipeVersion(id: UUID) async throws -> RecipeDetail
 }
 
 protocol AuthService: Sendable {
@@ -104,6 +124,69 @@ final class APIClient: Sendable, RecipeService, AuthService {
         try await send(.get("/v1/recipes/\(id.uuidString.lowercased())"))
     }
 
+    // MARK: Brief 003 — drafts
+
+    func createDraft(_ patch: DraftPatch = .empty) async throws -> Draft {
+        try await send(.post("/v1/recipes/drafts", body: try encoder.encode(patch)))
+    }
+
+    func listDrafts() async throws -> [DraftSummary] {
+        let response: ItemsResponse<DraftSummary> = try await send(.get("/v1/recipes/drafts"))
+        return response.items
+    }
+
+    func draft(id: UUID) async throws -> Draft {
+        try await send(.get("/v1/recipes/drafts/\(Self.pathId(id))"))
+    }
+
+    func updateDraft(id: UUID, _ patch: DraftPatch) async throws -> Draft {
+        try await send(.patch("/v1/recipes/drafts/\(Self.pathId(id))", body: try encoder.encode(patch)))
+    }
+
+    func deleteDraft(id: UUID) async throws {
+        _ = try await raw(.delete("/v1/recipes/drafts/\(Self.pathId(id))"))
+    }
+
+    func publishDraft(id: UUID) async throws -> PublishResult {
+        try await send(.post("/v1/recipes/drafts/\(Self.pathId(id))/publish", body: Self.emptyObject))
+    }
+
+    func editRecipe(id: UUID) async throws -> Draft {
+        try await send(.post("/v1/recipes/\(Self.pathId(id))/edit", body: Self.emptyObject))
+    }
+
+    func unpublishRecipe(id: UUID) async throws -> UnpublishResult {
+        try await send(.post("/v1/recipes/\(Self.pathId(id))/unpublish", body: Self.emptyObject))
+    }
+
+    // MARK: Brief 003 — saves and "mine"
+
+    func saveRecipe(id: UUID) async throws -> SaveResult {
+        try await send(.post("/v1/recipes/\(Self.pathId(id))/save", body: Self.emptyObject))
+    }
+
+    func unsaveRecipe(id: UUID) async throws -> SaveResult {
+        try await send(.delete("/v1/recipes/\(Self.pathId(id))/save"))
+    }
+
+    func mySaved() async throws -> [RecipeCard] {
+        let response: ItemsResponse<RecipeCard> = try await send(.get("/v1/me/saved"))
+        return response.items
+    }
+
+    func myRecipes() async throws -> [MyRecipe] {
+        let response: ItemsResponse<MyRecipe> = try await send(.get("/v1/me/recipes"))
+        return response.items
+    }
+
+    func recipeVersion(id: UUID) async throws -> RecipeDetail {
+        try await send(.get("/v1/recipe-versions/\(Self.pathId(id))"))
+    }
+
+    private static let emptyObject = Data("{}".utf8)
+
+    private static func pathId(_ id: UUID) -> String { id.uuidString.lowercased() }
+
     // MARK: - Transport
 
     struct Endpoint: Sendable {
@@ -118,6 +201,14 @@ final class APIClient: Sendable, RecipeService, AuthService {
 
         static func post(_ path: String, body: Data?) -> Endpoint {
             Endpoint(method: "POST", path: path, body: body)
+        }
+
+        static func patch(_ path: String, body: Data?) -> Endpoint {
+            Endpoint(method: "PATCH", path: path, body: body)
+        }
+
+        static func delete(_ path: String) -> Endpoint {
+            Endpoint(method: "DELETE", path: path)
         }
     }
 
@@ -175,7 +266,8 @@ final class APIClient: Sendable, RecipeService, AuthService {
                 code: envelope.error.code,
                 message: envelope.error.message,
                 retryable: envelope.error.retryable,
-                correlationId: cid
+                correlationId: cid,
+                details: envelope.error.details
             )
         }
         throw APIError.http(status: http.statusCode, correlationId: cid)

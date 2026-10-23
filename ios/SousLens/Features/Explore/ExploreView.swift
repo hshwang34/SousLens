@@ -5,7 +5,8 @@ struct ExploreView: View {
     @State private var model: ExploreViewModel?
 
     var body: some View {
-        NavigationStack {
+        @Bindable var environment = environment
+        NavigationStack(path: $environment.exploreRoutes) {
             Group {
                 if let model {
                     ExploreContent(model: model)
@@ -15,8 +16,11 @@ struct ExploreView: View {
             }
             .background(SLColor.background)
             .navigationTitle("Explore")
-            .navigationDestination(for: RecipeCard.self) { card in
-                RecipeDetailView(card: card)
+            .navigationDestination(for: RecipeRoute.self) { route in
+                switch route {
+                case .recipe(let id, let card):
+                    RecipeDetailView(recipeId: id, card: card)
+                }
             }
         }
         .task {
@@ -43,7 +47,7 @@ private struct ExploreContent: View {
                     loadingState
                 case .loaded:
                     ForEach(model.cards) { card in
-                        NavigationLink(value: card) {
+                        NavigationLink(value: RecipeRoute.card(card)) {
                             RecipeCardView(card: card)
                         }
                         .buttonStyle(.plain)
@@ -67,7 +71,7 @@ private struct ExploreContent: View {
         .refreshable {
             await model.refresh()
         }
-        .searchable(text: $model.searchText, prompt: "Search recipes")
+        .searchable(text: $model.searchText, prompt: "Search recipes or ingredients")
         .onSubmit(of: .search) {
             Task { await model.submitSearchNow() }
         }

@@ -138,6 +138,13 @@ final class AuthStore {
         forceSignOut(reason: wasSignedIn ? "Server changed to \(newValue). Sign in again." : nil)
     }
 
+    #if DEBUG
+    /// Tests only.
+    func forceSignedInForTests() {
+        state = .signedIn(User(id: UUID(), displayName: "Tester", preferenceUnits: .us, createdAt: Date()))
+    }
+    #endif
+
     private func forceSignOut(reason: String?) {
         generation.advance()
         clearCredentials()
