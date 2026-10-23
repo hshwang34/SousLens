@@ -27,6 +27,7 @@ from app.domains.recipes.schemas import (
     RecipePage,
     SaveStatus,
 )
+from app.domains.recipes.versions import version_meta
 
 MAX_PAGE_SIZE = 100
 
@@ -67,14 +68,11 @@ def to_card(recipe: Recipe, *, saved: bool | None) -> RecipeCard:
     return RecipeCard(
         recipe_id=recipe.id,
         slug=recipe.slug,
-        title=recipe.title,
-        summary=recipe.summary,
-        tags=list(recipe.tags),
+        **version_meta(recipe, version),
         creator=CreatorRef(id=recipe.owner.id, display_name=recipe.owner.display_name),
         servings=version.servings,
         prep_minutes=version.prep_minutes,
         cook_minutes=version.cook_minutes,
-        cover_image_url=recipe.cover_image_url,
         published_at=recipe.published_at,
         recipe_version_id=version.id,
         version_number=version.version_number,
@@ -101,15 +99,12 @@ def to_detail(
         recipe_version_id=version.id,
         version_number=version.version_number,
         slug=recipe.slug,
-        title=recipe.title,
-        summary=recipe.summary,
-        tags=list(recipe.tags),
+        **version_meta(recipe, version),
         creator=CreatorRef(id=recipe.owner.id, display_name=recipe.owner.display_name),
         creator_id=recipe.owner.id,
         servings=content.servings,
         prep_minutes=content.prep_minutes,
         cook_minutes=content.cook_minutes,
-        cover_image_url=recipe.cover_image_url,
         ingredients=content.ingredients,
         steps=content.steps,
         creator_notes=content.creator_notes,

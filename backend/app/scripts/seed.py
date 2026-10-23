@@ -142,6 +142,10 @@ async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
                 "dietary_warnings": list(fixture.dietary_warnings),
             },
             search_text=search_text_for(fixture.title, ingredients),
+            title=fixture.title,
+            summary=fixture.summary,
+            tags=list(fixture.tags),
+            cover_image_url=fixture.cover_image_url,
         )
         session.add(version)
         await session.flush()

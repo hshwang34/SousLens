@@ -182,6 +182,9 @@ class RecipeVersion(CreatedAtMixin, Base):
     ``SET LOCAL souslens.unlock_versions = 'on'`` in the same transaction (operator repairs,
     account deletion flows); application code never sets it.
 
+    ``title``/``summary``/``tags``/``cover_image_url`` are snapshotted too, so
+    ``GET /recipe-versions/{id}`` is byte-identical for the life of the row.
+
     ``search_text`` is a denormalised, lowercased ``title + ingredient names`` string written at
     publish time so the public search can match ingredients with a plain ILIKE (REC-02).
     """
@@ -203,6 +206,14 @@ class RecipeVersion(CreatedAtMixin, Base):
     search_text: Mapped[str] = mapped_column(
         Text, nullable=False, default="", server_default=text("''")
     )
+    # Display metadata snapshotted at publish so a version is immutable *as served*. Nullable
+    # only for rows written before migration 0002 (backfilled) and ad-hoc test rows; readers
+    # fall back to the mutable ``recipes`` columns when null. ``recipes.title/summary/tags/
+    # cover_image_url`` stay as listing/search metadata, mirrored from the latest publish.
+    title: Mapped[str | None] = mapped_column(String(200))
+    summary: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    cover_image_url: Mapped[str | None] = mapped_column(Text)
     source_video_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_media.id", use_alter=True, ondelete="SET NULL")
     )

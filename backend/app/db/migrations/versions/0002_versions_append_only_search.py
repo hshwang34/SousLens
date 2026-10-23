@@ -4,6 +4,8 @@ Revision ID: 0002
 Revises: 0001
 Create Date: 2026-10-20
 
+* ``recipe_versions.title/summary/tags/cover_image_url``: display metadata snapshot so a version
+  is immutable as served; backfilled from ``recipes``.
 * ``recipe_versions.search_text``: lowercased ``title + ingredient names`` for the public search
   (REC-02), backfilled from the existing JSON before the trigger is installed.
 * ``recipe_versions_immutable``: BEFORE UPDATE OR DELETE trigger that raises on every row
@@ -16,6 +18,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = '0002'
 down_revision: str | None = '0001'
@@ -51,12 +54,28 @@ WHERE r.id = v.recipe_id
 """
 
 
+BACKFILL_METADATA = """
+UPDATE recipe_versions AS v
+SET title = r.title, summary = r.summary, tags = r.tags, cover_image_url = r.cover_image_url
+FROM recipes AS r
+WHERE r.id = v.recipe_id
+"""
+
+
 def upgrade() -> None:
     op.add_column(
         'recipe_versions',
         sa.Column('search_text', sa.Text(), server_default=sa.text("''"), nullable=False),
     )
+    op.add_column('recipe_versions', sa.Column('title', sa.String(length=200), nullable=True))
+    op.add_column('recipe_versions', sa.Column('summary', sa.Text(), nullable=True))
+    op.add_column(
+        'recipe_versions', sa.Column('tags', postgresql.ARRAY(sa.Text()), nullable=True)
+    )
+    op.add_column('recipe_versions', sa.Column('cover_image_url', sa.Text(), nullable=True))
+    # Backfill before the trigger exists (the trigger would refuse these UPDATEs).
     op.execute(BACKFILL_SEARCH_TEXT)
+    op.execute(BACKFILL_METADATA)
     op.execute(TRIGGER_FUNCTION)
     op.execute(
         "CREATE TRIGGER recipe_versions_immutable BEFORE UPDATE OR DELETE ON recipe_versions "
@@ -67,4 +86,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS recipe_versions_immutable ON recipe_versions")
     op.execute("DROP FUNCTION IF EXISTS recipe_versions_immutable()")
+    op.drop_column('recipe_versions', 'cover_image_url')
+    op.drop_column('recipe_versions', 'tags')
+    op.drop_column('recipe_versions', 'summary')
+    op.drop_column('recipe_versions', 'title')
     op.drop_column('recipe_versions', 'search_text')

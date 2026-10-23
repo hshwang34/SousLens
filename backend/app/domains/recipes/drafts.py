@@ -38,6 +38,7 @@ from app.domains.recipes.draft_schemas import (
     PublishResult,
 )
 from app.domains.recipes.schemas import IngredientOut, StepOut
+from app.domains.recipes.versions import version_meta
 
 OPEN_DRAFT_STATUSES: tuple[DraftStatus, ...] = (
     DraftStatus.EDITING,
@@ -375,6 +376,10 @@ async def publish(
             "dietary_warnings": normalised["dietary_warnings"],
         },
         search_text=search_text_for(title, normalised["ingredients"]),
+        title=title,
+        summary=normalised["summary"],
+        tags=normalised["tags"],
+        cover_image_url=normalised["cover_image_url"],
     )
     session.add(version)
     await session.flush()
@@ -422,11 +427,12 @@ async def start_edit(session: AsyncSession, user: User, recipe_id: uuid.UUID) ->
             extra={"details": {"draft_id": str(existing)}},
         )
     warnings = version.warning_json or {}
+    meta = version_meta(recipe, version)
     content = DraftContent(
-        title=recipe.title,
-        summary=recipe.summary,
-        tags=list(recipe.tags),
-        cover_image_url=recipe.cover_image_url,
+        title=meta["title"],
+        summary=meta["summary"],
+        tags=meta["tags"],
+        cover_image_url=meta["cover_image_url"],
         servings=version.servings,
         prep_minutes=version.prep_minutes,
         cook_minutes=version.cook_minutes,

@@ -73,11 +73,6 @@ async def test_v1_version_fields_byte_identical_after_v2_and_unpublish(
     assert after["recipe_version_id"] == before["recipe_version_id"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="DEFECT: title/summary/tags/cover live on recipes, so GET /recipe-versions/{v1} "
-    "changes after v2 renames the recipe (only the version-owned fields are frozen).",
-)
 async def test_whole_v1_json_is_unchanged_after_v2(client: AsyncClient) -> None:
     """The brief's gate is "v1 JSON unchanged (byte-equal)": every key, title included."""
     alice = await bearer(client, "alice@example.com")
@@ -95,6 +90,10 @@ async def test_whole_v1_json_is_unchanged_after_v2(client: AsyncClient) -> None:
     await client.post(f"/v1/recipes/drafts/{draft['id']}/publish", json={}, headers=alice)
     after = (await client.get(url1, headers=alice)).text
     assert after == before
+    # ... and after unpublish (same caller, so the caller-dependent saved/share_url match too).
+    await client.post(f"/v1/recipes/{v1['recipe_id']}/unpublish", json={}, headers=alice)
+    assert (await client.get(url1, headers=alice)).text == before
+    assert json.loads(before)["title"] == "Weeknight Garlic Noodles"
 
 
 async def test_raw_sql_update_delete_and_fk_cascades_are_blocked(db_session: AsyncSession) -> None:

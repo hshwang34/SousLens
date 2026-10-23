@@ -188,12 +188,9 @@ async def test_gate_edit_then_publish_v2_leaves_v1_byte_identical(
     response = await client.get(f"/v1/recipe-versions/{v1['recipe_version_id']}", headers=alice)
     assert response.status_code == 200
     v1_again = response.json()
-    # Recipe-level metadata (summary) is mutable per PRD §10 and was changed in v2; everything
-    # the version owns must be unchanged.
-    for key in ("summary",):
-        v1_detail.pop(key)
-        v1_again.pop(key)
-    assert json.dumps(v1_again, sort_keys=True) == json.dumps(v1_detail, sort_keys=True)
+    # Whole v1 body, every key (title/summary included), is unchanged: the version owns its
+    # display metadata too. ``saved``/``share_url`` are equal here (same caller, same recipe).
+    assert response.text == v1_detail_text
     assert v1_again["version_number"] == 1 and len(v1_again["steps"]) == 3
 
     mine = (await client.get("/v1/me/recipes", headers=alice)).json()["items"]
