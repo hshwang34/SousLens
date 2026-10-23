@@ -140,11 +140,13 @@ comes back; it never moves a step, starts a timer or applies a swap on its own.
   `GET /recipe-versions/{id}/my-variation` returns one; tapping it fills the swaps (still undoable).
 - **Start cooking** (fit screen with swaps, or recipe detail as written) creates the session and
   opens the full-screen cooking view, which sends `start` on that same tap.
-  If the user already has 3 open cooks (409 `STATE_CONFLICT` with `details.open_session_ids`), a
+  If the user has too many unfinished cooks (409 `STATE_CONFLICT` with `details.open_session_ids`), a
   **You have unfinished cooks** sheet lists them with **Resume** / **Abandon** (confirmation →
   `GET` the session for its revision → confirmed `abandon` with a fresh key; one retry on a stale
   revision); once none block, the start is retried with the same version and swaps. 429 on create
-  says to try again later (`SessionStarter`).
+  says to try again later (`SessionStarter`). The start is retried after each stop; another 409
+  refreshes the list. A cook that changed since it was shown is refreshed and must be confirmed
+  again. The cooking screen opens from the sheet's `onDismiss`, with the epoch from the Start tap.
 - **Cooking** (`Features/Cooking`): step N of M, the session's step text in large Dynamic Type,
   **Adapted · Common swap / AI suggested adaptation** badge with **Show original**, success cues,
   warnings with a safety icon, creator note, "No clip for this step", oversized **Back / Pause /
@@ -176,6 +178,22 @@ comes back; it never moves a step, starts a timer or applies a swap on its own.
   banner "Continue cooking <title> — Step N" (dismissible), then a floating pill while browsing.
   Tapping reopens the cooking view at the server's step. Offline, the last cached Session is shown
   read-only with **Reconnect to continue**.
+- **Stale state**: a Session with a lower revision than the one on screen is ignored (a slow read
+  overtaken by a command). A cached / resumed copy is read-only until the first server read
+  settles; no refresh is sent while a command is in flight. A pending tap shows on the offline
+  banner ("Your last tap (Next) wasn’t confirmed"); one older than 2 minutes is re-sent only after
+  asking.
+- **Warnings stay visible**: a swap's allergy warning, risks and the sheet's safety notice are
+  shown in the fit summary and on the adapted step ("Adapted · Common swap · Check the label: …").
+  `conflicts_with_allergies` on an adaptation shows a red "Conflicts with your allergies — revert?"
+  and blocks Save my changes. Preferences the server returns in `unrecognized` stay flagged with
+  "We don’t recognise “X”…" until removed.
+- **Screen and speech**: the screen stays awake while cooking; nothing is spoken after the cooking
+  screen or the drawer closes; a coach answer is read safety notice first. A timer reaching zero
+  plays a haptic and posts a VoiceOver announcement; toasts are announced. At accessibility text
+  sizes Back/Next stack and Repeat/Slower/Ask/Look form a 2×2 grid (`CookingLayout`).
+- **Session end draft** (outcome, note, Save my changes) lives on the cooking model, so an offline
+  Done keeps it; the note is posted once even if Done is retried; Reconnect is in the sheet.
 - **Account isolation**: the cached Session (`Persistence/SessionCache`) is stamped with the owner
   (user id + server) and deleted if anyone else reads it. Every AuthStore path that drops
   credentials (sign-out, 401, server change, fresh install, a restore that ends signed out, a

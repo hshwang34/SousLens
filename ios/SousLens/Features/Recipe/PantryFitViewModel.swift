@@ -336,9 +336,14 @@ final class PantryFitViewModel {
 
     /// **Start cooking**: `POST /sessions` pinning this version with the approved swaps. The
     /// returned Session (status `created`) is started by the cooking screen on the same tap.
-    func startCooking() async -> CookingSession? {
+    func startCooking(epoch: Int? = nil) async -> CookingSession? {
         guard let starter else { return nil }
-        return await starter.start(recipeVersionId: recipeVersionId, adaptations: approvedSwapList.map(\.input))
+        return await starter.start(recipeVersionId: recipeVersionId, adaptations: approvedSwapList.map(\.input), epoch: epoch)
+    }
+
+    /// Cautions by ingredient ref, handed to the cooking screen.
+    var swapCautions: [String: SwapCaution] {
+        approvedSwaps.mapValues(\.caution).filter { !$0.value.isEmpty }
     }
 
 }

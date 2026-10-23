@@ -46,6 +46,11 @@ struct SessionCache: SessionCaching {
         let data = try JSONCoding.makeEncoder().encode(CachedSession(owner: owner, session: session))
         // Private session data: protected while the device is locked.
         try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        // A transient display copy: never in iCloud / iTunes backups.
+        var url = fileURL
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try url.setResourceValues(values)
     }
 
     func clear() throws {

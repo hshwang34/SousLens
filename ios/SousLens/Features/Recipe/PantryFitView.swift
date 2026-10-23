@@ -35,12 +35,10 @@ struct PantryFitView: View {
             await model.loadVariation()
         }
         .sheet(isPresented: Binding(get: { model?.starter?.showsUnfinished ?? false },
-                                    set: { if !$0 { model?.starter?.dismissUnfinished() } })) {
+                                    set: { if !$0 { model?.starter?.dismissUnfinished() } }),
+               onDismiss: { presentOutcome() }) {
             if let starter = model?.starter {
-                let epoch = environment.cooking.epoch
-                UnfinishedCooksSheet(starter: starter,
-                                     onResume: { environment.cooking.resume(sessionId: $0) },
-                                     onStarted: { environment.cooking.present(newSession: $0, epoch: epoch) })
+                UnfinishedCooksSheet(starter: starter)
             }
         }
         .sheet(item: $swapSheet) { target in
@@ -56,6 +54,19 @@ struct PantryFitView: View {
                 // The revision bump re-runs the fit.
                 environment.notePantryChanged()
             }
+        }
+    }
+
+    /// After the unfinished-cooks sheet has fully gone (never while it is dismissing).
+    private func presentOutcome() {
+        guard let starter = model?.starter, let outcome = starter.takeOutcome() else { return }
+        switch outcome {
+        case .started(let session):
+            // The epoch from when Start cooking was tapped, not from when the sheet drew.
+            environment.cooking.present(newSession: session, epoch: starter.initiatedEpoch ?? -1,
+                                        cautions: model?.swapCautions ?? [:])
+        case .resume(let id):
+            environment.cooking.resume(sessionId: id)
         }
     }
 
@@ -152,6 +163,22 @@ struct PantryFitView: View {
                         Text("\(swap.ingredientName) → \(swap.candidate) · \(swap.label)")
                             .font(SLFont.footnote)
                             .foregroundStyle(SLColor.textPrimary)
+                        // Warnings stay visible after approval.
+                        if let warning = swap.caution.allergyWarning {
+                            Label("Check the label: \(warning)", systemImage: "exclamationmark.shield.fill")
+                                .font(SLFont.footnote.weight(.semibold))
+                                .foregroundStyle(SLColor.danger)
+                        }
+                        if let notice = swap.caution.safetyNotice {
+                            Label(notice, systemImage: "exclamationmark.shield")
+                                .font(SLFont.footnote)
+                                .foregroundStyle(SLColor.danger)
+                        }
+                        ForEach(swap.caution.risks, id: \.self) { risk in
+                            Label(risk, systemImage: "exclamationmark.circle")
+                                .font(SLFont.footnote)
+                                .foregroundStyle(SLColor.warning)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -164,8 +191,8 @@ struct PantryFitView: View {
             Button {
                 Task {
                     let epoch = environment.cooking.epoch
-                    if let session = await model.startCooking() {
-                        environment.cooking.present(newSession: session, epoch: epoch)
+                    if let session = await model.startCooking(epoch: epoch) {
+                        environment.cooking.present(newSession: session, epoch: epoch, cautions: model.swapCautions)
                     }
                 }
             } label: {
@@ -242,20 +269,26 @@ private struct FitRowView: View {
                 .accessibilityLabel(row.accessibilityLabel)
                 .accessibilityIdentifier(identifier)
             if !row.actions.isEmpty {
-                HStack(spacing: Spacing.sm) {
-                    ForEach(row.actions, id: \.self) { action in
-                        Button(action.title) { perform(action) }
-                            .buttonStyle(.bordered)
-                            .tint(SLColor.accent)
-                            .frame(minHeight: Metrics.minTapTarget)
-                            .disabled(action == .stillHaveIt && isBusy)
-                            .accessibilityLabel(row.name.isEmpty ? action.title : "\(action.title): \(row.name)")
-                            .accessibilityIdentifier("fit.action.\(action.rawValue)")
-                    }
+                // Wraps to a column at large text sizes instead of truncating.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.sm) { actionButtons }
+                    VStack(alignment: .leading, spacing: Spacing.sm) { actionButtons }
                 }
             }
         }
         .padding(.vertical, Spacing.xs)
+    }
+
+    private var actionButtons: some View {
+        ForEach(row.actions, id: \.self) { action in
+            Button(action.title) { perform(action) }
+                .buttonStyle(.bordered)
+                .tint(SLColor.accent)
+                .frame(minHeight: Metrics.minTapTarget)
+                .disabled(action == .stillHaveIt && isBusy)
+                .accessibilityLabel(row.name.isEmpty ? action.title : "\(action.title): \(row.name)")
+                .accessibilityIdentifier("fit.action.\(action.rawValue)")
+        }
     }
 
     private var summary: some View {

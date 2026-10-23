@@ -68,10 +68,17 @@ private struct PreferenceSection: View {
                     .font(SLFont.footnote)
                     .foregroundStyle(SLColor.textSecondary)
             } else {
-                ChipFlow(entries: entries) { index in
+                ChipFlow(entries: entries, isFlagged: model.isUnrecognized) { index in
                     Task { await model.remove(kind, at: index) }
                 }
                 .disabled(model.isSaving)
+            }
+            // Kept until removed: swaps can't check for something the server doesn't recognise.
+            ForEach(model.unrecognizedEntries(kind), id: \.self) { entry in
+                Label(PreferencesViewModel.unrecognizedMessage(entry), systemImage: "exclamationmark.triangle.fill")
+                    .font(SLFont.footnote)
+                    .foregroundStyle(SLColor.warning)
+                    .accessibilityIdentifier("preferences.unrecognized")
             }
             HStack(spacing: Spacing.sm) {
                 TextField(kind.placeholder, text: Binding(get: { model.draft(kind) }, set: { model.setDraft(kind, $0) }))
@@ -96,6 +103,7 @@ private struct PreferenceSection: View {
 /// Removable chips, wrapping onto new lines.
 private struct ChipFlow: View {
     let entries: [String]
+    let isFlagged: (String) -> Bool
     let onRemove: (Int) -> Void
 
     var body: some View {
@@ -105,6 +113,9 @@ private struct ChipFlow: View {
                     onRemove(index)
                 } label: {
                     HStack(spacing: Spacing.xs) {
+                        if isFlagged(entry) {
+                            Image(systemName: "exclamationmark.triangle.fill").font(.caption)
+                        }
                         Text(entry).font(SLFont.callout)
                         Image(systemName: "xmark.circle.fill").font(.caption)
                     }
@@ -114,7 +125,7 @@ private struct ChipFlow: View {
                     .background(SLColor.accentSoft, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(entry). Remove")
+                .accessibilityLabel(isFlagged(entry) ? "\(entry), not recognised. Remove" : "\(entry). Remove")
             }
         }
         .padding(.vertical, Spacing.xs)

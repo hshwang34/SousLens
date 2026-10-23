@@ -49,15 +49,26 @@ struct SessionEndView: View {
                             VStack(alignment: .leading, spacing: Spacing.xxs) {
                                 Text("\(swap.original) → \(swap.replacement)").font(SLFont.body)
                                 Text(swap.displayLabel).font(SLFont.caption).foregroundStyle(SLColor.textSecondary)
+                                if swap.conflictsWithAllergies {
+                                    Label("Conflicts with your allergies", systemImage: "exclamationmark.octagon.fill")
+                                        .font(SLFont.caption.weight(.semibold))
+                                        .foregroundStyle(SLColor.danger)
+                                }
                             }
                         }
-                        Toggle("Save my changes", isOn: $model.saveChanges)
-                            .frame(minHeight: Metrics.minTapTarget)
-                            .accessibilityIdentifier("end.saveChanges")
+                        if model.canSaveChanges {
+                            Toggle("Save my changes", isOn: $model.saveChanges)
+                                .frame(minHeight: Metrics.minTapTarget)
+                                .accessibilityIdentifier("end.saveChanges")
+                        }
                     } header: {
                         Text("Your swaps")
                     } footer: {
-                        Text("Saved privately for next time (“Use my changes from last time”). Nobody else sees them.")
+                        if model.hasAllergyConflict {
+                            Text("A swap conflicts with your allergies, so these changes can’t be saved for next time. Undo it from the cooking menu first.")
+                        } else {
+                            Text("Saved privately for next time (“Use my changes from last time”). Nobody else sees them.")
+                        }
                     }
                 }
 
@@ -74,6 +85,16 @@ struct SessionEndView: View {
                 if let error = model.errorMessage {
                     Section {
                         Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger)
+                        if model.showsReconnect {
+                            Button(model.isReconnecting ? "Reconnecting…" : "Reconnect") {
+                                Task { await model.reconnect() }
+                            }
+                            .disabled(model.isReconnecting)
+                            .frame(minHeight: Metrics.minTapTarget)
+                            .accessibilityIdentifier("end.reconnect")
+                        }
+                    } footer: {
+                        Text("Your outcome, note and choices are kept until this is sent.")
                     }
                 }
             }

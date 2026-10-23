@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// "You have unfinished cooks" (409 on Start cooking): Resume one, or Abandon (confirmed) and
-/// the start is retried.
+/// "You have too many unfinished cooks" (409 on Start cooking): Resume one, or stop one (after a
+/// confirmation) and the start is retried. The cooking screen is presented by the parent's
+/// `onDismiss`, after this sheet has gone.
 struct UnfinishedCooksSheet: View {
     let starter: SessionStarter
-    let onResume: (UUID) -> Void
-    let onStarted: (CookingSession) -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var toAbandon: SessionSummary?
 
     var body: some View {
@@ -16,64 +14,57 @@ struct UnfinishedCooksSheet: View {
                     ForEach(starter.unfinished) { summary in
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             Text(summary.title).font(SLFont.headline)
-                            Text(stepText(summary))
+                            Text(Self.stepText(summary))
                                 .font(SLFont.subheadline)
                                 .foregroundStyle(SLColor.textSecondary)
+                            if starter.changedSessionId == summary.id {
+                                Label("Changed since you looked", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(SLFont.caption.weight(.semibold))
+                                    .foregroundStyle(SLColor.warning)
+                            }
                             HStack(spacing: Spacing.sm) {
-                                Button("Resume") {
-                                    starter.dismissUnfinished()
-                                    dismiss()
-                                    onResume(summary.id)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(SLColor.accent)
-                                .accessibilityIdentifier("unfinished.resume")
-                                Button("Abandon", role: .destructive) { toAbandon = summary }
+                                Button("Resume") { starter.chooseResume(summary.id) }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(SLColor.accent)
+                                    .accessibilityIdentifier("unfinished.resume")
+                                Button("Stop this cook", role: .destructive) { toAbandon = summary }
                                     .buttonStyle(.bordered)
-                                    .disabled(starter.busySessionIds.contains(summary.id))
+                                    .disabled(starter.busySessionIds.contains(summary.id) || starter.isStarting)
                                     .accessibilityIdentifier("unfinished.abandon")
-                                if starter.busySessionIds.contains(summary.id) { ProgressView() }
+                                if starter.busySessionIds.contains(summary.id) || starter.isStarting { ProgressView() }
                             }
                             .frame(minHeight: Metrics.minTapTarget)
                         }
                         .padding(.vertical, Spacing.xs)
                     }
                 } footer: {
-                    Text("You can have up to 3 cooks open. Resume one, or stop one to start this recipe.")
+                    Text("You have too many unfinished cooks to start another. Resume one, or stop one to start this recipe.")
                 }
                 if let error = starter.errorMessage {
                     Section { Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger) }
                 }
             }
-            .navigationTitle("You have unfinished cooks")
+            .navigationTitle("Unfinished cooks")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        starter.dismissUnfinished()
-                        dismiss()
-                    }
+                    Button("Cancel") { starter.dismissUnfinished() }
                 }
             }
-            .confirmationDialog("Stop “\(toAbandon?.title ?? "")”?", isPresented: Binding(get: { toAbandon != nil }, set: { if !$0 { toAbandon = nil } }), titleVisibility: .visible) {
-                Button("Stop that cook", role: .destructive) {
-                    if let summary = toAbandon {
-                        Task {
-                            if let session = await starter.abandon(summary) {
-                                dismiss()
-                                onStarted(session)
-                            }
-                        }
-                    }
+            .confirmationDialog("Stop this cook?", isPresented: Binding(get: { toAbandon != nil }, set: { if !$0 { toAbandon = nil } }), titleVisibility: .visible) {
+                Button("Stop “\(toAbandon?.title ?? "")”", role: .destructive) {
+                    if let summary = toAbandon { Task { await starter.abandon(summary) } }
                 }
                 Button("Keep it", role: .cancel) {}
             } message: {
-                Text("That session ends and its swaps aren’t saved. Then this recipe starts.")
+                if let summary = toAbandon {
+                    Text("\(summary.title), \(Self.stepText(summary).lowercased()). It ends and its swaps aren’t saved. Then we try starting this recipe again.")
+                }
             }
         }
     }
 
-    private func stepText(_ summary: SessionSummary) -> String {
+    static func stepText(_ summary: SessionSummary) -> String {
         if summary.status == .created { return "Not started" }
         let step = min(summary.stepIndex, max(summary.stepsCount - 1, 0)) + 1
         return "\(summary.status == .paused ? "Paused at" : "At") step \(step) of \(summary.stepsCount)"

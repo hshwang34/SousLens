@@ -96,18 +96,7 @@ private struct TurnView: View {
                 .accessibilityLabel("You asked: \(turn.query)")
 
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                if model.isStale(turn) {
-                    MetadataPill(text: "Based on previous step", systemImage: "clock.arrow.circlepath")
-                        .accessibilityIdentifier("assistant.stale")
-                }
-                ForEach(turn.segments) { segment in
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        if let heading = segment.heading {
-                            Text(heading).font(SLFont.headline)
-                        }
-                        Text(segment.text).font(SLFont.title3.weight(.regular))
-                    }
-                }
+                // Safety first: shown (and read) before the answer.
                 if let notice = turn.response.safetyNotice, !notice.isEmpty {
                     Label {
                         Text(notice).font(SLFont.callout.weight(.semibold))
@@ -121,6 +110,18 @@ private struct TurnView: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Safety notice: \(notice)")
                     .accessibilityIdentifier("assistant.safety")
+                }
+                if model.isStale(turn) {
+                    MetadataPill(text: "Based on previous step", systemImage: "clock.arrow.circlepath")
+                        .accessibilityIdentifier("assistant.stale")
+                }
+                ForEach(turn.segments) { segment in
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        if let heading = segment.heading {
+                            Text(heading).font(SLFont.headline)
+                        }
+                        Text(segment.text).font(SLFont.title3.weight(.regular))
+                    }
                 }
                 FlowBadges(badges: model.badges(for: turn), uncertainty: turn.response.uncertainty.uncertaintyText)
                 HStack(spacing: Spacing.sm) {

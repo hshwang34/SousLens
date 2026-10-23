@@ -35,11 +35,25 @@ final class CookingViewModel: CookingSessionClient {
     /// Steps whose suggested timer the user skipped (UI only; a skipped suggestion is not state).
     private(set) var skippedTimerSteps: Set<Int> = []
     var readAloudEnabled = true
+    /// Session-end draft lives here so a failed (offline) Done never loses it.
+    var endDraft = SessionEndDraft()
+    /// The note text the server already has, so a retried Done never posts it twice.
+    private(set) var savedNoteText: String?
+    /// Swap cautions (allergy warning, risks, safety notice) by `ingredient_ref`, carried from the
+    /// swap sheet; the Session itself doesn't repeat them.
+    let swapCautions: [String: SwapCaution]
+    /// A cached / resumed copy not yet confirmed by a server read: shown, never acted on.
+    private(set) var isProvisional = false
+    /// The pending tap is older than `staleTapInterval`: ask before re-sending it.
+    private(set) var asksToResendStaleTap = false
+    /// False once the cooking screen is gone: nothing more is spoken.
+    private(set) var isScreenVisible = true
 
     /// Every canonical Session (for the resume store and the on-device cache).
     var onSessionChanged: (@MainActor (CookingSession) -> Void)?
 
     private let initial: CookingSession?
+    private let initialIsFresh: Bool
     private let startOnOpen: Bool
     private let service: CookingService
     private let audio: any AudioOutput
@@ -49,27 +63,37 @@ final class CookingViewModel: CookingSessionClient {
     private(set) var isInvalidated = false
     let sender: SessionCommandSender
     private let now: @MainActor () -> Date
+    /// Timer ids already reported as done (nil until the first look, so timers that were already
+    /// done when the screen opened are not announced).
+    private var announcedDoneTimers: Set<UUID>?
 
     static let conflictToast = "Updated from your other device"
     static let invalidTransitionToast = "That step change wasn’t possible. Showing where you are."
     static let offlineMessage = "Reconnect to continue. Your step hasn’t changed."
+    static let staleTapInterval: TimeInterval = 120
 
     init(sessionId: UUID,
          initial: CookingSession? = nil,
+         initialIsFresh: Bool? = nil,
          startOnOpen: Bool = false,
          service: CookingService,
          audio: any AudioOutput,
          loadCached: @escaping @MainActor () -> CookingSession? = { nil },
+         swapCautions: [String: SwapCaution] = [:],
          makeKey: @escaping @MainActor () -> String = { UUID().uuidString.lowercased() },
          now: @escaping @MainActor () -> Date = { Date() }) {
         self.sessionId = sessionId
         self.initial = initial
+        // A Session handed over right after POST /sessions is the server's answer; a resumed one
+        // comes from the cache.
+        self.initialIsFresh = initialIsFresh ?? startOnOpen
         self.startOnOpen = startOnOpen
         self.service = service
         self.audio = audio
         self.loadCached = loadCached
+        self.swapCautions = swapCautions
         self.now = now
-        sender = SessionCommandSender(sessionId: sessionId, service: service, makeKey: makeKey)
+        sender = SessionCommandSender(sessionId: sessionId, service: service, makeKey: makeKey, now: now)
     }
 
     // MARK: - Derived
@@ -96,12 +120,32 @@ final class CookingViewModel: CookingSessionClient {
         return matched.isEmpty ? [] : matched
     }
 
-    /// "Adapted · Common swap" / "Adapted · AI suggested adaptation" (AI wins when mixed).
+    /// "Adapted · Common swap" / "Adapted · AI suggested adaptation" (AI wins when mixed), plus
+    /// "· Check the label: …" when a swap on this step carried an allergy warning.
     var adaptedBadgeText: String? {
         guard let step = currentStep, step.adapted else { return nil }
         let sources = Set(currentAdaptations.map(\.source))
         let label = sources.isEmpty || sources.contains(.ai) ? SwapSource.ai.label : SwapSource.rule.label
+        if let warning = currentCautions.compactMap(\.allergyWarning).first {
+            return "Adapted · \(label) · Check the label: \(warning)"
+        }
         return "Adapted · \(label)"
+    }
+
+    private var currentCautions: [SwapCaution] {
+        currentAdaptations.compactMap { swapCautions[$0.ingredientRef] }
+    }
+
+    /// Swaps on this step that now overlap the user's allergies (an allergy added mid-cook).
+    var conflictingAdaptations: [SessionAdaptation] {
+        currentAdaptations.filter(\.conflictsWithAllergies)
+    }
+
+    /// Risks and safety notices of the swaps on this step, shown under the badge.
+    var adaptedCautionLines: [String] {
+        var seen = Set<String>()
+        return currentCautions.flatMap { $0.risks + [$0.safetyNotice].compactMap { $0 } }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     var status: SessionStatus? { session?.status }
@@ -111,7 +155,7 @@ final class CookingViewModel: CookingSessionClient {
 
     /// Commands need a live server copy, an open session and nothing in flight.
     var canSendCommands: Bool {
-        guard let session, !isOffline, !isSending, !isInvalidated else { return false }
+        guard let session, !isOffline, !isSending, !isInvalidated, !isProvisional else { return false }
         return session.status.isOpen
     }
 
@@ -136,11 +180,36 @@ final class CookingViewModel: CookingSessionClient {
         TimerRow.rows(for: session?.timers ?? [], now: date ?? now())
     }
 
+    /// Timers that turned done since the last look (haptic + VoiceOver announcement). The first
+    /// call only records what is already done.
+    func newlyFinishedTimers(at date: Date? = nil) -> [TimerRow] {
+        let done = timerRows(at: date).filter(\.isDone)
+        guard let announced = announcedDoneTimers else {
+            announcedDoneTimers = Set(done.map(\.id))
+            return []
+        }
+        let fresh = done.filter { !announced.contains($0.id) }
+        announcedDoneTimers = announced.union(fresh.map(\.id))
+        return fresh
+    }
+
+    /// "Your last tap (Next) wasn’t confirmed" on the offline banner.
+    var pendingTapText: String? {
+        guard let pending = sender.pending else { return nil }
+        return "Your last tap (\(pending.command.command.displayName)) wasn’t confirmed"
+    }
+
+    var pendingTapIsStale: Bool {
+        guard let pending = sender.pending else { return false }
+        return now().timeIntervalSince(pending.createdAt) > Self.staleTapInterval
+    }
+
     // MARK: - Loading
 
     func load() async {
         if let initial, session == nil {
-            adopt(initial)
+            adopt(initial, persist: initialIsFresh)
+            isProvisional = !initialIsFresh
         }
         await refresh()
         if startOnOpen, session?.status == .created, !isOffline, !isInvalidated {
@@ -150,13 +219,20 @@ final class CookingViewModel: CookingSessionClient {
 
     /// Re-read the canonical Session (also the "Reconnect" button when nothing is pending).
     func refresh() async {
-        guard !isInvalidated else { return }
+        // A command in flight will answer with a newer Session anyway.
+        guard !isInvalidated, !isSending else { return }
         do {
             let latest = try await service.session(id: sessionId)
             guard !isInvalidated else { return }
             isOffline = false
+            isProvisional = false
             errorMessage = nil
             adopt(latest)
+            // The server moved past the unconfirmed tap: its body is stale either way.
+            if let pending = sender.pending, (session?.revision ?? 0) > pending.command.expectedRevision {
+                sender.discardPending()
+                asksToResendStaleTap = false
+            }
             phase = .ready
         } catch let error as APIError where error == .cancelled {
             return
@@ -164,6 +240,7 @@ final class CookingViewModel: CookingSessionClient {
             guard !isInvalidated else { return }
             if session == nil, let cached = loadCached(), cached.id == sessionId {
                 adopt(cached, persist: false)
+                isProvisional = true
             }
             isOffline = true
             if session != nil {
@@ -186,8 +263,39 @@ final class CookingViewModel: CookingSessionClient {
         sender.discardPending()
     }
 
+    func screenDidAppear() { isScreenVisible = true }
+
+    /// The cooking screen closed: stop speaking and never start again from this model.
+    func screenDidDisappear() {
+        isScreenVisible = false
+        audio.stop()
+    }
+
     /// "Reconnect": re-send the pending tap with its original key, or re-read the Session.
+    /// A tap older than two minutes is not re-sent without asking (`resendStaleTap`).
     func reconnect() async {
+        guard !isSending, !isInvalidated else { return }
+        if sender.pending != nil, pendingTapIsStale {
+            asksToResendStaleTap = true
+            return
+        }
+        await resendPendingOrRefresh()
+    }
+
+    /// "Send it again" on the stale-tap question.
+    func resendStaleTap() async {
+        asksToResendStaleTap = false
+        await resendPendingOrRefresh()
+    }
+
+    /// "Discard" on the stale-tap question: forget the tap, re-read the Session.
+    func discardStaleTap() async {
+        asksToResendStaleTap = false
+        sender.discardPending()
+        await refresh()
+    }
+
+    private func resendPendingOrRefresh() async {
         guard !isSending, !isInvalidated else { return }
         if sender.pending != nil {
             isSending = true
@@ -196,6 +304,7 @@ final class CookingViewModel: CookingSessionClient {
                 if let latest = try await sender.retryPending() {
                     guard !isInvalidated else { return }
                     isOffline = false
+                    isProvisional = false
                     errorMessage = nil
                     adopt(latest)
                     return
@@ -264,17 +373,28 @@ final class CookingViewModel: CookingSessionClient {
         _ = await run(command)
     }
 
-    /// Session end **Done**: private note (if any), then `complete` with the outcome.
+    /// Session end **Done**: private note (if any, and not already saved), then `complete`.
+    /// The whole thing counts as one in-flight command, so a second tap can't double-post.
     @discardableResult
     func complete(result: OutcomeResult, saveChanges: Bool, note: String) async -> Bool {
         guard canSendCommands else { return false }
-        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
+        isSending = true
+        errorMessage = nil
+        defer { isSending = false }
+        let text = String(note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(SessionEndViewModel.maxNoteLength))
+        if !text.isEmpty, text != savedNoteText {
             do {
-                _ = try await service.addNote(sessionId: sessionId, text: String(trimmed.prefix(2000)))
+                _ = try await service.addNote(sessionId: sessionId, text: text)
                 guard !isInvalidated else { return false }
+                savedNoteText = text
             } catch let error as APIError {
-                errorMessage = "Couldn’t save your note: \(error.userMessage)"
+                guard !isInvalidated else { return false }
+                if error.isTransportFailure {
+                    isOffline = true
+                    errorMessage = "Couldn’t save your note — reconnect and tap Done again. Nothing is lost."
+                } else {
+                    errorMessage = "Couldn’t save your note: \(error.userMessage)"
+                }
                 return false
             } catch {
                 errorMessage = error.localizedDescription
@@ -282,9 +402,11 @@ final class CookingViewModel: CookingSessionClient {
             }
         }
         var command = SessionCommand.confirmed(.complete, revision: revisionOrZero)
-        command.outcome = OutcomeInput(result: result, saveChanges: saveChanges && !(session?.adaptations.isEmpty ?? true))
+        let adaptations = session?.adaptations ?? []
+        let saveable = !adaptations.isEmpty && !adaptations.contains(where: \.conflictsWithAllergies)
+        command.outcome = OutcomeInput(result: result, saveChanges: saveChanges && saveable)
         audio.stop()
-        return await run(command)
+        return await execute(command)
     }
 
     /// Cooking menu → Stop cooking (after a confirmation dialog in the view).
@@ -295,10 +417,14 @@ final class CookingViewModel: CookingSessionClient {
     }
 
     /// A coach proposal the user just tapped ("Go to next step?"). The tap is the confirmation.
+    /// Sent with `expected_revision` = the revision the answer was grounded on, so a proposal made
+    /// for an older state is refused by the server instead of applied to a newer one.
     @discardableResult
     func perform(_ proposal: ProposedAction) async -> Bool {
-        guard proposal.isSupported, canSendCommands else { return false }
-        var command = SessionCommand.confirmed(proposal.command, revision: revisionOrZero, source: .iosAssistant)
+        guard proposal.isSupported, canSendCommands, let session, session.status == .active else { return false }
+        let grounded = proposal.groundedRevision ?? session.revision
+        guard grounded == session.revision else { return false }
+        var command = SessionCommand.confirmed(proposal.command, revision: grounded, source: .iosAssistant)
         switch proposal.command {
         case .jumpToStep: command.stepIndex = proposal.stepIndex
         case .startTimer: command.timer = proposal.timer
@@ -331,7 +457,7 @@ final class CookingViewModel: CookingSessionClient {
     }
 
     private func speakCurrentStep(pace: SpeechPace = .normal, force: Bool = false) async {
-        guard !isInvalidated, force || readAloudEnabled, let text = spokenText, session?.status == .active else { return }
+        guard !isInvalidated, isScreenVisible, force || readAloudEnabled, let text = spokenText, session?.status == .active else { return }
         await audio.speak(text, pace: pace)
     }
 
@@ -343,10 +469,15 @@ final class CookingViewModel: CookingSessionClient {
 
     /// Sends one command; adopts whatever Session the server answers with. Returns true on 200.
     private func run(_ command: SessionCommand) async -> Bool {
-        guard session != nil, !isSending, !isOffline, !isInvalidated else { return false }
+        guard session != nil, !isSending, !isOffline, !isInvalidated, !isProvisional else { return false }
         isSending = true
         errorMessage = nil
         defer { isSending = false }
+        return await execute(command)
+    }
+
+    /// The request itself; the caller has already set `isSending`.
+    private func execute(_ command: SessionCommand) async -> Bool {
         do {
             let latest = try await sender.send(command)
             guard !isInvalidated else { return false }
@@ -385,8 +516,11 @@ final class CookingViewModel: CookingSessionClient {
         errorMessage = error.userMessage
     }
 
+    /// Adopts a server Session — unless it is an older revision of the one on screen (a slow read
+    /// overtaken by a command). Equal revisions may re-adopt.
     private func adopt(_ latest: CookingSession, persist: Bool = true) {
-        guard !isInvalidated else { return }
+        guard !isInvalidated, latest.id == sessionId else { return }
+        if let current = session, current.id == latest.id, latest.revision < current.revision { return }
         let stepChanged = session?.stepIndex != latest.stepIndex
         session = latest
         if stepChanged { showOriginal = false }

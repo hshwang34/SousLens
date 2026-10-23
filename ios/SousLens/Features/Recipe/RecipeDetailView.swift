@@ -41,12 +41,17 @@ struct RecipeDetailView: View {
             DraftEditorView(model: editor)
         }
         .sheet(isPresented: Binding(get: { starter?.showsUnfinished ?? false },
-                                    set: { if !$0 { starter?.dismissUnfinished() } })) {
+                                    set: { if !$0 { starter?.dismissUnfinished() } }),
+               onDismiss: {
+                   // Only once the sheet has gone; the epoch is the one from the Start tap.
+                   guard let starter, let outcome = starter.takeOutcome() else { return }
+                   switch outcome {
+                   case .started(let session): environment.cooking.present(newSession: session, epoch: starter.initiatedEpoch ?? -1)
+                   case .resume(let id): environment.cooking.resume(sessionId: id)
+                   }
+               }) {
             if let starter {
-                let epoch = environment.cooking.epoch
-                UnfinishedCooksSheet(starter: starter,
-                                     onResume: { environment.cooking.resume(sessionId: $0) },
-                                     onStarted: { environment.cooking.present(newSession: $0, epoch: epoch) })
+                UnfinishedCooksSheet(starter: starter)
             }
         }
         .navigationDestination(isPresented: $showPantryFit) {
@@ -216,7 +221,7 @@ struct RecipeDetailView: View {
         let starter = self.starter ?? SessionStarter(service: environment.api)
         self.starter = starter
         let epoch = environment.cooking.epoch
-        if let session = await starter.start(recipeVersionId: detail.recipeVersionId, adaptations: []) {
+        if let session = await starter.start(recipeVersionId: detail.recipeVersionId, adaptations: [], epoch: epoch) {
             environment.cooking.present(newSession: session, epoch: epoch)
         }
     }

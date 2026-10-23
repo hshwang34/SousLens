@@ -12,23 +12,29 @@ final class SessionCommandSender {
     struct Action: Equatable, Sendable {
         let key: String
         let command: SessionCommand
+        /// When the user tapped (a tap older than two minutes is not re-sent without asking).
+        let createdAt: Date
     }
 
     let sessionId: UUID
     private let service: CookingService
     private let makeKey: @MainActor () -> String
+    private let now: @MainActor () -> Date
     /// The action whose outcome is unknown; `retryPending` re-sends it unchanged.
     private(set) var pending: Action?
 
-    init(sessionId: UUID, service: CookingService, makeKey: @escaping @MainActor () -> String = { UUID().uuidString.lowercased() }) {
+    init(sessionId: UUID, service: CookingService,
+         makeKey: @escaping @MainActor () -> String = { UUID().uuidString.lowercased() },
+         now: @escaping @MainActor () -> Date = { Date() }) {
         self.sessionId = sessionId
         self.service = service
         self.makeKey = makeKey
+        self.now = now
     }
 
     /// A new user action → a new key.
     func send(_ command: SessionCommand) async throws -> CookingSession {
-        let action = Action(key: makeKey(), command: command)
+        let action = Action(key: makeKey(), command: command, createdAt: now())
         pending = action
         return try await perform(action)
     }

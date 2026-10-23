@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Pure formatting for the cooking screen (unit-tested without a view).
 enum CookingFormatting {
@@ -162,5 +163,20 @@ extension ProposedAction {
         case .startTimer: return timer.map { (1...86_400).contains($0.durationSeconds) } ?? false
         default: return false
         }
+    }
+}
+
+/// Control layout for the cooking screen by Dynamic Type size (PRD §14: accessibility sizes must
+/// still fit Back / Next and keep the step text scrollable above the controls).
+struct CookingLayout: Equatable {
+    /// Back / Pause / Next in one row, or stacked.
+    let stacksNavigation: Bool
+    /// Repeat / Slower / Ask / Look: 4 in a row, or a 2×2 grid.
+    let toolColumns: Int
+
+    static func forSize(_ size: DynamicTypeSize) -> CookingLayout {
+        size.isAccessibilitySize
+            ? CookingLayout(stacksNavigation: true, toolColumns: 2)
+            : CookingLayout(stacksNavigation: false, toolColumns: 4)
     }
 }

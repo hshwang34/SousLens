@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 /// Full-screen cooking (PRD §6, §6.1, J4): one step at a time, large type, oversized controls.
 /// Everything on screen is the server's Session; every button is one confirmed command.
 struct CookingView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let presentation: CookingSessionStore.Presentation
 
     @State private var model: CookingViewModel?
@@ -12,6 +14,8 @@ struct CookingView: View {
     @State private var showSessionEnd = false
     @State private var confirmAbandon = false
     @State private var swapToRevert: SessionAdaptation?
+    @State private var timerToCancel: TimerRow?
+    @State private var previousIdleTimerSetting = false
 
     var body: some View {
         Group {
@@ -22,6 +26,17 @@ struct CookingView: View {
             }
         }
         .background(SLColor.background.ignoresSafeArea())
+        .onAppear {
+            // The phone may be propped up across the kitchen: keep the screen on while cooking.
+            previousIdleTimerSetting = UIApplication.shared.isIdleTimerDisabled
+            UIApplication.shared.isIdleTimerDisabled = true
+            model?.screenDidAppear()
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerSetting
+            model?.screenDidDisappear()
+            assistant?.drawerDidDisappear()
+        }
         .task {
             guard model == nil else { return }
             let created = CookingViewModel(
@@ -30,7 +45,8 @@ struct CookingView: View {
                 startOnOpen: presentation.startOnOpen,
                 service: environment.api,
                 audio: environment.audio,
-                loadCached: { [environment] in environment.cooking.cachedSession() }
+                loadCached: { [environment] in environment.cooking.cachedSession() },
+                swapCautions: presentation.swapCautions
             )
             // Stamped with the epoch this screen opened under: after a sign-out it reports nothing.
             let epoch = environment.cooking.epoch
@@ -71,18 +87,19 @@ struct CookingView: View {
     private func ready(_ model: CookingViewModel) -> some View {
         VStack(spacing: 0) {
             topBar(model)
-            if model.isOffline {
-                OfflineBanner(isBusy: model.isSending) { Task { await model.reconnect() } }
+            if model.isOffline || model.isProvisional {
+                OfflineBanner(model: model)
             }
+            // The step scrolls on its own above the controls, whatever the text size.
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
-                    StepContent(model: model)
+                    StepContent(model: model, onRevert: { swapToRevert = $0 })
                     if let suggestion = model.timerSuggestion, model.canSendCommands {
                         TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
                                             onStart: { Task { await model.startSuggestedTimer() } },
                                             onSkip: { model.skipSuggestedTimer() })
                     }
-                    TimersList(model: model)
+                    TimersList(model: model, onCancel: { timerToCancel = $0 })
                     if let error = model.errorMessage, !model.isOffline {
                         Text(error)
                             .font(SLFont.callout)
@@ -105,6 +122,9 @@ struct CookingView: View {
                     }
             }
         }
+        .onChange(of: model.toast) { _, toast in
+            if let toast { AccessibilityNotification.Announcement(toast).post() }
+        }
         .onChange(of: model.isEnded) { _, ended in
             if ended { environment.cooking.closeCookingScreen() }
         }
@@ -113,6 +133,8 @@ struct CookingView: View {
                 AssistantDrawerView(model: assistant, cooking: model)
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+                    .onAppear { assistant.drawerDidAppear() }
+                    .onDisappear { assistant.drawerDidDisappear() }
             }
         }
         .sheet(isPresented: $showSessionEnd) {
@@ -134,6 +156,12 @@ struct CookingView: View {
             Button("Keep the swap", role: .cancel) {}
         } message: {
             Text("The steps go back to the recipe as written.")
+        }
+        .confirmationDialog("Cancel the \(timerToCancel?.label ?? "") timer?", isPresented: Binding(get: { timerToCancel != nil }, set: { if !$0 { timerToCancel = nil } }), titleVisibility: .visible) {
+            Button("Cancel timer", role: .destructive) {
+                if let timer = timerToCancel { Task { await model.cancelTimer(id: timer.id) } }
+            }
+            Button("Keep it running", role: .cancel) {}
         }
     }
 
@@ -193,7 +221,8 @@ struct CookingView: View {
     // MARK: Controls
 
     private func controls(_ model: CookingViewModel) -> some View {
-        VStack(spacing: Spacing.md) {
+        let layout = CookingLayout.forSize(dynamicTypeSize)
+        return VStack(spacing: Spacing.md) {
             if model.isNotStarted {
                 Button {
                     Task { await model.start() }
@@ -213,7 +242,8 @@ struct CookingView: View {
                 .disabled(!model.canSendCommands)
                 .accessibilityIdentifier("cooking.resume")
             }
-            HStack(spacing: Spacing.sm) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.sm), count: layout.toolColumns),
+                      spacing: Spacing.sm) {
                 SmallControl(title: "Repeat", systemImage: "arrow.counterclockwise", identifier: "cooking.repeat") {
                     Task { await model.repeatStep() }
                 }
@@ -226,59 +256,29 @@ struct CookingView: View {
                     showAssistant = true
                 }
                 .disabled(model.session == nil)
-                VStack(spacing: Spacing.xxs) {
-                    SmallControl(title: "Look", systemImage: "camera.viewfinder", identifier: "cooking.look") {}
-                        .disabled(true)
-                        .accessibilityHint("Coming with camera help")
-                }
+                SmallControl(title: "Look", systemImage: "camera.viewfinder", identifier: "cooking.look") {}
+                    .disabled(true)
+                    .accessibilityHint("Coming with camera help")
             }
             Text("Look is coming with camera help")
                 .font(SLFont.caption)
                 .foregroundStyle(SLColor.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityHidden(true)
-            HStack(spacing: Spacing.sm) {
-                Button {
-                    Task { await model.back() }
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
-                }
-                .buttonStyle(CookingButtonStyle(kind: .secondary))
-                .disabled(!model.canGoBack)
-                .accessibilityIdentifier("cooking.back")
-
-                if !model.isPaused && !model.isNotStarted {
-                    Button {
-                        Task { await model.pause() }
-                    } label: {
-                        Image(systemName: "pause.fill")
-                    }
-                    .buttonStyle(CookingButtonStyle(kind: .secondary))
-                    .frame(maxWidth: 96)
-                    .disabled(!model.canSendCommands)
-                    .accessibilityLabel("Pause")
-                    .accessibilityIdentifier("cooking.pause")
-                }
-
-                Button {
-                    if model.isLastStep {
-                        model.stopSpeaking()
-                        showSessionEnd = true
-                    } else {
-                        Task { await model.next() }
-                    }
-                } label: {
-                    if model.isSending {
-                        ProgressView().tint(.white)
-                    } else {
-                        Label(model.nextTitle, systemImage: model.isLastStep ? "flag.checkered" : "chevron.right")
-                            .labelStyle(TrailingIconLabelStyle())
+            if layout.stacksNavigation {
+                VStack(spacing: Spacing.sm) {
+                    nextButton(model)
+                    HStack(spacing: Spacing.sm) {
+                        backButton(model)
+                        pauseButton(model)
                     }
                 }
-                .buttonStyle(CookingButtonStyle(kind: .primary))
-                .disabled(!model.canGoNext)
-                .accessibilityLabel(model.nextTitle)
-                .accessibilityIdentifier("cooking.next")
+            } else {
+                HStack(spacing: Spacing.sm) {
+                    backButton(model)
+                    pauseButton(model).frame(maxWidth: 96)
+                    nextButton(model)
+                }
             }
         }
         .padding(.horizontal, Spacing.screen)
@@ -286,12 +286,61 @@ struct CookingView: View {
         .padding(.bottom, Spacing.lg)
         .background(SLColor.surface.ignoresSafeArea(edges: .bottom))
     }
+
+    private func backButton(_ model: CookingViewModel) -> some View {
+        Button {
+            Task { await model.back() }
+        } label: {
+            Label("Back", systemImage: "chevron.left")
+        }
+        .buttonStyle(CookingButtonStyle(kind: .secondary))
+        .disabled(!model.canGoBack)
+        .accessibilityIdentifier("cooking.back")
+    }
+
+    @ViewBuilder
+    private func pauseButton(_ model: CookingViewModel) -> some View {
+        if !model.isPaused && !model.isNotStarted {
+            Button {
+                Task { await model.pause() }
+            } label: {
+                Image(systemName: "pause.fill")
+            }
+            .buttonStyle(CookingButtonStyle(kind: .secondary))
+            .disabled(!model.canSendCommands)
+            .accessibilityLabel("Pause")
+            .accessibilityIdentifier("cooking.pause")
+        }
+    }
+
+    private func nextButton(_ model: CookingViewModel) -> some View {
+        Button {
+            if model.isLastStep {
+                model.stopSpeaking()
+                showSessionEnd = true
+            } else {
+                Task { await model.next() }
+            }
+        } label: {
+            if model.isSending {
+                ProgressView().tint(.white)
+            } else {
+                Label(model.nextTitle, systemImage: model.isLastStep ? "flag.checkered" : "chevron.right")
+                    .labelStyle(TrailingIconLabelStyle())
+            }
+        }
+        .buttonStyle(CookingButtonStyle(kind: .primary))
+        .disabled(!model.canGoNext)
+        .accessibilityLabel(model.nextTitle)
+        .accessibilityIdentifier("cooking.next")
+    }
 }
 
 // MARK: - Step
 
 private struct StepContent: View {
     let model: CookingViewModel
+    let onRevert: (SessionAdaptation) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
@@ -306,18 +355,31 @@ private struct StepContent: View {
                     .font(SLFont.title3)
                     .foregroundStyle(SLColor.textSecondary)
             }
+            ForEach(model.conflictingAdaptations) { swap in
+                Button {
+                    onRevert(swap)
+                } label: {
+                    Label("Conflicts with your allergies — revert?", systemImage: "exclamationmark.octagon.fill")
+                        .font(SLFont.headline)
+                        .foregroundStyle(Color.white)
+                        .padding(Spacing.md)
+                        .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget, alignment: .leading)
+                        .background(SLColor.danger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!model.canSendCommands)
+                .accessibilityLabel("\(swap.replacement) conflicts with your allergies. Revert to \(swap.original)?")
+                .accessibilityIdentifier("cooking.allergyConflict")
+            }
             if let badge = model.adaptedBadgeText {
-                HStack(spacing: Spacing.sm) {
-                    MetadataPill(text: badge, systemImage: "arrow.triangle.swap", style: .accent,
-                                 accessibilityLabel: badge)
-                        .accessibilityIdentifier("cooking.adaptedBadge")
-                    Spacer()
-                    Button(model.showOriginal ? "Show adapted" : "Show original") {
-                        model.showOriginal.toggle()
-                    }
-                    .font(SLFont.callout.weight(.semibold))
-                    .frame(minHeight: Metrics.minTapTarget)
-                    .accessibilityIdentifier("cooking.showOriginal")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Spacing.sm) { badgeView(badge); Spacer(); originalToggle }
+                    VStack(alignment: .leading, spacing: Spacing.sm) { badgeView(badge); originalToggle }
+                }
+                ForEach(model.adaptedCautionLines, id: \.self) { line in
+                    Label(line, systemImage: "exclamationmark.circle")
+                        .font(SLFont.callout)
+                        .foregroundStyle(SLColor.warning)
                 }
                 if model.showOriginal {
                     Text("Original recipe text")
@@ -347,12 +409,13 @@ private struct StepContent: View {
                     .accessibilityLabel("Safety warning: \(warning)")
                 }
                 ForEach(recipeStep.successCues, id: \.self) { cue in
+                    // A cue is something to look for, not a verdict: neutral icon, not a green check.
                     Label {
                         Text(cue).font(SLFont.body)
                     } icon: {
-                        Image(systemName: "checkmark.circle.fill")
+                        Image(systemName: "eye")
                     }
-                    .foregroundStyle(SLColor.success)
+                    .foregroundStyle(SLColor.textPrimary)
                     .accessibilityLabel("Look for: \(cue)")
                 }
                 if let note = recipeStep.creatorNote, !note.isEmpty {
@@ -378,6 +441,27 @@ private struct StepContent: View {
                 .accessibilityElement(children: .combine)
             }
         }
+    }
+
+    private func badgeView(_ badge: String) -> some View {
+        Label(badge, systemImage: "arrow.triangle.swap")
+            .font(SLFont.caption)
+            .padding(.horizontal, Spacing.sm + 2)
+            .padding(.vertical, Spacing.xs + 1)
+            .foregroundStyle(SLColor.accent)
+            .background(SLColor.accentSoft, in: Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(badge)
+            .accessibilityIdentifier("cooking.adaptedBadge")
+    }
+
+    private var originalToggle: some View {
+        Button(model.showOriginal ? "Show adapted" : "Show original") {
+            model.showOriginal.toggle()
+        }
+        .font(SLFont.callout.weight(.semibold))
+        .frame(minHeight: Metrics.minTapTarget)
+        .accessibilityIdentifier("cooking.showOriginal")
     }
 }
 
@@ -410,17 +494,20 @@ private struct TimerSuggestionCard: View {
 
 private struct TimersList: View {
     let model: CookingViewModel
+    let onCancel: (TimerRow) -> Void
 
     var body: some View {
         // Re-rendered every second from the absolute target times; nothing is counted locally.
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let rows = model.timerRows(at: context.date)
-            if !rows.isEmpty {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                if !rows.isEmpty {
                     Text("Timers")
                         .font(SLFont.headline)
                         .foregroundStyle(SLColor.textSecondary)
-                    ForEach(rows) { row in
+                }
+                ForEach(rows) { row in
+                    HStack {
                         HStack {
                             Image(systemName: row.isDone ? "bell.fill" : "timer")
                                 .foregroundStyle(row.isDone ? SLColor.success : SLColor.accent)
@@ -430,24 +517,34 @@ private struct TimersList: View {
                             Text(row.countdownText)
                                 .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
                                 .foregroundStyle(row.isDone ? SLColor.success : SLColor.textPrimary)
-                            if !row.isDone {
-                                Button {
-                                    Task { await model.cancelTimer(id: row.id) }
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title2)
-                                        .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
-                                }
-                                .disabled(!model.canSendCommands)
-                                .accessibilityLabel("Cancel \(row.label) timer")
-                            }
                         }
-                        .padding(Spacing.md)
-                        .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                        // The countdown is one element; the cancel button stays its own.
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(row.accessibilityLabel)
                         .accessibilityIdentifier("cooking.timer")
+                        if !row.isDone {
+                            Button {
+                                onCancel(row)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title)
+                                    .frame(width: 60, height: 60)
+                                    .contentShape(Rectangle())
+                            }
+                            .disabled(!model.canSendCommands)
+                            .accessibilityLabel("Cancel \(row.label) timer")
+                            .accessibilityIdentifier("cooking.timer.cancel")
+                        }
                     }
+                    .padding(Spacing.md)
+                    .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            .onChange(of: context.date) { _, date in
+                for finished in model.newlyFinishedTimers(at: date) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    AccessibilityNotification.Announcement("\(finished.label) timer done").post()
                 }
             }
         }
@@ -457,23 +554,42 @@ private struct TimersList: View {
 // MARK: - Small pieces
 
 private struct OfflineBanner: View {
-    let isBusy: Bool
-    let onReconnect: () -> Void
+    let model: CookingViewModel
 
     var body: some View {
-        HStack(spacing: Spacing.md) {
-            Image(systemName: "wifi.slash").accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Spacing.xxs) {
-                Text("Reconnect to continue").font(SLFont.headline)
-                Text("Showing your last saved step. Nothing moves until the server answers.")
-                    .font(SLFont.footnote)
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "wifi.slash").accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text(model.isOffline ? "Reconnect to continue" : "Checking with the server…").font(SLFont.headline)
+                    if let pending = model.pendingTapText {
+                        Text(pending).font(SLFont.footnote.weight(.semibold))
+                            .accessibilityIdentifier("cooking.pendingTap")
+                    }
+                    Text("Showing your last saved step. Nothing moves until the server answers.")
+                        .font(SLFont.footnote)
+                }
+                Spacer()
+                if model.isOffline, !model.asksToResendStaleTap {
+                    Button(model.isSending ? "…" : "Reconnect") { Task { await model.reconnect() } }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SLColor.warning)
+                        .disabled(model.isSending)
+                        .accessibilityIdentifier("cooking.reconnect")
+                }
             }
-            Spacer()
-            Button(isBusy ? "…" : "Reconnect", action: onReconnect)
-                .buttonStyle(.borderedProminent)
-                .tint(SLColor.warning)
-                .disabled(isBusy)
-                .accessibilityIdentifier("cooking.reconnect")
+            if model.asksToResendStaleTap {
+                Text("That tap is more than 2 minutes old. Send it again?")
+                    .font(SLFont.callout)
+                HStack(spacing: Spacing.sm) {
+                    Button("Send it again") { Task { await model.resendStaleTap() } }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SLColor.accent)
+                    Button("Discard") { Task { await model.discardStaleTap() } }
+                        .buttonStyle(.bordered)
+                }
+                .frame(minHeight: Metrics.minTapTarget)
+            }
         }
         .foregroundStyle(SLColor.textPrimary)
         .padding(Spacing.md)
@@ -498,7 +614,6 @@ struct ToastView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("cooking.toast")
-        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 

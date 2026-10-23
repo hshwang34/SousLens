@@ -66,6 +66,20 @@ final class PreferencesViewModel {
         kind == .allergies ? preferences.allergies : preferences.avoid
     }
 
+    /// Entries in this list the server couldn't recognise (kept visible with a warning).
+    func unrecognizedEntries(_ kind: Kind) -> [String] {
+        let unknown = Set(preferences.unrecognized.map { $0.lowercased() })
+        return entries(kind).filter { unknown.contains($0.lowercased()) }
+    }
+
+    func isUnrecognized(_ entry: String) -> Bool {
+        preferences.unrecognized.contains { $0.caseInsensitiveCompare(entry) == .orderedSame }
+    }
+
+    static func unrecognizedMessage(_ entry: String) -> String {
+        "We don’t recognise “\(entry)”, so swaps can’t check for it — try a simpler word (e.g. peanut, shellfish, milk)."
+    }
+
     func draft(_ kind: Kind) -> String {
         kind == .allergies ? allergyDraft : avoidDraft
     }

@@ -3,6 +3,15 @@ import Observation
 
 /// A swap the user approved on the fit screen. Held there (revertible) and sent with
 /// `POST /sessions` when they tap **Start cooking** (SUB-03: nothing is applied before that).
+/// Warnings that must stay visible after a swap is approved (fit summary, cooking badge).
+struct SwapCaution: Equatable, Sendable {
+    var allergyWarning: String?
+    var risks: [String] = []
+    var safetyNotice: String?
+
+    var isEmpty: Bool { allergyWarning == nil && risks.isEmpty && safetyNotice == nil }
+}
+
 struct ApprovedSwap: Equatable, Identifiable, Sendable {
     let ingredientRef: String
     let ingredientName: String
@@ -10,17 +19,21 @@ struct ApprovedSwap: Equatable, Identifiable, Sendable {
     let ratioOrAmount: String?
     let source: SwapSource
     let input: AdaptationInput
+    let caution: SwapCaution
 
     var id: String { ingredientRef }
     var label: String { source.label }
 
-    init(ingredientName: String, suggestion: SubstitutionSuggestion, ingredientRef: String) {
+    init(ingredientName: String, suggestion: SubstitutionSuggestion, ingredientRef: String, safetyNotice: String? = nil) {
         self.ingredientRef = ingredientRef
         self.ingredientName = ingredientName
         candidate = suggestion.candidate
         ratioOrAmount = suggestion.ratioOrAmount
         source = suggestion.source
         input = .suggestion(suggestion.suggestionId, ingredientRef: ingredientRef)
+        caution = SwapCaution(allergyWarning: suggestion.allergyWarning.flatMap { $0.isEmpty ? nil : $0 },
+                              risks: suggestion.risks.filter { !$0.isEmpty },
+                              safetyNotice: safetyNotice.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     /// From a saved private variation ("Use my changes from last time").
@@ -31,6 +44,7 @@ struct ApprovedSwap: Equatable, Identifiable, Sendable {
         ratioOrAmount = variation.ratioOrAmount
         source = variation.source
         input = variation.input
+        caution = SwapCaution()
     }
 }
 
@@ -134,6 +148,7 @@ final class SubstitutionSheetViewModel {
     /// **Use this swap** — an explicit approval. Nothing is sent to a session yet.
     func approve(suggestionId: UUID) -> ApprovedSwap? {
         guard let suggestion = result?.suggestions.first(where: { $0.suggestionId == suggestionId }) else { return nil }
-        return ApprovedSwap(ingredientName: ingredientName, suggestion: suggestion, ingredientRef: ingredientRef)
+        return ApprovedSwap(ingredientName: ingredientName, suggestion: suggestion, ingredientRef: ingredientRef,
+                            safetyNotice: safetyNotice)
     }
 }

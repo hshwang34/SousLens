@@ -29,6 +29,8 @@ final class AssistantViewModel {
     private(set) var turns: [Turn] = []
     private(set) var isAsking = false
     private(set) var errorMessage: String?
+    /// False while the drawer is closed: an answer is never read out after dismissal.
+    private(set) var isVisible = true
 
     private let sessionId: UUID
     private let service: CookingService
@@ -98,6 +100,10 @@ final class AssistantViewModel {
         guard !turn.proposalUsed, let action = turn.response.proposedAction, action.isSupported else { return nil }
         // A stale proposal (the step already moved) is not offered.
         if isStale(turn) { return nil }
+        // Only for exactly the state it was grounded on, and never while paused.
+        guard let session = currentSession(), session.status == .active,
+              session.revision == turn.response.groundedSessionRevision
+        else { return nil }
         return action
     }
 
@@ -116,8 +122,24 @@ final class AssistantViewModel {
         }
     }
 
+    /// The safety notice, when there is one, is read first.
     func readAloud(turnId: UUID) async {
-        guard let turn = turns.first(where: { $0.id == turnId }) else { return }
-        await audio.speak(turn.response.answerText, pace: .normal)
+        guard isVisible, let turn = turns.first(where: { $0.id == turnId }) else { return }
+        await audio.speak(Self.spokenText(for: turn.response), pace: .normal)
+    }
+
+    static func spokenText(for response: AskResponse) -> String {
+        guard let notice = response.safetyNotice?.trimmingCharacters(in: .whitespacesAndNewlines), !notice.isEmpty else {
+            return response.answerText
+        }
+        return "\(notice) \(response.answerText)"
+    }
+
+    func drawerDidAppear() { isVisible = true }
+
+    /// The drawer closed: stop any answer being read.
+    func drawerDidDisappear() {
+        isVisible = false
+        audio.stop()
     }
 }

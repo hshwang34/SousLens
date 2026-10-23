@@ -84,7 +84,7 @@ enum CookingFixtures {
     static func summaryJSON(id: String = sessionId, status: String = "active", stepIndex: Int = 2) -> String {
         """
         {"id":"\(id)","recipe_version_id":"\(versionId)","recipe_id":"\(recipeId)","title":"Gochujang Chicken Thighs",
-         "status":"\(status)","step_index":\(stepIndex),"steps_count":7,"updated_at":"2026-10-23T10:05:00Z"}
+         "status":"\(status)","step_index":\(stepIndex),"steps_count":7,"updated_at":"2026-10-23T10:05:00.123456Z"}
         """
     }
 

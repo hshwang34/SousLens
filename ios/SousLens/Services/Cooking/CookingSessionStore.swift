@@ -27,6 +27,8 @@ final class CookingSessionStore {
         /// True only right after the user tapped **Start cooking**: a `created` session is then
         /// started (that tap is the confirmation). A resumed `created` session waits for a tap.
         let startOnOpen: Bool
+        /// Swap cautions (allergy warning, risks, safety notice) by ingredient ref, from the sheet.
+        var swapCautions: [String: SwapCaution] = [:]
 
         var id: UUID { sessionId }
     }
@@ -45,6 +47,8 @@ final class CookingSessionStore {
     /// The signed-in user on the current server; nil when signed out.
     private let owner: @MainActor () -> SessionOwner?
     private weak var client: CookingSessionClient?
+    /// Cautions per session for this app run (the Session doesn't repeat them).
+    private var cautionsBySession: [UUID: [String: SwapCaution]] = [:]
 
     init(service: CookingService, cache: SessionCaching, owner: @escaping @MainActor () -> SessionOwner?) {
         self.service = service
@@ -111,22 +115,26 @@ final class CookingSessionStore {
     func resume() {
         guard let active, owner() != nil else { return }
         let cached = cachedSession()
-        presented = Presentation(sessionId: active.id, initial: cached?.id == active.id ? cached : nil, startOnOpen: false)
+        presented = Presentation(sessionId: active.id, initial: cached?.id == active.id ? cached : nil, startOnOpen: false,
+                                 swapCautions: cautionsBySession[active.id] ?? [:])
     }
 
     /// "You have unfinished cooks" → Resume: open that session at the server's step.
     func resume(sessionId: UUID) {
         guard owner() != nil else { return }
         let cached = cachedSession()
-        presented = Presentation(sessionId: sessionId, initial: cached?.id == sessionId ? cached : nil, startOnOpen: false)
+        presented = Presentation(sessionId: sessionId, initial: cached?.id == sessionId ? cached : nil, startOnOpen: false,
+                                 swapCautions: cautionsBySession[sessionId] ?? [:])
     }
 
     /// Right after `POST /sessions` from an explicit **Start cooking** tap. `epoch` is the value
     /// captured before that request was sent.
-    func present(newSession session: CookingSession, epoch started: Int) {
+    func present(newSession session: CookingSession, epoch started: Int, cautions: [String: SwapCaution] = [:]) {
         guard started == epoch, owner() != nil else { return }
         sessionChanged(session, epoch: started)
-        presented = Presentation(sessionId: session.id, initial: session, startOnOpen: true)
+        let kept = cautions.filter { !$0.value.isEmpty }
+        if !kept.isEmpty { cautionsBySession[session.id] = kept }
+        presented = Presentation(sessionId: session.id, initial: session, startOnOpen: true, swapCautions: kept)
     }
 
     /// Every canonical Session the cooking screen receives lands here, stamped with the epoch the
@@ -161,6 +169,7 @@ final class CookingSessionStore {
         activeIsFromCache = false
         presented = nil
         bannerDismissedFor = nil
+        cautionsBySession = [:]
         try? cache.clear()
     }
 }

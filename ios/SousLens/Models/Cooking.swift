@@ -10,11 +10,15 @@ struct FoodPreferences: Codable, Sendable, Equatable {
     var allergies: [String]
     var avoid: [String]
     var updatedAt: Date?
+    /// Entries the server couldn't map to an allergen class or ingredient (still stored): swaps
+    /// can't check for them, so the editor warns until they're removed.
+    var unrecognized: [String]
 
-    init(allergies: [String] = [], avoid: [String] = [], updatedAt: Date? = nil) {
+    init(allergies: [String] = [], avoid: [String] = [], updatedAt: Date? = nil, unrecognized: [String] = []) {
         self.allergies = allergies
         self.avoid = avoid
         self.updatedAt = updatedAt
+        self.unrecognized = unrecognized
     }
 
     init(from decoder: Decoder) throws {
@@ -22,6 +26,7 @@ struct FoodPreferences: Codable, Sendable, Equatable {
         allergies = try container.decodeIfPresent([String].self, forKey: .allergies) ?? []
         avoid = try container.decodeIfPresent([String].self, forKey: .avoid) ?? []
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        unrecognized = try container.decodeIfPresent([String].self, forKey: .unrecognized) ?? []
     }
 
     /// PUT body: the two lists only (`updated_at` is the server's).
@@ -171,9 +176,25 @@ struct SessionAdaptation: Codable, Sendable, Hashable, Identifiable {
     let label: String?
     let reason: String?
     let approvedAt: Date?
+    /// An allergy added mid-cook overlaps this swap (set by the server on read).
+    let conflictsWithAllergies: Bool
 
     /// Derived from `source`, never from free text, so an AI swap can't be shown as a vetted one.
     var displayLabel: String { source.label }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        ingredientRef = try c.decode(String.self, forKey: .ingredientRef)
+        original = try c.decode(String.self, forKey: .original)
+        replacement = try c.decode(String.self, forKey: .replacement)
+        ratioOrAmount = try c.decodeIfPresent(String.self, forKey: .ratioOrAmount)
+        source = try c.decodeIfPresent(SwapSource.self, forKey: .source) ?? .ai
+        label = try c.decodeIfPresent(String.self, forKey: .label)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        approvedAt = try c.decodeIfPresent(Date.self, forKey: .approvedAt)
+        conflictsWithAllergies = try c.decodeIfPresent(Bool.self, forKey: .conflictsWithAllergies) ?? false
+    }
 }
 
 struct SuggestedTimer: Codable, Sendable, Hashable {
@@ -357,6 +378,24 @@ enum SessionCommandKind: String, Codable, Sendable, Hashable {
     case revertAdaptation = "revert_adaptation"
     case startTimer = "start_timer"
     case cancelTimer = "cancel_timer"
+
+    /// The button the user pressed, for "Your last tap (Next) wasn’t confirmed".
+    var displayName: String {
+        switch self {
+        case .start: return "Start"
+        case .next: return "Next"
+        case .back: return "Back"
+        case .pause: return "Pause"
+        case .resume: return "Resume"
+        case .complete: return "Done"
+        case .abandon: return "Stop cooking"
+        case .jumpToStep: return "Go to step"
+        case .approveAdaptation: return "Use this swap"
+        case .revertAdaptation: return "Undo swap"
+        case .startTimer: return "Start timer"
+        case .cancelTimer: return "Cancel timer"
+        }
+    }
 }
 
 enum CommandSource: String, Codable, Sendable, Hashable {
@@ -410,6 +449,13 @@ struct ProposedAction: Codable, Sendable, Hashable {
     let command: SessionCommandKind
     let stepIndex: Int?
     let timer: TimerRequest?
+    /// Not on the wire: the `grounded_session_revision` of the answer that proposed it. Sent as
+    /// `expected_revision`, so a proposal for an older state can't apply to a newer one.
+    var groundedRevision: Int? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case command, stepIndex, timer
+    }
 }
 
 struct AskResponse: Codable, Sendable, Hashable {
@@ -433,7 +479,9 @@ struct AskResponse: Codable, Sendable, Hashable {
         uncertainty = try c.decodeIfPresent(QualitativeLevel.self, forKey: .uncertainty) ?? .high
         safetyNotice = try c.decodeIfPresent(String.self, forKey: .safetyNotice)
         // A proposal for a command the app doesn't know is dropped, not guessed at.
-        proposedAction = try? c.decodeIfPresent(ProposedAction.self, forKey: .proposedAction)
+        var proposal = try? c.decodeIfPresent(ProposedAction.self, forKey: .proposedAction)
+        proposal?.groundedRevision = groundedSessionRevision
+        proposedAction = proposal
         requiresConfirmation = try c.decodeIfPresent(Bool.self, forKey: .requiresConfirmation) ?? true
     }
 }

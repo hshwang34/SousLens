@@ -199,9 +199,20 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         XCTAssertTrue(wait(for: check, enabled: true, timeout: 10))
         check.tap()
         XCTAssertTrue(app.staticTexts["fit.headline"].waitForExistence(timeout: 15), "Pantry fit did not load")
-        let findSwap = app.buttons.matching(NSPredicate(format: "identifier == 'fit.action.findSwap' AND label CONTAINS[c] 'rice vinegar'")).firstMatch
+        // Look the row up by ingredient name. Precondition: this pantry has only gochujang and
+        // chicken, so rice vinegar must be a Missing line.
+        let swapIngredient = "rice vinegar"
+        let missingRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'fit.missing' AND label CONTAINS[c] %@", swapIngredient)).firstMatch
+        scrollUntilHittable(missingRow, in: app)
+        guard missingRow.exists else {
+            XCTFail("PRECONDITION: “\(swapIngredient)” is not listed as Missing on Pantry fit. The pantry should hold only "
+                    + "“3 tbsp gochujang, 2 lb chicken thighs” (fresh account) and the seed recipe must still use rice vinegar.")
+            return
+        }
+        let findSwap = app.buttons.matching(NSPredicate(format: "identifier == 'fit.action.findSwap' AND label CONTAINS[c] %@", swapIngredient)).firstMatch
         scrollUntilHittable(findSwap, in: app)
-        XCTAssertTrue(findSwap.exists, "no Find a swap on the rice vinegar line")
+        XCTAssertTrue(findSwap.exists, "PRECONDITION: the Missing “\(swapIngredient)” line has no Find a swap button")
         findSwap.tap()
         let use = app.buttons["swap.use"].firstMatch
         XCTAssertTrue(use.waitForExistence(timeout: 20), "no swap suggestions for rice vinegar")
@@ -274,10 +285,20 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         }
         attach(app, "22-step3-before-kill")
 
-        // Kill and relaunch, keeping the sign-in (no fresh-install flag this time).
+        // Kill and relaunch with the SAME launch arguments minus the fresh-install reset flag
+        // (`-auth.hasLaunched NO` would wipe the token and the session with it).
         app.terminate()
-        app.launchArguments = ["-serverBaseURL", "http://localhost:8000"]
+        var arguments = app.launchArguments
+        if let reset = arguments.firstIndex(of: "-auth.hasLaunched") {
+            arguments.removeSubrange(reset...min(reset + 1, arguments.count - 1))
+        }
+        XCTAssertFalse(arguments.contains("-auth.hasLaunched"), "relaunch must not take the fresh-install path")
+        XCTAssertTrue(arguments.contains("-serverBaseURL"), "relaunch keeps the server address")
+        app.launchArguments = arguments
         app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 15),
+                      "relaunch landed on sign-in: the session was not kept (fresh-install path?)")
+        XCTAssertFalse(app.buttons["Continue"].exists, "relaunch shows the sign-in screen")
         let banner = app.buttons["resume.banner"]
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "no resume banner after relaunch")
         XCTAssertTrue(banner.label.contains("Step 3"), "banner says \(banner.label)")
