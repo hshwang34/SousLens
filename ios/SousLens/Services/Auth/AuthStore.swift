@@ -33,6 +33,10 @@ final class AuthStore {
     /// Shared with `APIClient`; bumped on every sign-in/out so late 401s from an old session are ignored.
     let generation: SessionGeneration
     private let logger = Logger(subsystem: "com.souslens.ios", category: "auth")
+    /// Fired whenever account-scoped local data must go (brief 005: the cooking session store
+    /// resets its cache and bumps its epoch). Called from `clearCredentials()`, from a restore that
+    /// ends signed out, and when a sign-in completes for a different user than the cached one.
+    var onCredentialsCleared: (@MainActor () -> Void)?
     nonisolated static let cachedUserKey = "auth.cachedUser"
     nonisolated static let hasLaunchedKey = "auth.hasLaunched"
 
@@ -59,6 +63,7 @@ final class AuthStore {
         }
         guard tokenStore.currentToken() != nil else {
             state = .signedOut
+            onCredentialsCleared?()
             return
         }
         if let cached = cachedUser() {
@@ -79,12 +84,14 @@ final class AuthStore {
                 } else {
                     state = .signedOut
                     banner = error.userMessage
+                    onCredentialsCleared?()
                 }
             }
         } catch {
             if case .signedIn = state { return }
             state = .signedOut
             banner = error.localizedDescription
+            onCredentialsCleared?()
         }
     }
 
@@ -103,6 +110,10 @@ final class AuthStore {
     /// leaves `pendingChallenge` in place so the user can retry; no session exists to tear down.
     func verify(challengeId: String, code: String) async throws {
         let response = try await api.verifyDevCode(challengeId: challengeId, code: code.trimmingCharacters(in: .whitespacesAndNewlines))
+        if cachedUser()?.id != response.user.id {
+            // A different account: nothing of the previous one's may survive.
+            onCredentialsCleared?()
+        }
         generation.advance()
         try tokenStore.save(token: response.accessToken)
         cache(response.user)
@@ -165,6 +176,7 @@ final class AuthStore {
         } catch {
             logger.error("recipe cache clear failed: \(String(describing: error), privacy: .public)")
         }
+        onCredentialsCleared?()
     }
 
     private func cache(_ user: User) {

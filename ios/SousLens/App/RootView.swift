@@ -21,10 +21,6 @@ struct RootView: View {
         .task {
             await environment.auth.restore()
         }
-        .onChange(of: environment.auth.isSignedIn) { _, signedIn in
-            // Session data is private to the account that was signed in.
-            if !signedIn { environment.cooking.reset() }
-        }
         .onOpenURL { url in
             environment.open(url: url)
         }

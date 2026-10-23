@@ -208,9 +208,10 @@ struct RecipeDetailView: View {
         isStartingSession = true
         startError = nil
         defer { isStartingSession = false }
+        let epoch = environment.cooking.epoch
         do {
             let session = try await environment.api.createSession(recipeVersionId: detail.recipeVersionId, adaptations: [])
-            environment.cooking.present(newSession: session)
+            environment.cooking.present(newSession: session, epoch: epoch)
         } catch let error as APIError where error == .cancelled {
             return
         } catch {

@@ -30,9 +30,12 @@ struct CookingView: View {
                 startOnOpen: presentation.startOnOpen,
                 service: environment.api,
                 audio: environment.audio,
-                cache: environment.cooking.cache
+                loadCached: { [environment] in environment.cooking.cachedSession() }
             )
-            created.onSessionChanged = { [environment] session in environment.cooking.sessionChanged(session) }
+            // Stamped with the epoch this screen opened under: after a sign-out it reports nothing.
+            let epoch = environment.cooking.epoch
+            created.onSessionChanged = { [environment] session in environment.cooking.sessionChanged(session, epoch: epoch) }
+            environment.cooking.attach(created)
             let drawer = AssistantViewModel(sessionId: presentation.sessionId, service: environment.api,
                                             audio: environment.audio, currentSession: { [weak created] in created?.session })
             drawer.onProposal = { [weak created] action in await created?.perform(action) ?? false }

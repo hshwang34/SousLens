@@ -12,7 +12,7 @@ import Observation
 /// - The step is read aloud only after an explicit start / next / back / repeat / slower.
 @MainActor
 @Observable
-final class CookingViewModel {
+final class CookingViewModel: CookingSessionClient {
     enum Phase: Equatable {
         case loading
         case ready
@@ -43,7 +43,10 @@ final class CookingViewModel {
     private let startOnOpen: Bool
     private let service: CookingService
     private let audio: any AudioOutput
-    private let cache: SessionCaching
+    /// The signed-in owner's cached copy (offline, read-only). Never another account's.
+    private let loadCached: @MainActor () -> CookingSession?
+    /// Set on sign-out / server change: every later result is dropped.
+    private(set) var isInvalidated = false
     let sender: SessionCommandSender
     private let now: @MainActor () -> Date
 
@@ -56,7 +59,7 @@ final class CookingViewModel {
          startOnOpen: Bool = false,
          service: CookingService,
          audio: any AudioOutput,
-         cache: SessionCaching,
+         loadCached: @escaping @MainActor () -> CookingSession? = { nil },
          makeKey: @escaping @MainActor () -> String = { UUID().uuidString.lowercased() },
          now: @escaping @MainActor () -> Date = { Date() }) {
         self.sessionId = sessionId
@@ -64,7 +67,7 @@ final class CookingViewModel {
         self.startOnOpen = startOnOpen
         self.service = service
         self.audio = audio
-        self.cache = cache
+        self.loadCached = loadCached
         self.now = now
         sender = SessionCommandSender(sessionId: sessionId, service: service, makeKey: makeKey)
     }
@@ -108,7 +111,7 @@ final class CookingViewModel {
 
     /// Commands need a live server copy, an open session and nothing in flight.
     var canSendCommands: Bool {
-        guard let session, !isOffline, !isSending else { return false }
+        guard let session, !isOffline, !isSending, !isInvalidated else { return false }
         return session.status.isOpen
     }
 
@@ -140,15 +143,17 @@ final class CookingViewModel {
             adopt(initial)
         }
         await refresh()
-        if startOnOpen, session?.status == .created, !isOffline {
+        if startOnOpen, session?.status == .created, !isOffline, !isInvalidated {
             await start()
         }
     }
 
     /// Re-read the canonical Session (also the "Reconnect" button when nothing is pending).
     func refresh() async {
+        guard !isInvalidated else { return }
         do {
             let latest = try await service.session(id: sessionId)
+            guard !isInvalidated else { return }
             isOffline = false
             errorMessage = nil
             adopt(latest)
@@ -156,7 +161,8 @@ final class CookingViewModel {
         } catch let error as APIError where error == .cancelled {
             return
         } catch let error as APIError where error.isTransportFailure {
-            if session == nil, let cached = cache.load(), cached.id == sessionId {
+            guard !isInvalidated else { return }
+            if session == nil, let cached = loadCached(), cached.id == sessionId {
                 adopt(cached, persist: false)
             }
             isOffline = true
@@ -167,29 +173,38 @@ final class CookingViewModel {
                 phase = .failed(error.userMessage)
             }
         } catch {
+            guard !isInvalidated else { return }
             let message = (error as? APIError)?.userMessage ?? error.localizedDescription
             if session == nil { phase = .failed(message) } else { errorMessage = message }
         }
     }
 
+    /// Sign-out / server change while this screen is alive: stop speaking, drop all later results.
+    func invalidate() {
+        isInvalidated = true
+        audio.stop()
+        sender.discardPending()
+    }
+
     /// "Reconnect": re-send the pending tap with its original key, or re-read the Session.
     func reconnect() async {
-        guard !isSending else { return }
+        guard !isSending, !isInvalidated else { return }
         if sender.pending != nil {
             isSending = true
             defer { isSending = false }
             do {
                 if let latest = try await sender.retryPending() {
+                    guard !isInvalidated else { return }
                     isOffline = false
                     errorMessage = nil
                     adopt(latest)
                     return
                 }
             } catch let error as APIError {
-                handle(error)
+                if !isInvalidated { handle(error) }
                 return
             } catch {
-                errorMessage = error.localizedDescription
+                if !isInvalidated { errorMessage = error.localizedDescription }
                 return
             }
         }
@@ -257,6 +272,7 @@ final class CookingViewModel {
         if !trimmed.isEmpty {
             do {
                 _ = try await service.addNote(sessionId: sessionId, text: String(trimmed.prefix(2000)))
+                guard !isInvalidated else { return false }
             } catch let error as APIError {
                 errorMessage = "Couldn’t save your note: \(error.userMessage)"
                 return false
@@ -315,7 +331,7 @@ final class CookingViewModel {
     }
 
     private func speakCurrentStep(pace: SpeechPace = .normal, force: Bool = false) async {
-        guard force || readAloudEnabled, let text = spokenText, session?.status == .active else { return }
+        guard !isInvalidated, force || readAloudEnabled, let text = spokenText, session?.status == .active else { return }
         await audio.speak(text, pace: pace)
     }
 
@@ -327,19 +343,20 @@ final class CookingViewModel {
 
     /// Sends one command; adopts whatever Session the server answers with. Returns true on 200.
     private func run(_ command: SessionCommand) async -> Bool {
-        guard session != nil, !isSending, !isOffline else { return false }
+        guard session != nil, !isSending, !isOffline, !isInvalidated else { return false }
         isSending = true
         errorMessage = nil
         defer { isSending = false }
         do {
             let latest = try await sender.send(command)
+            guard !isInvalidated else { return false }
             adopt(latest)
             return true
         } catch let error as APIError {
-            handle(error)
+            if !isInvalidated { handle(error) }
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            if !isInvalidated { errorMessage = error.localizedDescription }
             return false
         }
     }
@@ -369,6 +386,7 @@ final class CookingViewModel {
     }
 
     private func adopt(_ latest: CookingSession, persist: Bool = true) {
+        guard !isInvalidated else { return }
         let stepChanged = session?.stepIndex != latest.stepIndex
         session = latest
         if stepChanged { showOriginal = false }

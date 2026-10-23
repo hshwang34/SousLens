@@ -72,7 +72,17 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
-        cooking = CookingSessionStore(service: api, cache: sessionCache)
+        cooking = CookingSessionStore(service: api, cache: sessionCache, owner: { [weak auth, weak serverSettings] in
+            guard let user = auth?.user, let server = serverSettings?.effectiveBaseURLString, !server.isEmpty else { return nil }
+            return SessionOwner(userId: user.id, server: server)
+        })
+        // Every path that drops credentials (sign-out, 401, server change, fresh install, a
+        // different user signing in, a restore that ends signed out) also drops cooking state.
+        let previousHook = auth.onCredentialsCleared
+        auth.onCredentialsCleared = { [weak cooking] in
+            previousHook?()
+            cooking?.reset()
+        }
         // Recipe ids belong to one server: a link (or an open stack) from the old server is stale.
         let previous = serverSettings.onEffectiveBaseURLChanged
         serverSettings.onEffectiveBaseURLChanged = { [weak self] oldValue, newValue in

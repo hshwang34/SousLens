@@ -52,8 +52,9 @@ final class PreferencesViewModel {
     private(set) var preferences = FoodPreferences()
     private(set) var isSaving = false
     private(set) var saveError: String?
-    var allergyDraft = "" { didSet { allergyDraft = Self.capped(allergyDraft) } }
-    var avoidDraft = "" { didSet { avoidDraft = Self.capped(avoidDraft) } }
+    // Assign only when over the cap: an unconditional write in `didSet` recurses under @Observable.
+    var allergyDraft = "" { didSet { if allergyDraft.count > Self.maxLength { allergyDraft = String(allergyDraft.prefix(Self.maxLength)) } } }
+    var avoidDraft = "" { didSet { if avoidDraft.count > Self.maxLength { avoidDraft = String(avoidDraft.prefix(Self.maxLength)) } } }
 
     private let service: PreferencesService
 
@@ -134,9 +135,5 @@ final class PreferencesViewModel {
         let scalars = raw.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0) ? " " : Character($0) }
         let collapsed = String(scalars).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return String(collapsed.prefix(maxLength))
-    }
-
-    private static func capped(_ value: String) -> String {
-        value.count > maxLength ? String(value.prefix(maxLength)) : value
     }
 }

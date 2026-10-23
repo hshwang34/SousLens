@@ -154,8 +154,9 @@ struct PantryFitView: View {
             }
             Button {
                 Task {
+                    let epoch = environment.cooking.epoch
                     if let session = await model.startCooking() {
-                        environment.cooking.present(newSession: session)
+                        environment.cooking.present(newSession: session, epoch: epoch)
                     }
                 }
             } label: {
