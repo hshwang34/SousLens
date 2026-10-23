@@ -239,8 +239,22 @@ class RecipeMedia(CreatedAtMixin, Base):
     )
 
 
+OPEN_DRAFT_STATUS_VALUES = ("editing", "extracting", "review")
+
+
 class RecipeDraft(TimestampMixin, Base):
     __tablename__ = "recipe_drafts"
+    __table_args__ = (
+        # At most one open (editing/extracting/review) draft per published recipe (REC-06).
+        Index(
+            "uq_recipe_drafts_one_open_per_recipe",
+            "recipe_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN (" + ", ".join(f"'{s}'" for s in OPEN_DRAFT_STATUS_VALUES) + ")"
+            ),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(

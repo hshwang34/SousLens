@@ -78,3 +78,26 @@ async def test_operator_unlock_is_transaction_local(db_session: AsyncSession) ->
             text("update recipe_versions set servings = 4 where id = :id"), {"id": version_id}
         )
     await db_session.rollback()
+
+
+async def test_truncate_is_blocked_even_with_cascade(db_session: AsyncSession) -> None:
+    await _version_id(db_session)
+    for sql in (
+        "truncate recipe_versions cascade",
+        "truncate recipes cascade",  # cascades into recipe_versions
+        "truncate users cascade",
+    ):
+        with pytest.raises(DBAPIError, match="TRUNCATE refused"):
+            await db_session.execute(text(sql))
+        await db_session.rollback()
+    count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
+    assert count == 5
+
+
+async def test_truncate_honours_the_operator_unlock(db_session: AsyncSession) -> None:
+    await _version_id(db_session)
+    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("truncate recipe_versions cascade"))
+    await db_session.commit()
+    count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
+    assert count == 0

@@ -11,6 +11,8 @@ Create Date: 2026-10-20
 * ``recipe_versions_immutable``: BEFORE UPDATE OR DELETE trigger that raises on every row
   (PRD §10.1 versioning rule). Escape hatch for operator repairs / account deletion only:
   ``SET LOCAL souslens.unlock_versions = 'on'`` inside the same transaction.
+* ``recipe_versions_no_truncate``: statement-level BEFORE TRUNCATE trigger, same unlock.
+* ``uq_recipe_drafts_one_open_per_recipe``: partial unique index, one open draft per recipe.
 """
 from __future__ import annotations
 
@@ -35,6 +37,19 @@ BEGIN
         RETURN NEW;
     END IF;
     RAISE EXCEPTION 'recipe_versions is append-only: % of version % refused', TG_OP, OLD.id
+        USING ERRCODE = 'P0001',
+              HINT = 'Published versions are immutable; publish a new version instead.';
+END
+$$ LANGUAGE plpgsql;
+"""
+
+TRUNCATE_FUNCTION = """
+CREATE OR REPLACE FUNCTION recipe_versions_no_truncate() RETURNS trigger AS $$
+BEGIN
+    IF coalesce(current_setting('souslens.unlock_versions', true), '') = 'on' THEN
+        RETURN NULL;
+    END IF;
+    RAISE EXCEPTION 'recipe_versions is append-only: TRUNCATE refused'
         USING ERRCODE = 'P0001',
               HINT = 'Published versions are immutable; publish a new version instead.';
 END
@@ -81,9 +96,25 @@ def upgrade() -> None:
         "CREATE TRIGGER recipe_versions_immutable BEFORE UPDATE OR DELETE ON recipe_versions "
         "FOR EACH ROW EXECUTE FUNCTION recipe_versions_immutable()"
     )
+    # Row triggers do not fire on TRUNCATE (incl. TRUNCATE ... CASCADE from a parent table).
+    op.execute(TRUNCATE_FUNCTION)
+    op.execute(
+        "CREATE TRIGGER recipe_versions_no_truncate BEFORE TRUNCATE ON recipe_versions "
+        "FOR EACH STATEMENT EXECUTE FUNCTION recipe_versions_no_truncate()"
+    )
+    op.create_index(
+        'uq_recipe_drafts_one_open_per_recipe',
+        'recipe_drafts',
+        ['recipe_id'],
+        unique=True,
+        postgresql_where=sa.text("status IN ('editing', 'extracting', 'review')"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index('uq_recipe_drafts_one_open_per_recipe', table_name='recipe_drafts')
+    op.execute("DROP TRIGGER IF EXISTS recipe_versions_no_truncate ON recipe_versions")
+    op.execute("DROP FUNCTION IF EXISTS recipe_versions_no_truncate()")
     op.execute("DROP TRIGGER IF EXISTS recipe_versions_immutable ON recipe_versions")
     op.execute("DROP FUNCTION IF EXISTS recipe_versions_immutable()")
     op.drop_column('recipe_versions', 'cover_image_url')

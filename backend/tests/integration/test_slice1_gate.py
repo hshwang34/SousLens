@@ -131,12 +131,17 @@ def _client_for(settings: Settings) -> AsyncClient:
 async def test_concurrent_publish_of_two_drafts_for_one_recipe_gets_distinct_versions(
     client: AsyncClient, engine: AsyncEngine, db_session: AsyncSession
 ) -> None:
+    """Fix round 1 item 6 makes "several open drafts for one recipe" impossible (partial unique
+    index), so the remaining race is the *same* draft published concurrently: exactly one 201
+    (v2), the rest 409, and versions stay 1..n with latest_version_id on the newest."""
+    from sqlalchemy.exc import IntegrityError
+
     alice = await bearer(client, "alice@example.com")
     v1 = await publish_new(client, alice)
     user_id = (await client.get("/v1/me", headers=alice)).json()["id"]
-    ids = []
-    for title in ("Concurrent A", "Concurrent B", "Concurrent C"):
-        row = RecipeDraft(
+
+    def open_draft(title: str) -> RecipeDraft:
+        return RecipeDraft(
             owner_user_id=uuid.UUID(user_id),
             recipe_id=uuid.UUID(v1["recipe_id"]),
             structured_draft_json=draft_service.normalise(
@@ -146,17 +151,21 @@ async def test_concurrent_publish_of_two_drafts_for_one_recipe_gets_distinct_ver
             ),
             status=DraftStatus.EDITING,
         )
-        db_session.add(row)
-        await db_session.flush()
-        ids.append(str(row.id))
-    await db_session.commit()
 
-    responses = await asyncio.gather(
-        *(client.post(f"/v1/recipes/drafts/{i}/publish", json={}, headers=alice) for i in ids)
-    )
-    assert [r.status_code for r in responses] == [201, 201, 201], [r.text for r in responses]
-    numbers = sorted(r.json()["version_number"] for r in responses)
-    assert numbers == [2, 3, 4]
+    first = open_draft("Concurrent A")
+    db_session.add(first)
+    await db_session.commit()
+    first_id = first.id  # the rollback below expires ORM state
+    db_session.add(open_draft("Concurrent B"))
+    with pytest.raises(IntegrityError, match="uq_recipe_drafts_one_open_per_recipe"):
+        await db_session.flush()
+    await db_session.rollback()
+
+    url = f"/v1/recipes/drafts/{first_id}/publish"
+    responses = await asyncio.gather(*(client.post(url, json={}, headers=alice) for _ in range(4)))
+    codes = sorted(r.status_code for r in responses)
+    assert codes == [201, 409, 409, 409], [r.text for r in responses]
+    assert next(r for r in responses if r.status_code == 201).json()["version_number"] == 2
     async with engine.connect() as conn:
         rows = (
             await conn.execute(
@@ -176,8 +185,8 @@ async def test_concurrent_publish_of_two_drafts_for_one_recipe_gets_distinct_ver
                 {"r": v1["recipe_id"]},
             )
         ).scalar_one()
-    assert [(n, c) for n, c in rows] == [(1, 1), (2, 1), (3, 1), (4, 1)]
-    assert latest == 4
+    assert [(n, c) for n, c in rows] == [(1, 1), (2, 1)]
+    assert latest == 2
 
 
 async def test_concurrent_first_publishes_with_same_title_never_500(

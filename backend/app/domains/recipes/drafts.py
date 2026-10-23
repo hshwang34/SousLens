@@ -438,17 +438,28 @@ async def open_draft_id(session: AsyncSession, recipe_id: uuid.UUID) -> uuid.UUI
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+def _open_draft_conflict(draft_id: uuid.UUID) -> StateConflict:
+    return StateConflict(
+        "A draft for this recipe is already open", extra={"details": {"draft_id": str(draft_id)}}
+    )
+
+
 async def start_edit(session: AsyncSession, user: User, recipe_id: uuid.UUID) -> RecipeDraft:
-    recipe = await get_owned_or_404(session, Recipe, recipe_id, user.id, label="Recipe")
-    version = recipe.latest_version
-    if version is None:
+    """One open draft per recipe: the recipe row lock serialises concurrent ``/edit`` calls and
+    ``uq_recipe_drafts_one_open_per_recipe`` is the database backstop."""
+    recipe = (
+        await session.execute(
+            select(Recipe)
+            .where(Recipe.id == recipe_id, Recipe.owner_user_id == user.id)
+            .with_for_update(of=Recipe)
+        )
+    ).scalar_one_or_none()
+    if recipe is None or recipe.latest_version is None:
         raise NotFound("Recipe not found")
+    version = recipe.latest_version
     existing = await open_draft_id(session, recipe.id)
     if existing is not None:
-        raise StateConflict(
-            "A draft for this recipe is already open",
-            extra={"details": {"draft_id": str(existing)}},
-        )
+        raise _open_draft_conflict(existing)
     warnings = version.warning_json or {}
     meta = version_meta(recipe, version)
     content = DraftContent(
@@ -470,8 +481,15 @@ async def start_edit(session: AsyncSession, user: User, recipe_id: uuid.UUID) ->
         structured_draft_json=normalise(content),
         status=DraftStatus.EDITING,
     )
-    session.add(row)
-    await session.flush()
+    try:
+        async with session.begin_nested():
+            session.add(row)
+            await session.flush()
+    except IntegrityError:
+        existing = await open_draft_id(session, recipe.id)
+        if existing is None:
+            raise
+        raise _open_draft_conflict(existing) from None
     await session.refresh(row)
     return row
 

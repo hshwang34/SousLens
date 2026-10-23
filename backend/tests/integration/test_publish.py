@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import uuid
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -318,3 +319,50 @@ async def test_feed_is_published_at_desc_and_republish_keeps_first_published_at(
     assert feed[1]["version_number"] == 2
     detail_a = (await client.get(f"/v1/recipes/{first['recipe_id']}")).json()
     assert detail_a["published_at"] == feed[1]["published_at"]
+
+
+async def test_concurrent_edit_creates_exactly_one_open_draft(client: AsyncClient) -> None:
+    import asyncio
+
+    alice = await bearer(client, "alice@example.com")
+    v1 = await publish_new(client, alice)
+    responses = await asyncio.gather(
+        *(
+            client.post(f"/v1/recipes/{v1['recipe_id']}/edit", json={}, headers=alice)
+            for _ in range(6)
+        )
+    )
+    codes = sorted(r.status_code for r in responses)
+    assert codes == [201, 409, 409, 409, 409, 409], [r.text for r in responses]
+    created = next(r.json() for r in responses if r.status_code == 201)
+    for r in responses:
+        if r.status_code == 409:
+            assert r.json()["error"]["code"] == "STATE_CONFLICT"
+            assert r.json()["error"]["details"] == {"draft_id": created["id"]}
+    drafts = (await client.get("/v1/recipes/drafts", headers=alice)).json()["items"]
+    assert [d["status"] for d in drafts].count("draft") == 1
+
+
+async def test_db_index_allows_one_open_draft_per_recipe(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    alice = await bearer(client, "alice@example.com")
+    v1 = await publish_new(client, alice)
+    owner = (await client.get("/v1/me", headers=alice)).json()["id"]
+    insert = text(
+        "insert into recipe_drafts (id, owner_user_id, recipe_id, structured_draft_json, status) "
+        "values (gen_random_uuid(), :o, :r, '{}'::jsonb, :s)"
+    )
+    params = {"o": owner, "r": v1["recipe_id"]}
+    # the published draft from v1 already exists; a second published/discarded one is fine
+    await db_session.execute(insert, {**params, "s": "discarded"})
+    await db_session.execute(insert, {**params, "s": "editing"})
+    await db_session.commit()
+    for status in ("editing", "extracting", "review"):
+        try:
+            with pytest.raises(IntegrityError, match="uq_recipe_drafts_one_open_per_recipe"):
+                await db_session.execute(insert, {**params, "s": status})
+        finally:
+            await db_session.rollback()

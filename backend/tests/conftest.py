@@ -82,6 +82,8 @@ async def engine(settings: Settings, migrated_db: None) -> AsyncIterator[AsyncEn
 async def clean_tables(engine: AsyncEngine) -> None:
     tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
     async with engine.begin() as conn:
+        # recipe_versions is append-only (migration 0002); the test reset uses the operator unlock.
+        await conn.execute(text("SET LOCAL souslens.unlock_versions = 'on'"))
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 

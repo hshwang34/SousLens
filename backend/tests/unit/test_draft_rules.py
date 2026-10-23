@@ -110,3 +110,10 @@ def test_https_url_accepts_and_stores_as_given(value: str | None) -> None:
 def test_https_url_rejects(value: str) -> None:
     with pytest.raises(ValueError):
         validate_https_url(value)
+
+
+def test_open_draft_statuses_match_the_partial_unique_index() -> None:
+    from app.db.models import OPEN_DRAFT_STATUS_VALUES
+    from app.domains.recipes.drafts import OPEN_DRAFT_STATUSES
+
+    assert tuple(s.value for s in OPEN_DRAFT_STATUSES) == OPEN_DRAFT_STATUS_VALUES
