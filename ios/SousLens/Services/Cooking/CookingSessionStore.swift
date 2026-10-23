@@ -114,6 +114,13 @@ final class CookingSessionStore {
         presented = Presentation(sessionId: active.id, initial: cached?.id == active.id ? cached : nil, startOnOpen: false)
     }
 
+    /// "You have unfinished cooks" → Resume: open that session at the server's step.
+    func resume(sessionId: UUID) {
+        guard owner() != nil else { return }
+        let cached = cachedSession()
+        presented = Presentation(sessionId: sessionId, initial: cached?.id == sessionId ? cached : nil, startOnOpen: false)
+    }
+
     /// Right after `POST /sessions` from an explicit **Start cooking** tap. `epoch` is the value
     /// captured before that request was sent.
     func present(newSession session: CookingSession, epoch started: Int) {

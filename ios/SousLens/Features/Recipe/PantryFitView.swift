@@ -34,6 +34,15 @@ struct PantryFitView: View {
             await model.load()
             await model.loadVariation()
         }
+        .sheet(isPresented: Binding(get: { model?.starter?.showsUnfinished ?? false },
+                                    set: { if !$0 { model?.starter?.dismissUnfinished() } })) {
+            if let starter = model?.starter {
+                let epoch = environment.cooking.epoch
+                UnfinishedCooksSheet(starter: starter,
+                                     onResume: { environment.cooking.resume(sessionId: $0) },
+                                     onStarted: { environment.cooking.present(newSession: $0, epoch: epoch) })
+            }
+        }
         .sheet(item: $swapSheet) { target in
             SubstitutionSheet(
                 model: SubstitutionSheetViewModel(recipeVersionId: recipeVersionId, ingredientRef: target.ingredientRef,

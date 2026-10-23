@@ -15,8 +15,7 @@ struct RecipeDetailView: View {
     @State private var isOpeningEditor = false
     @State private var showUnpublishConfirmation = false
     @State private var showPantryFit = false
-    @State private var isStartingSession = false
-    @State private var startError: String?
+    @State private var starter: SessionStarter?
 
     var body: some View {
         Group {
@@ -40,6 +39,15 @@ struct RecipeDetailView: View {
         }
         .fullScreenCover(item: $editor, onDismiss: { Task { await model?.load() } }) { editor in
             DraftEditorView(model: editor)
+        }
+        .sheet(isPresented: Binding(get: { starter?.showsUnfinished ?? false },
+                                    set: { if !$0 { starter?.dismissUnfinished() } })) {
+            if let starter {
+                let epoch = environment.cooking.epoch
+                UnfinishedCooksSheet(starter: starter,
+                                     onResume: { environment.cooking.resume(sessionId: $0) },
+                                     onStarted: { environment.cooking.present(newSession: $0, epoch: epoch) })
+            }
         }
         .navigationDestination(isPresented: $showPantryFit) {
             if let detail = model?.detail {
@@ -140,7 +148,7 @@ struct RecipeDetailView: View {
             .slDisabledAppearance(!loaded)
             .accessibilityIdentifier("recipe.checkPantry")
             .accessibilityHint("Shows which ingredients you have, which to check, and which are missing")
-            if let startError {
+            if let startError = starter?.errorMessage {
                 Text(startError)
                     .font(SLFont.footnote)
                     .foregroundStyle(SLColor.danger)
@@ -149,14 +157,14 @@ struct RecipeDetailView: View {
             Button {
                 Task { await startCooking() }
             } label: {
-                if isStartingSession {
+                if starter?.isStarting == true {
                     ProgressView().tint(.white)
                 } else {
                     Label("Start cooking", systemImage: "flame")
                 }
             }
             .buttonStyle(SLButtonStyle(prominent: true))
-            .disabled(!loaded || isStartingSession)
+            .disabled(!loaded || starter?.isStarting == true)
             .slDisabledAppearance(!loaded)
             .accessibilityIdentifier("recipe.startCooking")
             .accessibilityHint("Starts this version as written. Check my pantry first to swap missing ingredients.")
@@ -204,18 +212,12 @@ struct RecipeDetailView: View {
 
     /// Start cooking this exact version as written (no swaps; those are chosen on Pantry fit).
     private func startCooking() async {
-        guard let detail = model?.detail, !isStartingSession else { return }
-        isStartingSession = true
-        startError = nil
-        defer { isStartingSession = false }
+        guard let detail = model?.detail else { return }
+        let starter = self.starter ?? SessionStarter(service: environment.api)
+        self.starter = starter
         let epoch = environment.cooking.epoch
-        do {
-            let session = try await environment.api.createSession(recipeVersionId: detail.recipeVersionId, adaptations: [])
+        if let session = await starter.start(recipeVersionId: detail.recipeVersionId, adaptations: []) {
             environment.cooking.present(newSession: session, epoch: epoch)
-        } catch let error as APIError where error == .cancelled {
-            return
-        } catch {
-            startError = "Couldn’t start cooking: \((error as? APIError)?.userMessage ?? error.localizedDescription)"
         }
     }
 

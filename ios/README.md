@@ -140,6 +140,11 @@ comes back; it never moves a step, starts a timer or applies a swap on its own.
   `GET /recipe-versions/{id}/my-variation` returns one; tapping it fills the swaps (still undoable).
 - **Start cooking** (fit screen with swaps, or recipe detail as written) creates the session and
   opens the full-screen cooking view, which sends `start` on that same tap.
+  If the user already has 3 open cooks (409 `STATE_CONFLICT` with `details.open_session_ids`), a
+  **You have unfinished cooks** sheet lists them with **Resume** / **Abandon** (confirmation →
+  `GET` the session for its revision → confirmed `abandon` with a fresh key; one retry on a stale
+  revision); once none block, the start is retried with the same version and swaps. 429 on create
+  says to try again later (`SessionStarter`).
 - **Cooking** (`Features/Cooking`): step N of M, the session's step text in large Dynamic Type,
   **Adapted · Common swap / AI suggested adaptation** badge with **Show original**, success cues,
   warnings with a safety icon, creator note, "No clip for this step", oversized **Back / Pause /

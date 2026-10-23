@@ -150,8 +150,10 @@ final class PantryFitViewModel {
     private(set) var approvedSwaps: [String: ApprovedSwap] = [:]
     /// The user's saved private variation for this version ("Use my changes from last time").
     private(set) var variation: PrivateVariation?
-    private(set) var isStarting = false
-    private(set) var startError: String?
+    /// Start cooking, including the "unfinished cooks" (409) and rate-limit (429) paths.
+    let starter: SessionStarter?
+    var isStarting: Bool { starter?.isStarting ?? false }
+    var startError: String? { starter?.errorMessage }
 
     init(recipeVersionId: UUID, recipeTitle: String, service: PantryService, cooking: CookingService? = nil,
          now: @escaping @MainActor () -> Date = { Date() }) {
@@ -159,6 +161,7 @@ final class PantryFitViewModel {
         self.recipeTitle = recipeTitle
         self.service = service
         self.cooking = cooking
+        starter = cooking.map { SessionStarter(service: $0) }
         self.now = now
     }
 
@@ -298,7 +301,6 @@ final class PantryFitViewModel {
     /// **Use this swap** in the sheet. Replaces any earlier swap for the same line.
     func approve(_ swap: ApprovedSwap) {
         approvedSwaps[swap.ingredientRef] = swap
-        startError = nil
     }
 
     /// **Undo swap** — nothing was sent anywhere, so this is purely local.
@@ -335,19 +337,8 @@ final class PantryFitViewModel {
     /// **Start cooking**: `POST /sessions` pinning this version with the approved swaps. The
     /// returned Session (status `created`) is started by the cooking screen on the same tap.
     func startCooking() async -> CookingSession? {
-        guard let cooking, !isStarting else { return nil }
-        isStarting = true
-        startError = nil
-        defer { isStarting = false }
-        do {
-            return try await cooking.createSession(recipeVersionId: recipeVersionId,
-                                                   adaptations: approvedSwapList.map(\.input))
-        } catch let error as APIError where error == .cancelled {
-            return nil
-        } catch {
-            startError = "Couldn’t start cooking: \((error as? APIError)?.userMessage ?? error.localizedDescription)"
-            return nil
-        }
+        guard let starter else { return nil }
+        return await starter.start(recipeVersionId: recipeVersionId, adaptations: approvedSwapList.map(\.input))
     }
 
 }
