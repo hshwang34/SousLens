@@ -137,7 +137,7 @@ struct DraftEditorView: View {
         Task {
             await model.flush()
             isClosing = false
-            if case .failed = model.saveStatus {
+            if model.saveStatus.isFailure {
                 showCloseConfirmation = true
             } else {
                 dismiss()
@@ -151,10 +151,12 @@ struct DraftEditorView: View {
         Section {
             TextField("Title", text: $model.form.title, axis: .vertical)
                 .font(SLFont.title3)
+                .characterLimit($model.form.title, DraftLimits.title)
                 .accessibilityIdentifier("draft.title")
             problemRows(model.problems(for: "title"))
             TextField("Summary — what makes this dish worth cooking?", text: $model.form.summary, axis: .vertical)
                 .lineLimit(2...5)
+                .characterLimit($model.form.summary, DraftLimits.summary)
                 .accessibilityIdentifier("draft.summary")
             problemRows(model.problems(for: "summary"))
             TagChipsEditor(tags: $model.form.tags)
@@ -345,6 +347,12 @@ struct SaveStatusLabel: View {
                 Button("Retry", action: retry)
                     .font(SLFont.bodyEmphasis)
                     .accessibilityIdentifier("draft.retrySave")
+            case .rejected:
+                // Retrying the same content can't help; the next edit saves again automatically.
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(SLColor.danger)
+                Text(status.label)
+                    .foregroundStyle(SLColor.danger)
+                    .lineLimit(3)
             }
         }
         .font(SLFont.footnote)

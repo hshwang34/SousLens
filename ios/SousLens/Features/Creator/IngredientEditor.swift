@@ -24,6 +24,7 @@ struct IngredientEditor: View {
         return Form {
             Section {
                 TextField("Name (e.g. garlic)", text: ingredient.name)
+                    .characterLimit(ingredient.name, DraftLimits.ingredientName)
                     .focused($nameFocused)
                     .accessibilityIdentifier("ingredient.name")
                 problemRows(model.problems(in: "ingredients", row: index))
@@ -32,6 +33,7 @@ struct IngredientEditor: View {
                         .accessibilityIdentifier("ingredient.quantity")
                     Divider()
                     TextField("Unit (cup, g, clove…)", text: ingredient.unit)
+                        .characterLimit(ingredient.unit, DraftLimits.unit)
                         .textInputAutocapitalization(.never)
                         .accessibilityIdentifier("ingredient.unit")
                 }
@@ -44,8 +46,10 @@ struct IngredientEditor: View {
             }
             Section {
                 TextField("Preparation (e.g. minced)", text: ingredient.preparation, axis: .vertical)
+                    .characterLimit(ingredient.preparation, DraftLimits.preparation)
                     .accessibilityIdentifier("ingredient.preparation")
                 TextField("Notes (brand, substitutes, where to find it)", text: ingredient.notes, axis: .vertical)
+                    .characterLimit(ingredient.notes, DraftLimits.ingredientNotes)
                     .lineLimit(1...4)
                     .accessibilityIdentifier("ingredient.notes")
             } header: {

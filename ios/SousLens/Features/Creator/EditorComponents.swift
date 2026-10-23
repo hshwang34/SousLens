@@ -15,6 +15,7 @@ struct StringListSection: View {
             ForEach($items) { $line in
                 TextField(placeholder, text: $line.text, axis: .vertical)
                     .lineLimit(1...4)
+                    .characterLimit($line.text, DraftLimits.line)
             }
             .onDelete { items.remove(atOffsets: $0) }
             Button {
@@ -64,6 +65,7 @@ struct TagChipsEditor: View {
             }
             HStack {
                 TextField("Add a tag (weeknight, korean…)", text: $draft)
+                    .characterLimit($draft, DraftLimits.tag)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .onSubmit(commit)
@@ -82,8 +84,7 @@ struct TagChipsEditor: View {
     }
 
     private func normalized(_ text: String) -> String? {
-        let tag = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return tag.isEmpty ? nil : tag
+        DraftText.tags([text]).first
     }
 }
 
@@ -176,5 +177,15 @@ enum KeyboardFocus {
     /// Commits whatever field is being edited before an action that reads the form.
     static func endEditing() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+extension View {
+    /// Caps a text field at the backend's limit as the user types (paste included), so the limit is
+    /// visible instead of surfacing later as a failed save.
+    func characterLimit(_ text: Binding<String>, _ max: Int) -> some View {
+        onChange(of: text.wrappedValue) { _, newValue in
+            if newValue.count > max { text.wrappedValue = String(newValue.prefix(max)) }
+        }
     }
 }

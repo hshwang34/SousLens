@@ -1,5 +1,71 @@
 import Foundation
 
+/// Backend PATCH limits (brief 003, item 12). Text fields cap at these lengths as you type, and the
+/// PATCH body is normalised to them, so a creator sees the limit instead of a failed save.
+enum DraftLimits {
+    static let title = 120
+    static let summary = 1000
+    static let tag = 40
+    static let line = 500            // creator notes, dietary warnings, success cues, step warnings
+    static let ingredientName = 200
+    static let unit = 32
+    static let preparation = 200
+    static let ingredientNotes = 500
+    static let instruction = 2000
+    static let creatorNote = 500
+}
+
+/// Client-side copy of the backend's text rules: no control or bidi-override characters, no
+/// newlines in single-line fields, trimmed, within the length limit. Untrusted-content hygiene too.
+enum DraftText {
+    /// Bidi embedding/override/isolate marks and the directional marks.
+    private static let bidi: Set<Unicode.Scalar> = Set(
+        [0x200E, 0x200F, 0x061C, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069]
+            .compactMap(Unicode.Scalar.init)
+    )
+
+    private static func clean(_ text: String, keepNewlines: Bool) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.replacingOccurrences(of: "\r\n", with: "\n").unicodeScalars {
+            if bidi.contains(scalar) { continue }
+            if scalar == "\n" || scalar == "\r" || scalar == "\u{2028}" || scalar == "\u{2029}" {
+                scalars.append(keepNewlines ? "\n" : " ")
+            } else if scalar == "\t" {
+                scalars.append(" ")
+            } else if scalar.properties.generalCategory == .control || scalar.properties.generalCategory == .format && scalar.value != 0x200D {
+                continue   // C0/C1 controls, zero-width/format chars (ZWJ kept for emoji)
+            } else {
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
+    /// Title, tags, ingredient name/unit/preparation.
+    static func singleLine(_ text: String, max: Int) -> String {
+        String(clean(text, keepNewlines: false).trimmingCharacters(in: .whitespaces).prefix(max))
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Summary, instruction, notes, cues, warnings.
+    static func multiLine(_ text: String, max: Int) -> String {
+        String(clean(text, keepNewlines: true).trimmingCharacters(in: .whitespacesAndNewlines).prefix(max))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func nonEmpty(_ text: String) -> String? { text.isEmpty ? nil : text }
+
+    /// Trimmed, lowercased, ≤40, unique, in order.
+    static func tags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.compactMap { raw in
+            let tag = singleLine(raw, max: DraftLimits.tag).lowercased()
+            guard !tag.isEmpty, seen.insert(tag).inserted else { return nil }
+            return tag
+        }
+    }
+}
+
 /// Editable, value-typed mirror of a `Draft`. The editor binds to this; `patch()` turns it back
 /// into the wire shape (full arrays — the contract replaces arrays whole).
 struct DraftForm: Equatable, Sendable {
@@ -34,10 +100,14 @@ struct DraftForm: Equatable, Sendable {
     /// clear one set elsewhere.
     static let clearableFields: Set<DraftPatch.Field> = [.title, .summary, .servings, .prepMinutes, .cookMinutes]
 
-    /// The title as committed: newlines (a vertical text field accepts Return) become spaces, trimmed.
+    /// The title as committed: newlines (a vertical text field accepts Return) become spaces,
+    /// control/bidi characters are dropped, trimmed, ≤120.
     var committedTitle: String? {
-        let flattened = title.components(separatedBy: .newlines).joined(separator: " ")
-        return EditableIngredient.nilIfBlank(flattened)
+        DraftText.nonEmpty(DraftText.singleLine(title, max: DraftLimits.title))
+    }
+
+    var committedSummary: String? {
+        DraftText.nonEmpty(DraftText.multiLine(summary, max: DraftLimits.summary))
     }
 
     /// Full-form PATCH body. Steps are sent in display order (the server rewrites `order` from array
@@ -45,8 +115,8 @@ struct DraftForm: Equatable, Sendable {
     func patch() -> DraftPatch {
         DraftPatch(
             title: committedTitle,
-            summary: EditableIngredient.nilIfBlank(summary),
-            tags: tags,
+            summary: committedSummary,
+            tags: DraftText.tags(tags),
             coverImageUrl: nil,
             servings: servings,
             prepMinutes: prepMinutes,
@@ -118,8 +188,8 @@ struct DraftForm: Equatable, Sendable {
             versionNumber: versionNumber,
             slug: "draft",
             title: committedTitle ?? "Untitled draft",
-            summary: EditableIngredient.nilIfBlank(summary),
-            tags: tags,
+            summary: committedSummary,
+            tags: DraftText.tags(tags),
             creator: creator,
             servings: servings,
             prepMinutes: prepMinutes,
@@ -162,12 +232,12 @@ struct EditableIngredient: Identifiable, Equatable, Sendable {
     var ingredient: Ingredient {
         Ingredient(
             id: id,
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            name: DraftText.singleLine(name, max: DraftLimits.ingredientName),
             quantity: quantity,
-            unit: Self.nilIfBlank(unit),
+            unit: DraftText.nonEmpty(DraftText.singleLine(unit, max: DraftLimits.unit)),
             optional: optional,
-            preparation: Self.nilIfBlank(preparation),
-            notes: Self.nilIfBlank(notes)
+            preparation: DraftText.nonEmpty(DraftText.singleLine(preparation, max: DraftLimits.preparation)),
+            notes: DraftText.nonEmpty(DraftText.multiLine(notes, max: DraftLimits.ingredientNotes))
         )
     }
 
@@ -227,12 +297,12 @@ struct EditableStep: Identifiable, Equatable, Sendable {
         RecipeStep(
             id: id,
             order: order,
-            instruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines),
+            instruction: DraftText.multiLine(instruction, max: DraftLimits.instruction),
             ingredientRefs: ingredientRefs,
             estimatedMinutes: estimatedMinutes,
             successCues: EditableLine.texts(successCues),
             warnings: EditableLine.texts(warnings),
-            creatorNote: EditableIngredient.nilIfBlank(creatorNote),
+            creatorNote: DraftText.nonEmpty(DraftText.multiLine(creatorNote, max: DraftLimits.creatorNote)),
             sourceClipId: sourceClipId,
             sourceStartMs: sourceStartMs,
             sourceEndMs: sourceEndMs,
@@ -263,6 +333,6 @@ struct EditableLine: Identifiable, Equatable, Sendable, ExpressibleByStringLiter
 
     /// Trimmed, non-blank texts in order: what goes on the wire.
     static func texts(_ lines: [EditableLine]) -> [String] {
-        lines.compactMap { EditableIngredient.nilIfBlank($0.text) }
+        lines.compactMap { DraftText.nonEmpty(DraftText.multiLine($0.text, max: DraftLimits.line)) }
     }
 }

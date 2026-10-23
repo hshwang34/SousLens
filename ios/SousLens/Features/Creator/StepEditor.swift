@@ -24,6 +24,7 @@ struct StepEditor: View {
         return Form {
             Section {
                 TextField("What to do (e.g. Sear the thighs skin-side down until deeply browned)", text: step.instruction, axis: .vertical)
+                    .characterLimit(step.instruction, DraftLimits.instruction)
                     .lineLimit(3...8)
                     .focused($instructionFocused)
                     .accessibilityIdentifier("step.instruction")
@@ -78,6 +79,7 @@ struct StepEditor: View {
 
             Section {
                 TextField("A personal tip for this step", text: step.creatorNote, axis: .vertical)
+                    .characterLimit(step.creatorNote, DraftLimits.creatorNote)
                     .lineLimit(1...4)
                     .accessibilityIdentifier("step.creatorNote")
             } header: {

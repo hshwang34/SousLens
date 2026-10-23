@@ -12,13 +12,25 @@ final class DraftEditorViewModel: Identifiable {
         /// Edited; the debounce timer is running.
         case pending
         case saving
+        /// Transport or server failure; the same body may succeed on Retry.
         case failed(String)
+        /// The server refused the content (PATCH 422 VALIDATION_ERROR): retrying the same body can't
+        /// help, the creator has to change the field. Shown inline with the server's reason.
+        case rejected(String)
 
         var label: String {
             switch self {
             case .saved: return "Saved"
             case .pending, .saving: return "Saving…"
             case .failed: return "Couldn’t save"
+            case .rejected(let reason): return "Couldn’t save · \(reason)"
+            }
+        }
+
+        var isFailure: Bool {
+            switch self {
+            case .failed, .rejected: return true
+            default: return false
             }
         }
     }
@@ -132,7 +144,7 @@ final class DraftEditorViewModel: Identifiable {
         // A published draft is read-only on the server (PATCH → 409); never queue a save for it.
         guard !isPublishedReadOnly else { return }
         dirty = true
-        if case .failed = saveStatus {
+        if saveStatus.isFailure {
             // Keep the failure visible until a save succeeds; a retry is one tap away.
         } else {
             saveStatus = .pending
@@ -161,7 +173,7 @@ final class DraftEditorViewModel: Identifiable {
         await save()
         // Another save may have started meanwhile (the autosave task, or an edit made during the
         // last PATCH). Keep going until nothing is in flight and nothing is waiting; a failed save
-        // stops the loop (its status stays `.failed`).
+        // stops the loop (its status stays `.failed` / `.rejected`).
         while saveTask != nil || (dirty && saveStatus == .pending) {
             autosaveTask?.cancel()
             await save()
@@ -197,7 +209,11 @@ final class DraftEditorViewModel: Identifiable {
                 // A read-only draft can never take these edits, so they are not "unsaved work"
                 // to retry; the failure message stays visible.
                 self.dirty = !self.isPublishedReadOnly
-                self.saveStatus = .failed(message)
+                if apiError?.status == 422 {
+                    self.saveStatus = .rejected(apiError?.userMessage ?? message)
+                } else {
+                    self.saveStatus = .failed(message)
+                }
             }
         }
         saveTask = task
@@ -246,6 +262,10 @@ final class DraftEditorViewModel: Identifiable {
         guard case .confirming = publishPhase else { return }
         publishPhase = .publishing
         await flush()
+        if case .rejected(let reason) = saveStatus {
+            publishPhase = .failed("Your latest changes weren’t accepted (\(reason)). Fix them, then publish.")
+            return
+        }
         if case .failed(let message) = saveStatus {
             publishPhase = .failed("Your latest changes didn’t save (\(message)). Retry saving, then publish.")
             return

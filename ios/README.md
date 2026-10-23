@@ -35,7 +35,13 @@ cues and warnings.
 - **Autosave:** every change is PATCHed after an 800 ms debounce (whole form; arrays replace whole,
   steps sent in display order). A field the creator empties (title, summary, servings, prep/cook
   minutes) is sent as JSON `null`, which the backend reads as "clear"; omitted keys mean "unchanged".
-  Steps keep their original provenance (`evidence_origin`, source clip) when edited. The bar shows **Saving… / Saved / Couldn’t save · Retry**. Closing
+  Steps keep their original provenance (`evidence_origin`, source clip) when edited.
+- **Text rules:** fields cap at the backend's limits as you type (`DraftLimits`: title 120,
+  summary 1000, tag 40, ingredient name 200 / unit 32 / preparation 200 / notes 500, instruction
+  2000, notes/warnings/cues 500). Before sending, `DraftText` strips control and bidi characters,
+  turns newlines in single-line fields into spaces, trims, and lowercases + dedupes tags. If the
+  server still refuses a PATCH (422), the bar shows "Couldn’t save · <server reason>" with no Retry;
+  the next edit saves again. The bar shows **Saving… / Saved / Couldn’t save · Retry**. Closing
   with an unsaved change asks before discarding.
 - **Validation:** the server's `validation.problems` are shown inline next to the field or row
   (`title`, `ingredients`, `steps[1].instruction`, …). **Publish** is enabled only when the last

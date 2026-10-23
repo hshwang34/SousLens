@@ -255,4 +255,60 @@ final class Slice1FixRoundTests: XCTestCase {
         await toggle.value
         XCTAssertTrue(model.isSaved)
     }
+
+    // MARK: 12. Client-side normalisation to the backend's PATCH rules
+
+    func testPatchIsNormalisedToBackendTextRules() throws {
+        var form = DraftForm()
+        form.title = "  Garlic\nPasta\u{202E}\u{0007}  " + String(repeating: "x", count: 200)
+        form.summary = "Line one\r\nLine two\u{200F}"
+        form.tags = ["  Weeknight ", "WEEKNIGHT", "Korean\nFood", "   ", String(repeating: "t", count: 60)]
+        form.addIngredient()
+        form.ingredients[0].name = " Garlic\ncloves\u{0000} "
+        form.ingredients[0].unit = String(repeating: "u", count: 50)
+        form.ingredients[0].preparation = "minced\n"
+        form.addStep()
+        form.steps[0].instruction = "Stir.\n\nThen rest." + String(repeating: "y", count: 2500)
+        form.steps[0].successCues = ["  Glossy\u{2066} ", "  "]
+        form.creatorNotes = [EditableLine(String(repeating: "n", count: 600))]
+        let patch = form.patch()
+
+        let title = try XCTUnwrap(patch.title)
+        XCTAssertTrue(title.hasPrefix("Garlic Pasta"), title)
+        XCTAssertFalse(title.contains("\n"))
+        XCTAssertFalse(title.unicodeScalars.contains { $0.value == 0x202E || $0.value == 0x0007 })
+        XCTAssertLessThanOrEqual(title.count, DraftLimits.title)
+        XCTAssertEqual(patch.summary, "Line one\nLine two", "multi-line fields keep newlines, lose bidi marks")
+        XCTAssertEqual(patch.tags, ["weeknight", "korean food", String(repeating: "t", count: 40)], "trimmed, lowercased, unique, ≤40")
+        let ingredient = try XCTUnwrap(patch.ingredients?.first)
+        XCTAssertEqual(ingredient.name, "Garlic cloves")
+        XCTAssertEqual(ingredient.unit?.count, DraftLimits.unit)
+        XCTAssertEqual(ingredient.preparation, "minced")
+        let step = try XCTUnwrap(patch.steps?.first)
+        XCTAssertTrue(step.instruction.hasPrefix("Stir.\n\nThen rest."))
+        XCTAssertEqual(step.instruction.count, DraftLimits.instruction)
+        XCTAssertEqual(step.successCues, ["Glossy"])
+        XCTAssertEqual(patch.creatorNotes?.first?.count, DraftLimits.line)
+    }
+
+    func testPatch422ShowsServerReasonInlineWithoutRetryLoop() async throws {
+        let service = FakeRecipeService()
+        service.updateDraftHandler = { _, _ in
+            throw APIError.server(status: 422, code: "VALIDATION_ERROR", message: "Title must be 120 characters or fewer.",
+                                  retryable: false, correlationId: nil, details: .object(["fields": .array([.string("body.title")])]))
+        }
+        let model = DraftEditorViewModel(draft: try AuthoringFixtures.draft(), service: service, creator: AuthoringFixtures.creator, debounce: .zero)
+        model.form.title = "Too long"
+        await model.flush()
+        XCTAssertEqual(model.saveStatus, .rejected("Title must be 120 characters or fewer."))
+        XCTAssertEqual(model.saveStatus.label, "Couldn’t save · Title must be 120 characters or fewer.")
+        XCTAssertTrue(model.hasUnsavedChanges)
+        XCTAssertEqual(service.authoringCalls.count, 1, "flush does not spin on a 422")
+
+        model.requestPublish()
+        await model.confirmPublish()
+        guard case .failed(let message) = model.publishPhase else { return XCTFail("\(model.publishPhase)") }
+        XCTAssertTrue(message.contains("weren’t accepted"))
+        XCTAssertFalse(service.authoringCalls.contains(.publishDraft(model.id)))
+    }
 }
