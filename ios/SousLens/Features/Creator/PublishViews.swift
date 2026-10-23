@@ -57,6 +57,9 @@ struct PublishConfirmationSheet: View {
 
 /// Success screen: version, share link, share sheet.
 struct PublishedView: View {
+    /// Honest about the universal-link stub (brief 003): souslens.app serves no pages yet.
+    static let linkCaveat = "Link pages aren’t live yet; the link opens the app if SousLens is installed."
+
     let result: PublishResult
     let title: String
     let done: () -> Void
@@ -83,20 +86,24 @@ struct PublishedView: View {
             }
             .multilineTextAlignment(.center)
             VStack(spacing: Spacing.sm) {
-                Text(result.shareUrl)
+                // Built from the recipe id, never from the server's `share_url`.
+                Text(result.shareURL.absoluteString)
                     .font(SLFont.footnote.monospaced())
                     .foregroundStyle(SLColor.textSecondary)
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .accessibilityLabel("Share link \(result.shareUrl)")
-                if let url = result.shareURL {
-                    ShareLink(item: url, subject: Text(title), message: Text("\(title) on SousLens")) {
-                        Label("Share link", systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(SLButtonStyle(prominent: true))
-                    .accessibilityIdentifier("published.share")
+                    .accessibilityLabel("Share link \(result.shareURL.absoluteString)")
+                    .accessibilityIdentifier("published.link")
+                Text(PublishedView.linkCaveat)
+                    .font(SLFont.caption)
+                    .foregroundStyle(SLColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                ShareLink(item: result.shareURL, subject: Text(title), message: Text("\(title) on SousLens")) {
+                    Label("Share link", systemImage: "square.and.arrow.up")
                 }
+                .buttonStyle(SLButtonStyle(prominent: true))
+                .accessibilityIdentifier("published.share")
                 Button("Done", action: done)
                     .buttonStyle(SLButtonStyle(prominent: false))
                     .accessibilityIdentifier("published.done")

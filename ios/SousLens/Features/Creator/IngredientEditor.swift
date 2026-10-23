@@ -28,8 +28,7 @@ struct IngredientEditor: View {
                     .accessibilityIdentifier("ingredient.name")
                 problemRows(model.problems(in: "ingredients", row: index))
                 HStack {
-                    TextField("Quantity", value: ingredient.quantity, format: .number)
-                        .keyboardType(.decimalPad)
+                    NumericTextField(placeholder: "Quantity", value: ingredient.quantity)
                         .accessibilityIdentifier("ingredient.quantity")
                     Divider()
                     TextField("Unit (cup, g, clove…)", text: ingredient.unit)

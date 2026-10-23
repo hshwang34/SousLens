@@ -31,6 +31,12 @@ final class AppEnvironment {
     var exploreRoutes: [RecipeRoute] = []
     /// A link that arrived while signed out; applied once the user is signed in.
     private(set) var pendingDeepLink: DeepLink?
+    /// Bumped whenever a recipe's saved state changes anywhere; the Saved tab refreshes on change.
+    private(set) var savedRevision = 0
+
+    func noteSavedChanged() {
+        savedRevision += 1
+    }
 
     init(serverSettings: ServerSettings,
          api: APIClient,
@@ -48,6 +54,17 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
+        // Recipe ids belong to one server: a link (or an open stack) from the old server is stale.
+        let previous = serverSettings.onEffectiveBaseURLChanged
+        serverSettings.onEffectiveBaseURLChanged = { [weak self] oldValue, newValue in
+            previous?(oldValue, newValue)
+            self?.discardNavigationState()
+        }
+    }
+
+    func discardNavigationState() {
+        pendingDeepLink = nil
+        exploreRoutes = []
     }
 
     // MARK: - Deep links (brief 003 REC-01)

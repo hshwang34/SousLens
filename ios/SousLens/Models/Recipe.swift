@@ -59,8 +59,8 @@ struct RecipeDetail: Codable, Sendable, Identifiable, Hashable {
 
     var id: UUID { recipeId }
     var coverImageURL: URL? { coverImageUrl.flatMap(URL.init(string:)) }
-    /// The server's share link, or the contract's canonical form when the server omitted it.
-    var shareURL: URL { shareUrl.flatMap(URL.init(string:)) ?? ShareLinks.universal(recipeId: recipeId) }
+    /// Always built from the id (`ShareLinks`); the server's `share_url` is never displayed or shared.
+    var shareURL: URL { ShareLinks.universal(recipeId: recipeId) }
     var orderedSteps: [RecipeStep] { steps.sorted { $0.order < $1.order } }
 
     /// Header label (PRD §13.4): the least creator-authored origin present wins.

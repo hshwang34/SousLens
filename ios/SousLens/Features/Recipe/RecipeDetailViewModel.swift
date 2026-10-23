@@ -27,6 +27,9 @@ final class RecipeDetailViewModel {
     private(set) var unpublishedVisibility: RecipeVisibility?
 
     private let service: RecipeService
+    /// Fired after the server confirms a save-state change (not on rollback). The view uses it to
+    /// tell the Saved tab to refresh.
+    var onSavedChanged: (@MainActor (UUID, Bool) -> Void)?
 
     init(recipeId: UUID, card: RecipeCard? = nil, service: RecipeService) {
         self.recipeId = recipeId
@@ -61,7 +64,8 @@ final class RecipeDetailViewModel {
         do {
             let detail = try await service.recipe(id: recipeId)
             phase = .loaded(detail)
-            if let saved = detail.saved { isSaved = saved }
+            // A toggle in flight owns `isSaved`; a reload must not overwrite the optimistic value.
+            if let saved = detail.saved, !isTogglingSave { isSaved = saved }
         } catch let error as APIError {
             if error == .cancelled { return }
             phase = .error(error.userMessage, retryable: error.isRetryable)
@@ -82,6 +86,7 @@ final class RecipeDetailViewModel {
         do {
             let result = target ? try await service.saveRecipe(id: recipeId) : try await service.unsaveRecipe(id: recipeId)
             isSaved = result.saved
+            if result.saved != previous { onSavedChanged?(recipeId, result.saved) }
         } catch let error as APIError where error == .cancelled {
             isSaved = previous
         } catch {

@@ -29,7 +29,16 @@ struct DraftValidation: Codable, Sendable, Hashable {
 
     /// Problems for a field or anything nested under it (`ingredients` matches `ingredients[2].name`).
     func problems(for field: String) -> [DraftProblem] {
-        problems.filter { $0.field == field || $0.field.hasPrefix(field + ".") || $0.field.hasPrefix(field + "[") }
+        problems.filter { Self.field($0.field, isWithin: field) }
+    }
+
+    /// True when `candidate` is `prefix` itself or nested under it (`prefix.x`, `prefix[0]`, `prefix.0.x`).
+    /// A bare prefix match is not enough: `ingredients.1` must not claim `ingredients.10`.
+    static func field(_ candidate: String, isWithin prefix: String) -> Bool {
+        guard candidate.hasPrefix(prefix) else { return false }
+        let rest = candidate.dropFirst(prefix.count)
+        guard let next = rest.first else { return true }
+        return next == "." || next == "["
     }
 
     /// Problems whose `field` is exactly `field` (section-level, not row-level).
@@ -87,8 +96,23 @@ struct DraftSummary: Codable, Sendable, Identifiable, Hashable {
 }
 
 /// Partial update body for `PATCH /v1/recipes/drafts/{id}` (and the optional body of `POST`).
-/// `nil` fields are omitted from the JSON; arrays replace the server's whole array.
+///
+/// The backend reads an omitted key as "unchanged" and an explicit `null` as "clear". By default a
+/// `nil` field is omitted; a field listed in `clearsWhenNil` is sent as `null` instead. The editor's
+/// full-form patch (`DraftForm.patch()`) lists every scalar it can empty, so clearing prep time
+/// actually clears it on the server. Arrays replace the server's whole array.
 struct DraftPatch: Encodable, Sendable, Hashable {
+    enum Field: String, CodingKey, CaseIterable, Sendable {
+        case title, summary, tags
+        case coverImageUrl = "cover_image_url"
+        case servings
+        case prepMinutes = "prep_minutes"
+        case cookMinutes = "cook_minutes"
+        case ingredients, steps
+        case creatorNotes = "creator_notes"
+        case dietaryWarnings = "dietary_warnings"
+    }
+
     var title: String?
     var summary: String?
     var tags: [String]?
@@ -100,8 +124,33 @@ struct DraftPatch: Encodable, Sendable, Hashable {
     var steps: [RecipeStep]?
     var creatorNotes: [String]?
     var dietaryWarnings: [String]?
+    /// Fields encoded as JSON `null` when their value is nil (instead of being omitted).
+    var clearsWhenNil: Set<Field> = []
 
     static let empty = DraftPatch()
+
+    // Keys are explicit snake_case raw values; `JSONEncoder.keyEncodingStrategy` leaves them as is.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: Field.self)
+        func put<T: Encodable>(_ value: T?, _ field: Field) throws {
+            if let value {
+                try container.encode(value, forKey: field)
+            } else if clearsWhenNil.contains(field) {
+                try container.encodeNil(forKey: field)
+            }
+        }
+        try put(title, .title)
+        try put(summary, .summary)
+        try put(tags, .tags)
+        try put(coverImageUrl, .coverImageUrl)
+        try put(servings, .servings)
+        try put(prepMinutes, .prepMinutes)
+        try put(cookMinutes, .cookMinutes)
+        try put(ingredients, .ingredients)
+        try put(steps, .steps)
+        try put(creatorNotes, .creatorNotes)
+        try put(dietaryWarnings, .dietaryWarnings)
+    }
 }
 
 /// `POST /v1/recipes/drafts/{id}/publish` → 201.
@@ -109,9 +158,11 @@ struct PublishResult: Codable, Sendable, Hashable {
     let recipeId: UUID
     let recipeVersionId: UUID
     let versionNumber: Int
-    let shareUrl: String
+    /// Decoded for completeness but never displayed or shared: the link is always built from
+    /// `recipeId` (`ShareLinks`), so a server can't make the app hand out a foreign URL.
+    let shareUrl: String?
 
-    var shareURL: URL? { URL(string: shareUrl) }
+    var shareURL: URL { ShareLinks.universal(recipeId: recipeId) }
 }
 
 /// `POST`/`DELETE /v1/recipes/{id}/save`.

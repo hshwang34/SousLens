@@ -61,6 +61,15 @@ enum APIError: Error, Equatable, Sendable {
         }
     }
 
+    /// The request may or may not have reached the server (no response, or a response we could not
+    /// read). Distinct from a server that answered with a reason.
+    var isTransportFailure: Bool {
+        switch self {
+        case .unreachable, .http: return true
+        default: return false
+        }
+    }
+
     var details: JSONValue? {
         if case .server(_, _, _, _, _, let details) = self { return details }
         return nil

@@ -35,7 +35,8 @@ enum DeepLink: Equatable, Sendable {
             guard host == "recipe", segments.count == 1 else { return nil }
             return UUID(uuidString: segments[0]).map(DeepLink.recipe)
         case "https":
-            guard host == ShareLinks.universalHost || host == "www." + ShareLinks.universalHost,
+            // Only the exact host in the associated-domains entitlement (`applinks:souslens.app`).
+            guard host == ShareLinks.universalHost,
                   segments.count == 2, segments[0] == "r"
             else { return nil }
             return UUID(uuidString: segments[1]).map(DeepLink.recipe)

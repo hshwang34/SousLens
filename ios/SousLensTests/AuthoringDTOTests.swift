@@ -91,7 +91,7 @@ final class AuthoringDTOTests: XCTestCase {
 
     // MARK: - DraftPatch encoding
 
-    func testDraftPatchOmitsNilAndEncodesSnakeCase() throws {
+    func testHandBuiltPatchOmitsNilByDefault() throws {
         var patch = DraftPatch()
         patch.title = "T"
         patch.prepMinutes = 5

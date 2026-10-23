@@ -11,8 +11,8 @@ struct DraftForm: Equatable, Sendable {
     var cookMinutes: Int?
     var ingredients: [EditableIngredient] = []
     var steps: [EditableStep] = []
-    var creatorNotes: [String] = []
-    var dietaryWarnings: [String] = []
+    var creatorNotes: [EditableLine] = []
+    var dietaryWarnings: [EditableLine] = []
 
     init() {}
 
@@ -25,15 +25,27 @@ struct DraftForm: Equatable, Sendable {
         cookMinutes = draft.cookMinutes
         ingredients = draft.ingredients.map(EditableIngredient.init(ingredient:))
         steps = draft.orderedSteps.map(EditableStep.init(step:))
-        creatorNotes = draft.creatorNotes
-        dietaryWarnings = draft.dietaryWarnings
+        creatorNotes = draft.creatorNotes.map { EditableLine($0) }
+        dietaryWarnings = draft.dietaryWarnings.map { EditableLine($0) }
     }
 
-    /// Full-form PATCH body. Steps are renumbered 0..n-1 from their array position (REC-04).
+    /// Fields the form can empty; a nil value for these is sent as JSON `null` ("clear").
+    /// `cover_image_url` is deliberately absent: the editor has no cover control, so it must never
+    /// clear one set elsewhere.
+    static let clearableFields: Set<DraftPatch.Field> = [.title, .summary, .servings, .prepMinutes, .cookMinutes]
+
+    /// The title as committed: newlines (a vertical text field accepts Return) become spaces, trimmed.
+    var committedTitle: String? {
+        let flattened = title.components(separatedBy: .newlines).joined(separator: " ")
+        return EditableIngredient.nilIfBlank(flattened)
+    }
+
+    /// Full-form PATCH body. Steps are sent in display order (the server rewrites `order` from array
+    /// position; we send 0..n-1 too). Blank list lines are dropped.
     func patch() -> DraftPatch {
         DraftPatch(
-            title: title,
-            summary: summary,
+            title: committedTitle,
+            summary: EditableIngredient.nilIfBlank(summary),
             tags: tags,
             coverImageUrl: nil,
             servings: servings,
@@ -41,8 +53,9 @@ struct DraftForm: Equatable, Sendable {
             cookMinutes: cookMinutes,
             ingredients: ingredients.map { $0.ingredient },
             steps: steps.enumerated().map { index, step in step.recipeStep(order: index) },
-            creatorNotes: creatorNotes,
-            dietaryWarnings: dietaryWarnings
+            creatorNotes: EditableLine.texts(creatorNotes),
+            dietaryWarnings: EditableLine.texts(dietaryWarnings),
+            clearsWhenNil: Self.clearableFields
         )
     }
 
@@ -104,8 +117,8 @@ struct DraftForm: Equatable, Sendable {
             recipeVersionId: draft.id,
             versionNumber: versionNumber,
             slug: "draft",
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled draft" : title,
-            summary: summary.isEmpty ? nil : summary,
+            title: committedTitle ?? "Untitled draft",
+            summary: EditableIngredient.nilIfBlank(summary),
             tags: tags,
             creator: creator,
             servings: servings,
@@ -114,8 +127,8 @@ struct DraftForm: Equatable, Sendable {
             coverImageUrl: draft.coverImageUrl,
             ingredients: ingredients.map { $0.ingredient },
             steps: steps.enumerated().map { index, step in step.recipeStep(order: index) },
-            creatorNotes: creatorNotes,
-            dietaryWarnings: dietaryWarnings,
+            creatorNotes: EditableLine.texts(creatorNotes),
+            dietaryWarnings: EditableLine.texts(dietaryWarnings),
             publishedAt: draft.updatedAt,
             saved: nil,
             shareUrl: nil
@@ -176,26 +189,40 @@ struct EditableStep: Identifiable, Equatable, Sendable {
     let id: String
     var instruction = ""
     var estimatedMinutes: Int?
-    var successCues: [String] = []
-    var warnings: [String] = []
+    var successCues: [EditableLine] = []
+    var warnings: [EditableLine] = []
     var creatorNote = ""
     var ingredientRefs: [String] = []
+    /// Provenance is carried through unchanged (PRD §13.4): an AI-extracted or creator-reviewed step
+    /// keeps its label and source clip after an edit here. Only steps added in this editor are
+    /// `creator_authored`.
+    let evidenceOrigin: EvidenceOrigin
+    let sourceClipId: String?
+    let sourceStartMs: Int?
+    let sourceEndMs: Int?
 
     init(id: String) {
         self.id = id
+        evidenceOrigin = .creatorAuthored
+        sourceClipId = nil
+        sourceStartMs = nil
+        sourceEndMs = nil
     }
 
     init(step: RecipeStep) {
         id = step.id
         instruction = step.instruction
         estimatedMinutes = step.estimatedMinutes
-        successCues = step.successCues
-        warnings = step.warnings
+        successCues = step.successCues.map { EditableLine($0) }
+        warnings = step.warnings.map { EditableLine($0) }
         creatorNote = step.creatorNote ?? ""
         ingredientRefs = step.ingredientRefs
+        evidenceOrigin = step.evidenceOrigin
+        sourceClipId = step.sourceClipId
+        sourceStartMs = step.sourceStartMs
+        sourceEndMs = step.sourceEndMs
     }
 
-    /// Hand-written in this editor, so the provenance is always `creator_authored` (PRD §13.4).
     func recipeStep(order: Int) -> RecipeStep {
         RecipeStep(
             id: id,
@@ -203,18 +230,39 @@ struct EditableStep: Identifiable, Equatable, Sendable {
             instruction: instruction.trimmingCharacters(in: .whitespacesAndNewlines),
             ingredientRefs: ingredientRefs,
             estimatedMinutes: estimatedMinutes,
-            successCues: successCues,
-            warnings: warnings,
+            successCues: EditableLine.texts(successCues),
+            warnings: EditableLine.texts(warnings),
             creatorNote: EditableIngredient.nilIfBlank(creatorNote),
-            sourceClipId: nil,
-            sourceStartMs: nil,
-            sourceEndMs: nil,
-            evidenceOrigin: .creatorAuthored
+            sourceClipId: sourceClipId,
+            sourceStartMs: sourceStartMs,
+            sourceEndMs: sourceEndMs,
+            evidenceOrigin: evidenceOrigin
         )
     }
 
     var displayLine: String {
         let trimmed = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "New step" : trimmed
+    }
+}
+
+/// One free-text line (cue, warning, note) with a stable identity, so list rows bind by id rather
+/// than by index (deleting a row while its field is focused can't index past the end).
+struct EditableLine: Identifiable, Equatable, Sendable, ExpressibleByStringLiteral {
+    let id: UUID
+    var text: String
+
+    init(_ text: String) {
+        id = UUID()
+        self.text = text
+    }
+
+    init(stringLiteral value: String) {
+        self.init(value)
+    }
+
+    /// Trimmed, non-blank texts in order: what goes on the wire.
+    static func texts(_ lines: [EditableLine]) -> [String] {
+        lines.compactMap { EditableIngredient.nilIfBlank($0.text) }
     }
 }

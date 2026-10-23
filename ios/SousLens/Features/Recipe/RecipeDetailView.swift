@@ -30,6 +30,7 @@ struct RecipeDetailView: View {
         .task {
             if model == nil {
                 let created = RecipeDetailViewModel(recipeId: recipeId, card: card, service: environment.api)
+                created.onSavedChanged = { [environment] _, _ in environment.noteSavedChanged() }
                 model = created
                 await created.load()
             }

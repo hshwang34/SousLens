@@ -1,22 +1,24 @@
 import SwiftUI
+import UIKit
 
-/// Editable list of free-text lines (cues, warnings, notes) as a Form section.
+/// Editable list of free-text lines (cues, warnings, notes) as a Form section. Rows bind by the
+/// line's stable id, never by index.
 struct StringListSection: View {
     let title: String
-    @Binding var items: [String]
+    @Binding var items: [EditableLine]
     let placeholder: String
     let addLabel: String
     let problems: [DraftProblem]
 
     var body: some View {
         Section {
-            ForEach(items.indices, id: \.self) { index in
-                TextField(placeholder, text: $items[index], axis: .vertical)
+            ForEach($items) { $line in
+                TextField(placeholder, text: $line.text, axis: .vertical)
                     .lineLimit(1...4)
             }
             .onDelete { items.remove(atOffsets: $0) }
             Button {
-                items.append("")
+                items.append(EditableLine(""))
             } label: {
                 Label(addLabel, systemImage: "plus.circle.fill")
             }
@@ -48,8 +50,10 @@ struct TagChipsEditor: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
-                                    .frame(width: 28, height: 28)
+                                    .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
+                                    .contentShape(Rectangle())
                             }
+                            .buttonStyle(.borderless)
                             .accessibilityLabel("Remove tag \(tag)")
                         }
                         .padding(.leading, Spacing.sm + 2)
@@ -118,5 +122,59 @@ struct FlowLayout: Layout {
             maxX = max(maxX, x - spacing)
         }
         return (CGSize(width: maxX, height: y + rowHeight), origins)
+    }
+}
+
+/// Numeric entry that writes through on every keystroke (not only on blur), so a value typed just
+/// before Publish or Close is part of the form. Empty text means nil. Keeps its own text so a
+/// half-typed decimal ("1.") is not reformatted under the cursor.
+struct NumericTextField: View {
+    let placeholder: String
+    @Binding var value: Double?
+    var allowsDecimal = true
+
+    @State private var text = ""
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .keyboardType(allowsDecimal ? .decimalPad : .numberPad)
+            .onAppear { text = Self.format(value) }
+            .onChange(of: text) { _, newText in
+                let parsed = Self.parse(newText, allowsDecimal: allowsDecimal)
+                if parsed != value { value = parsed }
+            }
+            .onChange(of: value) { _, newValue in
+                // External change (e.g. form reset): reflect it unless the text already means it.
+                if Self.parse(text, allowsDecimal: allowsDecimal) != newValue { text = Self.format(newValue) }
+            }
+    }
+
+    static func parse(_ text: String, allowsDecimal: Bool) -> Double? {
+        let cleaned = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        guard !cleaned.isEmpty, let number = Double(cleaned), number.isFinite, number >= 0 else { return nil }
+        return allowsDecimal ? number : number.rounded(.down)
+    }
+
+    static func format(_ value: Double?) -> String {
+        guard let value else { return "" }
+        return value == value.rounded() ? String(Int(value)) : String(value)
+    }
+}
+
+extension Binding where Value == Int? {
+    /// `Int?` ⇄ `Double?` for `NumericTextField` in whole-number mode.
+    var asDouble: Binding<Double?> {
+        Binding<Double?>(
+            get: { wrappedValue.map(Double.init) },
+            set: { wrappedValue = $0.map { Int($0) } }
+        )
+    }
+}
+
+@MainActor
+enum KeyboardFocus {
+    /// Commits whatever field is being edited before an action that reads the form.
+    static func endEditing() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }

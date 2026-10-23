@@ -31,26 +31,33 @@ cues and warnings.
 - **Create:** Profile → **Create recipe** opens the editor on a new server draft
   (`POST /v1/recipes/drafts`). Title, summary, tag chips, servings stepper, prep/cook minutes;
   ingredients (name, quantity, unit, optional, preparation, notes) and steps (instruction, minutes,
-  ingredients used, success cues, warnings, creator note). Swipe to delete, **Edit** to reorder.
+  ingredients used, success cues, warnings, creator note). Swipe to delete; **Reorder** (top right) moves ingredients and steps. Numeric fields commit on every keystroke.
 - **Autosave:** every change is PATCHed after an 800 ms debounce (whole form; arrays replace whole,
-  steps sent in display order). The bar shows **Saving… / Saved / Couldn’t save · Retry**. Closing
+  steps sent in display order). A field the creator empties (title, summary, servings, prep/cook
+  minutes) is sent as JSON `null`, which the backend reads as "clear"; omitted keys mean "unchanged".
+  Steps keep their original provenance (`evidence_origin`, source clip) when edited. The bar shows **Saving… / Saved / Couldn’t save · Retry**. Closing
   with an unsaved change asks before discarding.
 - **Validation:** the server's `validation.problems` are shown inline next to the field or row
   (`title`, `ingredients`, `steps[1].instruction`, …). **Publish** is enabled only when the last
   saved state has `validation.publishable == true`.
 - **Publish:** always behind a confirmation sheet ("Publish version N? This snapshot can’t be
   edited; later edits create a new version"). Pending edits are saved first; a failed save blocks
-  the publish. Success shows the version, the `share_url` and a share sheet.
+  the publish. If the publish request fails in transit, the app re-reads the draft and reports
+  success if it was in fact published. Success shows the version, the share link and a share sheet.
+- **Share links are always built from the recipe id** (`ShareLinks`); the server's `share_url` is
+  never shown or shared.
 - **Preview** renders the draft through the real detail layout under a "Draft preview" banner.
 - **Edit a published recipe:** owner sees **Edit** / **Unpublish** on the detail screen. Edit calls
   `POST /v1/recipes/{id}/edit`; a 409 means a draft is already open and that draft is opened
-  instead. A PATCH that returns 409 (draft already published) turns the editor read-only.
+  instead. A PATCH that returns 409 (draft already published) turns the editor read-only: fields are
+  disabled, nothing more is sent, and Close does not ask about unsaved changes.
 - **Profile** lists *My recipes* (visibility pill, version, "Draft in progress"; swipe to Unpublish
   with confirmation) and *Drafts* (tap to continue, swipe to delete with confirmation).
 - **Save:** Save/Unsave on the detail screen flips immediately and rolls back with an inline message
-  if the idempotent POST/DELETE fails. The **Saved** tab is `GET /v1/me/saved`.
+  if the idempotent POST/DELETE fails. The **Saved** tab is `GET /v1/me/saved` and refreshes
+  whenever a save changes anywhere in the app.
 - **Share / deep links:** `souslens://recipe/{id}` (registered in `CFBundleURLTypes`) and
-  `https://souslens.app/r/{id}` (associated-domains entry is a stub; the domain is not live) both
+  `https://souslens.app/r/{id}` (exact host only; associated-domains entry is a stub, the domain is not live) both
   open the recipe on the Explore stack from any tab. A link that arrives while signed out is
   applied after sign-in. Try it: `xcrun simctl openurl booted souslens://recipe/<recipe-id>`.
 - Search placeholder is "Search recipes or ingredients" (the backend matches title or ingredient).

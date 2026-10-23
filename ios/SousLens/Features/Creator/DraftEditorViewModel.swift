@@ -115,7 +115,10 @@ final class DraftEditorViewModel: Identifiable {
 
     /// Problems attached to one array row: `ingredients[2]…` or pydantic-style `ingredients.2…`.
     func problems(in collection: String, row index: Int) -> [DraftProblem] {
-        validation.problems.filter { $0.field.hasPrefix("\(collection)[\(index)]") || $0.field.hasPrefix("\(collection).\(index)") }
+        validation.problems.filter {
+            DraftValidation.field($0.field, isWithin: "\(collection)[\(index)]")
+                || DraftValidation.field($0.field, isWithin: "\(collection).\(index)")
+        }
     }
 
     /// Section-level problems only (not attributed to a row).
@@ -126,6 +129,8 @@ final class DraftEditorViewModel: Identifiable {
     var hasUnsavedChanges: Bool { dirty || saveTask != nil }
 
     private func markDirty() {
+        // A published draft is read-only on the server (PATCH → 409); never queue a save for it.
+        guard !isPublishedReadOnly else { return }
         dirty = true
         if case .failed = saveStatus {
             // Keep the failure visible until a save succeeds; a retry is one tap away.
@@ -169,7 +174,7 @@ final class DraftEditorViewModel: Identifiable {
         while let inFlight = saveTask {
             await inFlight.value
         }
-        guard dirty else { return }
+        guard dirty, !isPublishedReadOnly else { return }
         dirty = false
         saveStatus = .saving
         let patch = form.patch()
@@ -189,7 +194,9 @@ final class DraftEditorViewModel: Identifiable {
                     self.isPublishedReadOnly = true
                 }
                 self.logger.error("autosave failed: \(message, privacy: .public)")
-                self.dirty = true
+                // A read-only draft can never take these edits, so they are not "unsaved work"
+                // to retry; the failure message stays visible.
+                self.dirty = !self.isPublishedReadOnly
                 self.saveStatus = .failed(message)
             }
         }
@@ -254,10 +261,34 @@ final class DraftEditorViewModel: Identifiable {
             if let problems = error.validationProblems {
                 validation = DraftValidation(publishable: false, problems: problems)
             }
-            publishPhase = .failed(error.userMessage)
+            if error.isTransportFailure, let recovered = await recoverPublishOutcome() {
+                publishPhase = .published(recovered)
+                return
+            }
+            publishPhase = .failed(error.isTransportFailure
+                ? "\(error.userMessage) The recipe may or may not have been published; check My recipes before trying again."
+                : error.userMessage)
         } catch {
             publishPhase = .failed(error.localizedDescription)
         }
+    }
+
+    /// The request may have reached the server even though the response didn't reach us. Re-read
+    /// the draft: if it is now `published`, the publish happened, so report success rather than a
+    /// failure the creator might "fix" by publishing twice.
+    private func recoverPublishOutcome() async -> PublishResult? {
+        guard let latest = try? await service.draft(id: id), latest.status == .published,
+              let recipeId = latest.recipeId ?? draft.recipeId
+        else { return nil }
+        draft = latest
+        isPublishedReadOnly = true
+        if let detail = try? await service.recipe(id: recipeId) {
+            return PublishResult(recipeId: recipeId, recipeVersionId: detail.recipeVersionId,
+                                 versionNumber: detail.versionNumber, shareUrl: nil)
+        }
+        // Published, but we could not learn the version; fall back to what we expected.
+        guard let expected = nextVersionNumber else { return nil }
+        return PublishResult(recipeId: recipeId, recipeVersionId: latest.id, versionNumber: expected, shareUrl: nil)
     }
 
     var publishResult: PublishResult? {

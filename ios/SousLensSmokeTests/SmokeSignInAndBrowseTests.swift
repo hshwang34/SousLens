@@ -50,7 +50,8 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         create.tap()
 
         // Title
-        let titleField = app.textViews["draft.title"].exists ? app.textViews["draft.title"] : app.textFields["draft.title"]
+        // Type-agnostic: a vertical-axis TextField may surface as a text view or a text field.
+        let titleField = app.descendants(matching: .any)["draft.title"].firstMatch
         XCTAssertTrue(titleField.waitForExistence(timeout: 10), "editor did not open")
         titleField.tap()
         titleField.typeText(title)
@@ -67,7 +68,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         let addStep = app.buttons["draft.addStep"]
         XCTAssertTrue(addStep.waitForExistence(timeout: 5))
         addStep.tap()
-        let instruction = app.textViews["step.instruction"].exists ? app.textViews["step.instruction"] : app.textFields["step.instruction"]
+        let instruction = app.descendants(matching: .any)["step.instruction"].firstMatch
         XCTAssertTrue(instruction.waitForExistence(timeout: 5), "step editor did not open")
         instruction.tap()
         instruction.typeText("Toast the bread until golden.")
@@ -96,10 +97,11 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         // Explore: search by title (REC-02) and open it
         app.tabBars.buttons["Explore"].tap()
         let search = app.searchFields.firstMatch
-        if !search.waitForExistence(timeout: 3) {
-            app.swipeDown()  // reveal the search bar
+        if !(search.waitForExistence(timeout: 3) && search.isHittable) {
+            app.swipeDown()  // the search bar collapses under the large title once scrolled
         }
         XCTAssertTrue(search.waitForExistence(timeout: 5), "Explore search not found")
+        XCTAssertTrue(search.isHittable, "Explore search is not on screen")
         search.tap()
         search.typeText(title)
         let card = app.staticTexts[title].firstMatch
@@ -171,6 +173,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
             swipes += 1
         }
         if signOut.exists {
+            XCTAssertTrue(signOut.isHittable, "Sign out is not on screen after scrolling")
             signOut.tap()
             let confirm = app.buttons["Sign out"].firstMatch  // confirmation sheet, if any
             if confirm.waitForExistence(timeout: 2) { confirm.tap() }

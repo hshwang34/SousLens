@@ -8,7 +8,9 @@ final class DeepLinkTests: XCTestCase {
     func testParsesCustomSchemeAndUniversalLink() throws {
         XCTAssertEqual(DeepLink.parse(URL(string: "souslens://recipe/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")!), .recipe(id))
         XCTAssertEqual(DeepLink.parse(URL(string: "https://souslens.app/r/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")!), .recipe(id))
-        XCTAssertEqual(DeepLink.parse(URL(string: "https://www.souslens.app/r/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/")!), .recipe(id))
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://souslens.app/r/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/")!), .recipe(id))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://www.souslens.app/r/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")!),
+                     "only the host in the associated-domains entitlement")
         XCTAssertEqual(DeepLink.parse(URL(string: "SOUSLENS://recipe/A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D")!), .recipe(id), "scheme and UUID are case-insensitive")
         XCTAssertEqual(DeepLink.parse(URL(string: "https://souslens.app/r/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d?utm=share")!), .recipe(id), "query is ignored")
     }

@@ -11,6 +11,7 @@ struct DraftEditorView: View {
     @State private var showCloseConfirmation = false
     @State private var isClosing = false
     @State private var path: [Route] = []
+    @State private var editMode: EditMode = .inactive
 
     private enum Route: Hashable {
         case ingredient(String)
@@ -61,6 +62,8 @@ struct DraftEditorView: View {
                 problems: model.problems(for: "dietary_warnings")
             )
         }
+        .disabled(model.isPublishedReadOnly)
+        .environment(\.editMode, $editMode)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle(model.draft.recipeId == nil ? "New recipe" : "Edit recipe")
@@ -77,9 +80,22 @@ struct DraftEditorView: View {
                     .disabled(isClosing)
                     .accessibilityIdentifier("draft.close")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Preview") { showPreview = true }
-                    .accessibilityIdentifier("draft.preview")
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if model.form.ingredients.count + model.form.steps.count > 1, !model.isPublishedReadOnly {
+                    // One control for the whole form: SwiftUI's edit mode is per-list anyway.
+                    Button(editMode == .active ? "Done" : "Reorder") {
+                        withAnimation { editMode = editMode == .active ? .inactive : .active }
+                    }
+                    .frame(minWidth: Metrics.minTapTarget, minHeight: Metrics.minTapTarget)
+                    .accessibilityLabel(editMode == .active ? "Done reordering" : "Reorder ingredients and steps")
+                    .accessibilityIdentifier("draft.reorder")
+                }
+                Button("Preview") {
+                    KeyboardFocus.endEditing()
+                    showPreview = true
+                }
+                .frame(minWidth: Metrics.minTapTarget, minHeight: Metrics.minTapTarget)
+                .accessibilityIdentifier("draft.preview")
             }
         }
         .safeAreaInset(edge: .bottom) { publishBar }
@@ -111,6 +127,12 @@ struct DraftEditorView: View {
     }
 
     private func close() {
+        KeyboardFocus.endEditing()
+        // Nothing in a read-only (already published) draft can be saved, so there is nothing to ask.
+        if model.isPublishedReadOnly {
+            dismiss()
+            return
+        }
         isClosing = true
         Task {
             await model.flush()
@@ -181,13 +203,9 @@ struct DraftEditorView: View {
             .accessibilityIdentifier("draft.addIngredient")
             problemRows(model.sectionProblems("ingredients"))
         } header: {
-            HStack {
-                Text("Ingredients")
-                Spacer()
-                if !model.form.ingredients.isEmpty { EditButton().font(SLFont.caption) }
-            }
+            Text("Ingredients")
         } footer: {
-            Text("Swipe to delete. Tap Edit to reorder.")
+            Text("Swipe to delete. Tap Reorder (top right) to move ingredients and steps.")
         }
     }
 
@@ -226,11 +244,7 @@ struct DraftEditorView: View {
             .accessibilityIdentifier("draft.addStep")
             problemRows(model.sectionProblems("steps"))
         } header: {
-            HStack {
-                Text("Steps")
-                Spacer()
-                if !model.form.steps.isEmpty { EditButton().font(SLFont.caption) }
-            }
+            Text("Steps")
         } footer: {
             Text("Steps are numbered in the order shown. Everything here is labelled “Creator instructions”.")
         }
@@ -258,6 +272,7 @@ struct DraftEditorView: View {
                 SaveStatusLabel(status: model.saveStatus) { Task { await model.retrySave() } }
                 Spacer()
                 Button {
+                    KeyboardFocus.endEditing()
                     model.requestPublish()
                 } label: {
                     Label("Publish", systemImage: "paperplane.fill")
@@ -348,8 +363,7 @@ struct MinutesField: View {
         HStack {
             Text(label)
             Spacer()
-            TextField("—", value: $value, format: .number)
-                .keyboardType(.numberPad)
+            NumericTextField(placeholder: "—", value: $value.asDouble, allowsDecimal: false)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: 80)
                 .accessibilityLabel("\(label) in minutes")

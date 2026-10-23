@@ -34,6 +34,10 @@ struct SavedView: View {
                 await model?.refresh()
             }
         }
+        // A save/unsave on any detail screen (this stack or another tab's) changes this list.
+        .onChange(of: environment.savedRevision) {
+            Task { await model?.refresh() }
+        }
     }
 }
 
