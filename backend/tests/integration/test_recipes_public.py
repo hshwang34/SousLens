@@ -369,3 +369,15 @@ async def test_reseed_does_not_republish_an_unpublished_seeded_recipe(
     await seed_fixtures(db_session, FIXTURES_DIR)
     assert slugs(await client.get("/v1/recipes")) == SEED_SLUGS_NEWEST_FIRST[1:]
     assert (await client.get(f"/v1/recipes/{ids[GOCHUJANG]}")).status_code == 404
+
+
+async def test_control_characters_in_search_params_are_422_not_500(client: AsyncClient) -> None:
+    for params, field in (
+        ({"query": "a\x00b"}, "query.query"),
+        ({"query": "a\u202eb"}, "query.query"),
+        ({"query": "a\nb"}, "query.query"),
+        ({"tag": "\x00"}, "query.tag"),
+    ):
+        response = await client.get("/v1/recipes", params=params)
+        assert response.status_code == 422, (params, response.text)
+        assert response.json()["error"]["fields"] == [field]

@@ -9,10 +9,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from functools import partial
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 from app.domains.recipes.schemas import EvidenceOrigin, IngredientOut, StepOut
 
@@ -24,10 +32,72 @@ MAX_STEPS = 100
 MAX_LIST_ITEMS = 50
 MAX_TAGS = 20
 
-_SHORT = 200
-_TEXT = 2000
-_ID = 64
+# Per-field text limits (fix round 1, item 4), counted after trimming where trimming applies.
+TAG_MAX = 40
+LIST_ITEM_MAX = 500  # creator_notes, dietary_warnings, success_cues, warnings
+ID_MAX = 64  # ingredient/step ids, ingredient_refs, source_clip_id
+NAME_MAX = 200
+UNIT_MAX = 32
+PREPARATION_MAX = 200
+NOTE_MAX = 500  # ingredient notes, step creator_note
+INSTRUCTION_MAX = 2000
+SUMMARY_MAX = 1000
 URL_MAX = 2048
+
+# C0 controls except \t \n \r, DEL, and the bidi embedding/override/isolate controls that can
+# visually reorder text ("Trojan Source"). Rejected in every text field, before any trimming.
+_FORBIDDEN = frozenset(
+    [chr(c) for c in range(0x00, 0x09)]
+    + ["\x0b", "\x0c"]
+    + [chr(c) for c in range(0x0E, 0x20)]
+    + ["\x7f"]
+    + [chr(c) for c in range(0x202A, 0x202F)]
+    + [chr(c) for c in range(0x2066, 0x206A)]
+)
+_LINE_BREAKS = frozenset("\n\r")
+
+
+def check_text(value: Any, *, multiline: bool, trim: bool = False, lower: bool = False) -> Any:
+    """Shared text hygiene, run on the raw value before any length check.
+
+    Rejects forbidden characters (and line breaks in single-line fields), then optionally trims
+    and lowercases, so ``StringConstraints`` lengths count the *stored* value. Non-strings pass
+    through so pydantic reports the type error normally.
+    """
+    if isinstance(value, str):
+        if any(ch in _FORBIDDEN for ch in value):
+            raise ValueError("contains a control or bidirectional-override character")
+        if not multiline and any(ch in _LINE_BREAKS for ch in value):
+            raise ValueError("must be a single line")
+        if trim:
+            value = value.strip()
+        if lower:
+            value = value.lower()
+    return value
+
+
+_SINGLE = BeforeValidator(partial(check_text, multiline=False))
+_MULTI = BeforeValidator(partial(check_text, multiline=True))
+
+Title = Annotated[
+    str,
+    BeforeValidator(partial(check_text, multiline=False, trim=True)),
+    StringConstraints(max_length=TITLE_MAX),
+]
+Summary = Annotated[str, _MULTI, StringConstraints(max_length=SUMMARY_MAX)]
+Tag = Annotated[
+    str,
+    BeforeValidator(partial(check_text, multiline=False, trim=True, lower=True)),
+    StringConstraints(min_length=1, max_length=TAG_MAX),
+]
+ListItem = Annotated[str, _MULTI, StringConstraints(max_length=LIST_ITEM_MAX)]
+ItemId = Annotated[str, _SINGLE, StringConstraints(min_length=1, max_length=ID_MAX)]
+Ref = Annotated[str, _SINGLE, StringConstraints(max_length=ID_MAX)]
+Name = Annotated[str, _SINGLE, StringConstraints(max_length=NAME_MAX)]
+Unit = Annotated[str, _SINGLE, StringConstraints(max_length=UNIT_MAX)]
+Preparation = Annotated[str, _SINGLE, StringConstraints(max_length=PREPARATION_MAX)]
+Note = Annotated[str, _MULTI, StringConstraints(max_length=NOTE_MAX)]
+Instruction = Annotated[str, _MULTI, StringConstraints(max_length=INSTRUCTION_MAX)]
 
 
 def validate_https_url(value: str | None) -> str | None:
@@ -35,14 +105,21 @@ def validate_https_url(value: str | None) -> str | None:
 
     Until uploads land (Slice 5, media ids served through signed URLs) a cover image is just
     an external link the creator pastes; this keeps ``javascript:``, ``file:``, relative
-    paths and ``user:pass@host`` out of the stored recipe metadata.
+    paths and ``user:pass@host`` out of the stored recipe metadata. The raw value must not
+    contain whitespace/control characters (≤ U+0020), DEL or a backslash (URL parsers disagree
+    on those); it is stored exactly as given once every check passes.
     """
     if value is None:
         return None
-    value = value.strip()
     if len(value) > URL_MAX:
         raise ValueError(f"must be at most {URL_MAX} characters")
-    parts = urlsplit(value)
+    if any(ord(ch) <= 0x20 or ch in ("\x7f", "\\") for ch in value):
+        raise ValueError("must not contain whitespace, control characters or backslashes")
+    try:
+        parts = urlsplit(value)
+        _ = parts.port  # raises ValueError on a non-numeric or out-of-range port
+    except ValueError as exc:
+        raise ValueError("must be a valid absolute https:// URL") from exc
     if parts.scheme.lower() != "https" or not parts.hostname:
         raise ValueError("must be an absolute https:// URL")
     if parts.username is not None or parts.password is not None:
@@ -55,13 +132,13 @@ class DraftIngredientIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=_ID)
-    name: str = Field(default="", max_length=_SHORT)
+    id: ItemId
+    name: Name = ""
     quantity: float | None = Field(default=None, ge=0)
-    unit: str | None = Field(default=None, max_length=32)
+    unit: Unit | None = None
     optional: bool = False
-    preparation: str | None = Field(default=None, max_length=_SHORT)
-    notes: str | None = Field(default=None, max_length=_TEXT)
+    preparation: Preparation | None = None
+    notes: Note | None = None
 
 
 class DraftStepIn(BaseModel):
@@ -70,38 +147,39 @@ class DraftStepIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=_ID)
+    id: ItemId
     order: int | None = Field(default=None, ge=0)
-    instruction: str = Field(default="", max_length=_TEXT)
-    ingredient_refs: list[str] = Field(default_factory=list, max_length=MAX_INGREDIENTS)
+    instruction: Instruction = ""
+    ingredient_refs: list[Ref] = Field(default_factory=list, max_length=MAX_INGREDIENTS)
     estimated_minutes: int | None = Field(default=None, ge=0, le=24 * 60)
-    success_cues: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
-    warnings: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
-    creator_note: str | None = Field(default=None, max_length=_TEXT)
-    source_clip_id: str | None = Field(default=None, max_length=_ID)
+    success_cues: list[ListItem] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    warnings: list[ListItem] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    creator_note: Note | None = None
+    source_clip_id: ItemId | None = None
     source_start_ms: int | None = Field(default=None, ge=0)
     source_end_ms: int | None = Field(default=None, ge=0)
     evidence_origin: EvidenceOrigin = "creator_authored"
 
 
 class DraftPatch(BaseModel):
-    """Partial update: only fields present in the request body are applied (``null`` clears a
-    scalar). Arrays replace whole. Read-only Draft fields are accepted and ignored so a client
-    may echo a whole Draft back; any other unknown key is rejected."""
+    """Partial update: only fields present in the request body are applied. ``null`` clears a
+    scalar; ``null`` for an array field is a 422 (send ``[]`` to empty it). Arrays replace
+    whole. Read-only Draft fields are accepted and ignored so a client may echo a whole Draft
+    back; any other unknown key is rejected. Every text field goes through ``check_text``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    title: str | None = Field(default=None, max_length=1000)
-    summary: str | None = Field(default=None, max_length=_TEXT)
-    tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS)
-    cover_image_url: str | None = Field(default=None, max_length=URL_MAX)
+    title: Title | None = None
+    summary: Summary | None = None
+    tags: list[Tag] = Field(default_factory=list, max_length=MAX_TAGS)
+    cover_image_url: str | None = None
     servings: int | None = Field(default=None, ge=0, le=1000)
     prep_minutes: int | None = Field(default=None, ge=0, le=7 * 24 * 60)
     cook_minutes: int | None = Field(default=None, ge=0, le=7 * 24 * 60)
     ingredients: list[DraftIngredientIn] = Field(default_factory=list, max_length=MAX_INGREDIENTS)
     steps: list[DraftStepIn] = Field(default_factory=list, max_length=MAX_STEPS)
-    creator_notes: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
-    dietary_warnings: list[str] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    creator_notes: list[ListItem] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
+    dietary_warnings: list[ListItem] = Field(default_factory=list, max_length=MAX_LIST_ITEMS)
 
     @field_validator("cover_image_url")
     @classmethod

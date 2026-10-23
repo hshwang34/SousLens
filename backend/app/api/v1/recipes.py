@@ -4,18 +4,23 @@ owner actions on a published recipe (edit → new draft, unpublish; REC-05/06)."
 from __future__ import annotations
 
 import uuid
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
+from pydantic import AfterValidator
 
 from app.core.errors import NotFound
 from app.core.security import CurrentUser, OptionalUser, SettingsDep
 from app.db.engine import DbSession
 from app.domains.recipes import drafts, service
-from app.domains.recipes.draft_schemas import Draft
+from app.domains.recipes.draft_schemas import Draft, check_text
 from app.domains.recipes.schemas import RecipeDetail, RecipePage, SaveStatus, UnpublishResult
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
+
+# Same hygiene as draft text: a NUL would otherwise reach Postgres and 500.
+SINGLE_LINE = AfterValidator(partial(check_text, multiline=False))
 versions_router = APIRouter(prefix="/recipe-versions", tags=["recipes"])
 
 
@@ -30,8 +35,8 @@ def _uuid_or_404(value: str, label: str) -> uuid.UUID:
 async def list_recipes(
     session: DbSession,
     user: OptionalUser,
-    query: Annotated[str | None, Query(max_length=120)] = None,
-    tag: Annotated[str | None, Query(max_length=64)] = None,
+    query: Annotated[str | None, Query(max_length=120), SINGLE_LINE] = None,
+    tag: Annotated[str | None, Query(max_length=64), SINGLE_LINE] = None,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=service.MAX_PAGE_SIZE)] = 20,
 ) -> RecipePage:

@@ -73,10 +73,16 @@ def test_slugify() -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["https://a.example/x.jpg", "HTTPS://A.EXAMPLE/x", "  https://a.example  ", None],
+    [
+        "https://a.example/x.jpg",
+        "HTTPS://A.EXAMPLE/x",
+        "https://a.example:8443/x?y=1#z",
+        "https://[2001:db8::1]/x.jpg",
+        None,
+    ],
 )
-def test_https_url_accepts(value: str | None) -> None:
-    assert validate_https_url(value) == (value.strip() if value else None)
+def test_https_url_accepts_and_stores_as_given(value: str | None) -> None:
+    assert validate_https_url(value) == value
 
 
 @pytest.mark.parametrize(
@@ -88,6 +94,17 @@ def test_https_url_accepts(value: str | None) -> None:
         "https:///x.jpg",
         "https://user@a.example/x.jpg",
         "https://a.example/" + "x" * 2048,
+        "  https://a.example  ",
+        "https://a.example/a b",
+        "https://a.example/\tx",
+        "https://a.example/\nx",
+        "https://a.example/\x00",
+        "https://a.example/\x7f",
+        "https://a.example\\@evil.example/",
+        "https:\\\\evil.example/",
+        "https://a.example:99999/x",
+        "https://a.example:abc/x",
+        "https://[::1/x",
     ],
 )
 def test_https_url_rejects(value: str) -> None:

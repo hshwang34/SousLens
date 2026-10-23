@@ -212,7 +212,7 @@ async def test_step_order_is_normalised_from_array_position(client: AsyncClient)
 async def test_validation_problems_cover_every_publish_rule(client: AsyncClient) -> None:
     alice = await bearer(client, "alice@example.com")
     payload = draft_payload(
-        title="x" * 121,
+        title="   ",
         servings=0,
         ingredients=[
             {"id": "ing-1", "name": "  "},
@@ -226,7 +226,7 @@ async def test_validation_problems_cover_every_publish_rule(client: AsyncClient)
     draft = (await client.post("/v1/recipes/drafts", json=payload, headers=alice)).json()
     problems = {p["field"]: p["message"] for p in draft["validation"]["problems"]}
     assert problems == {
-        "title": "Title must be 120 characters or fewer",
+        "title": "Add a title",
         "servings": "Servings must be at least 1",
         "ingredients[0].name": "Ingredient 1 needs a name",
         "ingredients[1].id": "Duplicate ingredient id 'ing-1'",
@@ -279,3 +279,140 @@ async def test_cover_image_url_must_be_an_absolute_https_url(client: AsyncClient
     )
     assert created.status_code == 422
     assert (await client.get(url, headers=alice)).json()["cover_image_url"] is None
+
+
+async def _new_draft(client: AsyncClient) -> tuple[dict[str, str], str]:
+    alice = await bearer(client, "alice@example.com")
+    draft = (await client.post("/v1/recipes/drafts", json={}, headers=alice)).json()
+    return alice, f"/v1/recipes/drafts/{draft['id']}"
+
+
+async def test_nul_in_title_is_422_not_500(client: AsyncClient) -> None:
+    alice, url = await _new_draft(client)
+    for method, path in (("patch", url), ("post", "/v1/recipes/drafts")):
+        response = await client.request(method, path, json={"title": "Soup\u0000"}, headers=alice)
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+        assert response.json()["error"]["fields"] == ["body.title"]
+
+
+async def test_control_and_bidi_characters_are_rejected_in_every_text_field(
+    client: AsyncClient,
+) -> None:
+    alice, url = await _new_draft(client)
+    ing = {"id": "ing-1", "name": "salt"}
+    step = {"id": "step-1", "instruction": "Stir."}
+    cases = {
+        "body.title": {"title": "a\u202eb"},
+        "body.summary": {"summary": "a\u0007b"},
+        "body.tags.0": {"tags": ["a\u2066b"]},
+        "body.creator_notes.0": {"creator_notes": ["a\u007fb"]},
+        "body.dietary_warnings.0": {"dietary_warnings": ["a\u001bb"]},
+        "body.ingredients.0.id": {"ingredients": [{**ing, "id": "i\u0000"}]},
+        "body.ingredients.0.name": {"ingredients": [{**ing, "name": "sa\u202alt"}]},
+        "body.ingredients.0.unit": {"ingredients": [{**ing, "unit": "g\u000b"}]},
+        "body.ingredients.0.preparation": {"ingredients": [{**ing, "preparation": "\u000c"}]},
+        "body.ingredients.0.notes": {"ingredients": [{**ing, "notes": "\u0001"}]},
+        "body.steps.0.instruction": {"steps": [{**step, "instruction": "x\u2069"}]},
+        "body.steps.0.ingredient_refs.0": {"steps": [{**step, "ingredient_refs": ["\u0002"]}]},
+        "body.steps.0.success_cues.0": {"steps": [{**step, "success_cues": ["\u202d"]}]},
+        "body.steps.0.warnings.0": {"steps": [{**step, "warnings": ["\u0010"]}]},
+        "body.steps.0.creator_note": {"steps": [{**step, "creator_note": "\u0000"}]},
+    }
+    for field, body in cases.items():
+        response = await client.patch(url, json=body, headers=alice)
+        assert response.status_code == 422, (field, response.text)
+        assert response.json()["error"]["fields"] == [field], field
+
+
+async def test_newlines_only_in_multiline_fields(client: AsyncClient) -> None:
+    alice, url = await _new_draft(client)
+    ok = {
+        "summary": "line 1\nline 2",
+        "creator_notes": ["a\nb"],
+        "dietary_warnings": ["a\r\nb"],
+        "ingredients": [{"id": "ing-1", "name": "salt", "notes": "a\nb"}],
+        "steps": [
+            {
+                "id": "step-1",
+                "instruction": "Stir.\nThen taste.",
+                "success_cues": ["a\nb"],
+                "warnings": ["a\nb"],
+                "creator_note": "a\nb",
+            }
+        ],
+    }
+    response = await client.patch(url, json=ok, headers=alice)
+    assert response.status_code == 200, response.text
+    assert response.json()["steps"][0]["instruction"] == "Stir.\nThen taste."
+    single = {
+        "body.title": {"title": "a\nb"},
+        "body.tags.0": {"tags": ["a\nb"]},
+        "body.ingredients.0.name": {"ingredients": [{"id": "i", "name": "a\nb"}]},
+        "body.ingredients.0.unit": {"ingredients": [{"id": "i", "unit": "a\rb"}]},
+        "body.ingredients.0.preparation": {"ingredients": [{"id": "i", "preparation": "a\nb"}]},
+        "body.steps.0.id": {"steps": [{"id": "s\n", "instruction": "x"}]},
+    }
+    for field, body in single.items():
+        response = await client.patch(url, json=body, headers=alice)
+        assert response.status_code == 422, (field, response.text)
+        assert response.json()["error"]["fields"] == [field], field
+
+
+async def test_text_length_limits_and_trimming(client: AsyncClient) -> None:
+    alice, url = await _new_draft(client)
+    body = await client.patch(
+        url, json={"title": "  Soup  ", "tags": ["  Weeknight ", "KOREAN"]}, headers=alice
+    )
+    assert body.status_code == 200
+    assert body.json()["title"] == "Soup" and body.json()["tags"] == ["weeknight", "korean"]
+    at_limit = {
+        "title": " " + "t" * 120 + " ",
+        "summary": "s" * 1000,
+        "tags": ["g" * 40],
+        "creator_notes": ["n" * 500],
+        "ingredients": [
+            {"id": "i" * 64, "name": "n" * 200, "unit": "u" * 32, "preparation": "p" * 200,
+             "notes": "o" * 500}
+        ],
+        "steps": [
+            {"id": "s", "instruction": "x" * 2000, "ingredient_refs": ["i" * 64],
+             "success_cues": ["c" * 500], "warnings": ["w" * 500], "creator_note": "c" * 500}
+        ],
+    }  # fmt: skip
+    assert (await client.patch(url, json=at_limit, headers=alice)).status_code == 200
+    ing = {"id": "ing-1", "name": "salt"}
+    step = {"id": "step-1", "instruction": "Stir."}
+    over = {
+        "body.title": {"title": "t" * 121},
+        "body.summary": {"summary": "s" * 1001},
+        "body.tags.0": {"tags": ["g" * 41]},
+        "body.tags.1": {"tags": ["ok", "   "]},
+        "body.creator_notes.0": {"creator_notes": ["n" * 501]},
+        "body.dietary_warnings.0": {"dietary_warnings": ["n" * 501]},
+        "body.ingredients.0.id": {"ingredients": [{**ing, "id": "i" * 65}]},
+        "body.ingredients.0.name": {"ingredients": [{**ing, "name": "n" * 201}]},
+        "body.ingredients.0.unit": {"ingredients": [{**ing, "unit": "u" * 33}]},
+        "body.ingredients.0.preparation": {"ingredients": [{**ing, "preparation": "p" * 201}]},
+        "body.ingredients.0.notes": {"ingredients": [{**ing, "notes": "o" * 501}]},
+        "body.steps.0.instruction": {"steps": [{**step, "instruction": "x" * 2001}]},
+        "body.steps.0.ingredient_refs.0": {"steps": [{**step, "ingredient_refs": ["r" * 65]}]},
+        "body.steps.0.success_cues.0": {"steps": [{**step, "success_cues": ["c" * 501]}]},
+        "body.steps.0.warnings.0": {"steps": [{**step, "warnings": ["w" * 501]}]},
+        "body.steps.0.creator_note": {"steps": [{**step, "creator_note": "c" * 501}]},
+    }
+    for field, payload in over.items():
+        response = await client.patch(url, json=payload, headers=alice)
+        assert response.status_code == 422, (field, response.text)
+        assert response.json()["error"]["fields"] == [field], field
+
+
+async def test_null_array_is_422_null_scalar_clears(client: AsyncClient) -> None:
+    alice, url = await _new_draft(client)
+    await client.patch(url, json={"summary": "x", "tags": ["a"]}, headers=alice)
+    cleared = await client.patch(url, json={"summary": None}, headers=alice)
+    assert cleared.status_code == 200 and cleared.json()["summary"] is None
+    for field in ("tags", "ingredients", "steps", "creator_notes", "dietary_warnings"):
+        response = await client.patch(url, json={field: None}, headers=alice)
+        assert response.status_code == 422, field
+        assert response.json()["error"]["fields"] == [f"body.{field}"], field
