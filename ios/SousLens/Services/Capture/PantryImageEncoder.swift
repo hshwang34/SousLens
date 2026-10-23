@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 /// Turns a captured frame or a picked photo (JPEG/HEIC/PNG) into the upload the backend accepts:
@@ -49,6 +50,28 @@ enum PantryImageEncoder {
         try await Task.detached(priority: .userInitiated) {
             try encode(data)
         }.value
+    }
+
+    /// Preview thumbnail (long edge ≤ `maxPixel`, orientation applied), decoded off the main actor
+    /// with ImageIO so a 12 MP photo is never fully decoded just to be shown.
+    static func thumbnail(_ data: Data, maxPixel: Int = Int(maxLongEdge)) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) {
+            makeThumbnail(data, maxPixel: maxPixel)
+        }.value
+    }
+
+    static func makeThumbnail(_ data: Data, maxPixel: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            return nil
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: image)
     }
 
     /// Aspect-preserving, never upscales, whole pixels.

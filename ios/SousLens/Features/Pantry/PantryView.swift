@@ -298,7 +298,9 @@ struct PantryCaptureSheet: View {
     }
 
     private func showReview(_ observation: PantryObservation) {
-        review = ScanReviewViewModel(observation: observation, existingItems: existingItems, service: environment.api)
+        // Typed text is `manual`, dictated text `voice`, photos `photo` (DECISIONS).
+        let source: PantrySource? = kind == .speak ? speak?.observationSource : nil
+        review = ScanReviewViewModel(observation: observation, existingItems: existingItems, service: environment.api, source: source)
     }
 }
 

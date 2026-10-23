@@ -38,7 +38,7 @@ struct PantryItemEditorView: View {
                 Section {
                     Picker("Location", selection: $model.form.location) {
                         Text("Not set").tag(StorageLocation?.none)
-                        ForEach(StorageLocation.allCases) { location in
+                        ForEach(locationChoices) { location in
                             Text(location.label).tag(Optional(location))
                         }
                     }
@@ -88,12 +88,20 @@ struct PantryItemEditorView: View {
                 Button("Keep both") { resolve(.keepBoth) }
                 Button("Cancel", role: .cancel) { model.cancelConflict() }
             } message: {
-                Text("Merge updates the item you have (and marks it confirmed now). Keep both adds a second, separate item.")
+                Text(DuplicateChoice.hint)
             }
             .onAppear {
                 if case .add = model.mode, model.form.name.isEmpty { nameFocused = true }
             }
         }
+    }
+
+    /// The known locations, plus the item's own value when this build doesn't recognise it.
+    private var locationChoices: [StorageLocation] {
+        if let current = model.form.location, !StorageLocation.known.contains(current) {
+            return StorageLocation.known + [current]
+        }
+        return StorageLocation.known
     }
 
     private func resolve(_ choice: DuplicateChoice) {

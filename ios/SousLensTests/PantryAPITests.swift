@@ -32,8 +32,10 @@ final class PantryDTOTests: XCTestCase {
     func testUnknownEnumValuesDecodeConservatively() throws {
         let json = PantryFixtures.itemJSON(location: "\"cellar\"", source: "glasses")
         let item = try PantryFixtures.decode(PantryItem.self, json)
-        XCTAssertEqual(item.storageLocation, .other)
-        XCTAssertEqual(item.source, .photo, "unknown source must not be labelled Manual")
+        XCTAssertEqual(item.storageLocation, .unrecognized("cellar"), "unknown location kept verbatim")
+        XCTAssertEqual(item.storageLocation?.rawValue, "cellar")
+        XCTAssertEqual(item.source, .other, "unknown source is neutral, not Manual or Photo")
+        XCTAssertEqual(item.source.badge, "Other")
         let status = try JSONCoding.makeDecoder().decode([FitStatus].self, from: Data(#"["maybe"]"#.utf8))
         XCTAssertEqual(status, [.uncertain], "an unknown fit status is never 'available'")
         let bin = try JSONCoding.makeDecoder().decode([ConfidenceBin].self, from: Data(#"["low"]"#.utf8))
@@ -61,7 +63,7 @@ final class PantryDTOTests: XCTestCase {
         XCTAssertTrue(observation.isDemoPhoto)
         XCTAssertEqual(observation.unknowns, ["contents of the unlabeled jar"])
         XCTAssertTrue(observation.candidates[1].quantityIsEstimate)
-        XCTAssertEqual(observation.expiresAt, ISO8601Flexible.parse("2026-10-24T09:00:00.5Z"))
+        XCTAssertEqual(observation.expiresAt, ISO8601Flexible.parse("2099-10-24T09:00:00.5Z"))
     }
 
     func testCandidateToleratesMissingOptionalKeys() throws {
@@ -115,12 +117,24 @@ final class PantryDTOTests: XCTestCase {
         XCTAssertNil(keepJSON["confidence"])
     }
 
-    func testPatchSendsClearedFieldsAsNull() throws {
-        let patch = PantryItemPatch(rawLabel: "Gochujang", quantity: nil, unit: nil, storageLocation: .pantry, note: nil)
+    func testPatchSendsOnlyChangedFieldsAndClearsAsNull() throws {
+        let patch = PantryItemPatch(quantity: .some(nil), storageLocation: .some(.pantry))
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONCoding.makeEncoder().encode(patch)) as? [String: Any])
-        XCTAssertEqual(Set(json.keys), ["raw_label", "quantity", "unit", "storage_location", "note"])
+        XCTAssertEqual(Set(json.keys), ["quantity", "storage_location"])
         XCTAssertTrue(json["quantity"] is NSNull)
         XCTAssertEqual(json["storage_location"] as? String, "pantry")
+        XCTAssertTrue(PantryItemPatch().isEmpty)
+    }
+
+    func testUnrecognizedLocationRoundTripsAndIsNotSentWhenUntouched() throws {
+        let item = try PantryFixtures.decode(PantryItem.self, PantryFixtures.itemJSON(location: "\"cellar\""))
+        XCTAssertEqual(item.storageLocation?.label, "Cellar")
+        var form = PantryItemForm(item: item)
+        form.note = "top shelf"
+        let patch = form.patch(from: item)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONCoding.makeEncoder().encode(patch)) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["note"], "an unknown location is never overwritten")
+        XCTAssertEqual(String(decoding: try JSONCoding.makeEncoder().encode([StorageLocation.unrecognized("cellar")]), as: UTF8.self), #"["cellar"]"#)
     }
 }
 
@@ -194,7 +208,7 @@ final class PantryAPIClientTests: XCTestCase {
         ])
         let client = makeClient()
         let uuid = UUID(uuidString: id)!
-        _ = try await client.updatePantryItem(id: uuid, PantryItemPatch(rawLabel: "Gochujang", quantity: 1, unit: "cup", storageLocation: nil, note: "half full"))
+        _ = try await client.updatePantryItem(id: uuid, PantryItemPatch(quantity: .some(1), unit: .some("cup"), note: .some("half full")))
         _ = try await client.confirmPantryItem(id: uuid)
         try await client.deletePantryItem(id: uuid)
         XCTAssertEqual(StubURLProtocol.requests.map { "\($0.httpMethod ?? "") \($0.url?.path ?? "")" },

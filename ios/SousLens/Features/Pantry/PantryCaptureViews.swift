@@ -14,6 +14,7 @@ struct SpeakCaptureView: View {
     @GestureState private var pressing = false
     @FocusState private var fieldFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     var body: some View {
         ScrollView {
@@ -73,7 +74,7 @@ struct SpeakCaptureView: View {
     /// Push-and-hold. Listening is visible the whole time it is on (PRD §13.2, §6.1).
     private var micBlock: some View {
         VStack(spacing: Spacing.md) {
-            Text("SousLens listens only while you hold the button. What you say becomes text here; the audio isn’t kept.")
+            Text(voiceOverEnabled ? SpeakCaptureViewModel.toggleExplainer : SpeakCaptureViewModel.holdExplainer)
                 .font(SLFont.footnote)
                 .foregroundStyle(SLColor.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,8 +104,8 @@ struct SpeakCaptureView: View {
                 }
             }
             .accessibilityElement()
-            .accessibilityLabel(model.isListening ? "Stop listening" : "Hold to talk")
-            .accessibilityHint("Double-tap to start listening, double-tap again to stop")
+            .accessibilityLabel(model.isListening ? "Stop" : "Start listening")
+            .accessibilityHint(model.isListening ? "Stops listening" : "Listens until you tap Stop, 60 seconds at most")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { Task { await model.toggleListening() } }
             .accessibilityIdentifier("speak.mic")
@@ -119,7 +120,7 @@ struct SpeakCaptureView: View {
                     .background(SLColor.surfaceRaised, in: Capsule())
                     .accessibilityIdentifier("speak.listening")
             } else {
-                Text(model.isStarting ? "Starting…" : "Hold to talk")
+                Text(model.isStarting ? "Starting…" : (voiceOverEnabled ? "Double-tap to talk" : "Hold to talk"))
                     .font(SLFont.callout)
                     .foregroundStyle(SLColor.textSecondary)
             }
@@ -208,6 +209,8 @@ struct ScanCaptureView: View {
                 // Loaded into memory; PhotosPicker gives us bytes, never a file we keep.
                 if let data = try? await item.loadTransferable(type: Data.self) {
                     await model.usePickedPhoto(data)
+                } else {
+                    model.photoPickFailed()
                 }
                 pickerItem = nil
             }
@@ -218,8 +221,12 @@ struct ScanCaptureView: View {
                 onObservation(observation)
             }
         }
-        .onChange(of: model.photoData) { _, data in
-            previewImage = data.flatMap(UIImage.init(data:))
+        .task(id: model.photoData) {
+            guard let data = model.photoData else {
+                previewImage = nil
+                return
+            }
+            previewImage = await PantryImageEncoder.thumbnail(data)
         }
     }
 
@@ -235,7 +242,7 @@ struct ScanCaptureView: View {
                     .accessibilityLabel("Photo to scan")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.cameraOn, let provider = model.camera as? CameraPreviewProviding {
-                CameraPreviewView(session: provider.previewSession)
+                CameraPreviewView(provider: provider)
                     .accessibilityLabel("Camera viewfinder")
             } else {
                 VStack(spacing: Spacing.sm) {
@@ -323,7 +330,7 @@ struct ScanCaptureView: View {
 
 /// Live viewfinder for the phone camera (device only; the simulator has no camera).
 struct CameraPreviewView: UIViewRepresentable {
-    let session: AVCaptureSession
+    let provider: any CameraPreviewProviding
 
     final class PreviewUIView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -336,13 +343,11 @@ struct CameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewUIView {
         let view = PreviewUIView()
         view.previewLayer.videoGravity = .resizeAspectFill
-        view.previewLayer.session = session
+        provider.attachPreview(to: view.previewLayer)
         return view
     }
 
-    func updateUIView(_ uiView: PreviewUIView, context: Context) {
-        if uiView.previewLayer.session !== session { uiView.previewLayer.session = session }
-    }
+    func updateUIView(_ uiView: PreviewUIView, context: Context) {}
 
     static func dismantleUIView(_ uiView: PreviewUIView, coordinator: ()) {
         uiView.previewLayer.session = nil

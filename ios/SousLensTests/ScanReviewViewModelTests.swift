@@ -12,6 +12,12 @@ final class ScanReviewViewModelTests: XCTestCase {
         try PantryFixtures.decode(PantryObservation.self, PantryFixtures.observationPhotoJSON)
     }
 
+    /// Mock photo candidates start unticked; tick the two real-looking ones.
+    private func tickPhotoRows(_ model: ScanReviewViewModel) {
+        model.setAccepted(0, true)
+        model.setAccepted(1, true)
+    }
+
     private let existingOnion = PantryFixtures.item(id: PantryFixtures.onionId, raw: "Onions", normalized: "onion", source: "voice")
 
     func testDefaultAcceptStatesPerBin() throws {
@@ -35,7 +41,8 @@ final class ScanReviewViewModelTests: XCTestCase {
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: FakePantryService())
         XCTAssertTrue(model.showsDemoBanner)
         XCTAssertEqual(model.unknowns, ["contents of the unlabeled jar"])
-        XCTAssertEqual(model.rows.map(\.accepted), [true, true, false])
+        XCTAssertEqual(model.rows.map(\.accepted), [false, false, false], "demo candidates start unticked")
+        XCTAssertEqual(model.blockingMessage, "Tick at least one item to add.")
         XCTAssertTrue(model.rows[1].isEstimate, "photo count is an estimate")
         model.setQuantityText(1, "6")
         XCTAssertFalse(model.rows[1].isEstimate, "a number the user typed is not an estimate")
@@ -98,6 +105,7 @@ final class ScanReviewViewModelTests: XCTestCase {
     func testPhotoRowsKeepEstimateFlagAndSourcePhoto() async throws {
         let service = FakePantryService()
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: service)
+        tickPhotoRows(model)
         await model.confirm()
         let items = try XCTUnwrap(service.addCalls.first)
         XCTAssertEqual(items.map(\.source), [.photo, .photo])
@@ -113,6 +121,7 @@ final class ScanReviewViewModelTests: XCTestCase {
         }
         // Photo observation: no server duplicate hints, so the 409 is the first we hear of it.
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: service)
+        tickPhotoRows(model)
         XCTAssertTrue(model.canConfirm)
         let first = await model.confirm()
         XCTAssertNil(first)
@@ -140,7 +149,7 @@ final class ScanReviewViewModelTests: XCTestCase {
         let duplicate = try PantryFixtures.duplicateError()
         service.addHandler = { _, _ in throw duplicate }
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: service)
-        model.setAccepted(0, false)       // only "eggs" (row 1) is sent, at index 0
+        model.setAccepted(1, true)        // only "eggs" (row 1) is sent, at index 0
         await model.confirm()
         XCTAssertNil(model.rows[0].duplicateOf)
         XCTAssertEqual(model.rows[1].duplicateName, "Onions")
@@ -150,6 +159,7 @@ final class ScanReviewViewModelTests: XCTestCase {
         let service = FakePantryService()
         service.addHandler = { _, _ in throw APIError.unreachable(baseURL: "http://x", underlying: "down") }
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: service)
+        tickPhotoRows(model)
         let result = await model.confirm()
         XCTAssertNil(result)
         XCTAssertTrue(model.error?.hasPrefix("Couldn’t add") ?? false)
@@ -158,6 +168,7 @@ final class ScanReviewViewModelTests: XCTestCase {
 
     func testRowProblemsBlockConfirm() throws {
         let model = ScanReviewViewModel(observation: try photoObservation(), existingItems: [], service: FakePantryService())
+        tickPhotoRows(model)
         model.setName(0, "   ")
         XCTAssertEqual(model.rows[0].problem, "Add a name or untick this item.")
         XCTAssertEqual(model.blockingMessage, "Fix the highlighted items first.")
@@ -167,5 +178,58 @@ final class ScanReviewViewModelTests: XCTestCase {
         model.setAccepted(0, false)
         model.setAccepted(1, false)
         XCTAssertEqual(model.blockingMessage, "Tick at least one item to add.")
+    }
+
+    func testRealProviderPhotoKeepsBinDefaults() throws {
+        let gemini = PantryFixtures.observationPhotoJSON.replacingOccurrences(of: #""provider":"mock""#, with: #""provider":"gemini""#)
+        let model = ScanReviewViewModel(observation: try PantryFixtures.decode(PantryObservation.self, gemini), existingItems: [], service: FakePantryService())
+        XCTAssertFalse(model.showsDemoBanner)
+        XCTAssertEqual(model.rows.map(\.accepted), [true, true, false])
+    }
+
+    func testTypedTranscriptIsSentAsManualAndDictatedAsVoice() async throws {
+        let service = FakePantryService()
+        let typed = ScanReviewViewModel(observation: try transcriptObservation(), existingItems: [], service: service, source: .manual)
+        typed.setAccepted(1, false)   // skip the duplicate
+        await typed.confirm()
+        XCTAssertEqual(Set(try XCTUnwrap(service.addCalls.last).map(\.source)), [.manual])
+        let dictated = ScanReviewViewModel(observation: try transcriptObservation(), existingItems: [], service: service, source: .voice)
+        dictated.setAccepted(1, false)
+        await dictated.confirm()
+        XCTAssertEqual(Set(try XCTUnwrap(service.addCalls.last).map(\.source)), [.voice])
+    }
+
+    func testExpiredObservationIsNotSentAndSaysScanAgain() async throws {
+        let service = FakePantryService()
+        let observation = try transcriptObservation()
+        let later = observation.expiresAt.addingTimeInterval(1)
+        let model = ScanReviewViewModel(observation: observation, existingItems: [], service: service, now: { later })
+        XCTAssertTrue(model.isExpired)
+        let result = await model.confirm()
+        XCTAssertNil(result)
+        XCTAssertTrue(service.calls.isEmpty)
+        XCTAssertEqual(model.error, "This scan expired — scan again.")
+    }
+
+    func testServer404Or410OnConfirmMeansExpired() async throws {
+        for status in [404, 410] {
+            let service = FakePantryService()
+            service.addHandler = { _, _ in
+                throw APIError.server(status: status, code: "NOT_FOUND", message: "Observation not found.", retryable: false, correlationId: nil)
+            }
+            let model = ScanReviewViewModel(observation: try transcriptObservation(), existingItems: [], service: service)
+            model.setAccepted(1, false)
+            await model.confirm()
+            XCTAssertEqual(model.error, ScanReviewViewModel.expiredMessage, "status \(status)")
+        }
+    }
+
+    func testDuplicateHintMatchesManualEditor() throws {
+        XCTAssertEqual(DuplicateChoice.hint, "Merge updates your existing item; Keep both adds a second one.")
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("SousLens/Features/Pantry")
+        for file in ["ScanReviewView.swift", "PantryItemEditorView.swift"] {
+            let text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
+            XCTAssertTrue(text.contains("DuplicateChoice.hint"), "\(file) shows the shared hint")
+        }
     }
 }

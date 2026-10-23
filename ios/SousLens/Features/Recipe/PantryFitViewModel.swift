@@ -30,8 +30,38 @@ struct FitRowPresentation: Identifiable, Equatable {
     var canAddToPantry: Bool { status == .missing || status == .optionalMissing }
     var canConfirmStillHave: Bool { isStale && pantryItemId != nil }
 
+    enum Action: String, CaseIterable {
+        case addToPantry
+        case stillHaveIt
+
+        var title: String {
+            switch self {
+            case .addToPantry: return "Add to pantry"
+            case .stillHaveIt: return "Still have it"
+            }
+        }
+    }
+
+    /// What the row offers; the view renders these as buttons and as VoiceOver actions, so the
+    /// combined accessibility element never hides them.
+    var actions: [Action] {
+        var actions: [Action] = []
+        if canAddToPantry { actions.append(.addToPantry) }
+        if canConfirmStillHave { actions.append(.stillHaveIt) }
+        return actions
+    }
+
+    var statusLabel: String {
+        switch status {
+        case .available: return "Available"
+        case .uncertain: return "Uncertain"
+        case .missing: return "Missing"
+        case .optionalMissing: return "Optional, missing"
+        }
+    }
+
     var accessibilityLabel: String {
-        var parts = [name, reason]
+        var parts = [name, statusLabel, reason]
         if let requiredText { parts.append("Recipe needs \(requiredText)") }
         if let conversionNote { parts.append(conversionNote) }
         return parts.joined(separator: ". ")
@@ -102,7 +132,12 @@ final class PantryFitViewModel {
         return nil
     }
 
+    /// Last request wins: a slow earlier fit never replaces a newer one.
+    private var loadGeneration = 0
+
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         if fit == nil { phase = .loading }
         actionError = nil
         async let fitResult = service.fit(recipeVersionId: recipeVersionId)
@@ -110,12 +145,15 @@ final class PantryFitViewModel {
         async let pantryResult = try? service.listPantry()
         do {
             let fit = try await fitResult
-            pantryItems = await pantryResult ?? []
+            let pantry = await pantryResult ?? []
+            guard generation == loadGeneration else { return }
+            pantryItems = pantry
             phase = .loaded(fit)
         } catch let error as APIError where error == .cancelled {
             _ = await pantryResult
         } catch {
             _ = await pantryResult
+            guard generation == loadGeneration else { return }
             if fit == nil {
                 phase = .error(error.pantryMessage)
             } else {
@@ -194,8 +232,8 @@ final class PantryFitViewModel {
         defer { busyItemIds.remove(pantryItemId) }
         do {
             _ = try await service.confirmPantryItem(id: pantryItemId)
+            // The revision bump is the one reload path (the view re-runs `load()` on it).
             onPantryChanged?()
-            await load()
         } catch {
             actionError = "Couldn’t update: \(error.pantryMessage)"
         }
@@ -207,9 +245,4 @@ final class PantryFitViewModel {
         PantryItemForm(name: row.name)
     }
 
-    /// After the add sheet saved something.
-    func pantryDidChange() async {
-        onPantryChanged?()
-        await load()
-    }
 }

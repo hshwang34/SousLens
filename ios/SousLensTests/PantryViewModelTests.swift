@@ -99,6 +99,27 @@ final class PantryViewModelTests: XCTestCase {
         XCTAssertEqual(model.rows[0].freshnessText, "Confirmed today")
     }
 
+    func testSlowEarlierLoadNeverReplacesNewerOne() async {
+        let service = FakePantryService()
+        let latch = TestLatch()
+        let counter = TestCounter()
+        let response = TestBox<[PantryItem]>([])
+        service.suspend = { call in
+            if call == .list, counter.next() == 1 { await latch.wait() }
+        }
+        service.listHandler = { response.value }
+        let model = makeModel(service)
+        let slow = Task { await model.load() }      // suspended before it answers
+        while service.calls.isEmpty { await Task.yield() }
+        response.value = [PantryFixtures.item(raw: "Honey", normalized: "honey")]
+        await model.load()                         // newer, answers first
+        XCTAssertEqual(model.items.map(\.rawLabel), ["Honey"])
+        response.value = [PantryFixtures.item(raw: "Stale", normalized: "stale")]
+        await latch.open()
+        await slow.value
+        XCTAssertEqual(model.items.map(\.rawLabel), ["Honey"], "the slow, older response is dropped")
+    }
+
     func testApplyMergesAndResorts() async {
         let service = FakePantryService()
         let model = makeModel(service)
@@ -184,7 +205,37 @@ final class PantryItemEditorModelTests: XCTestCase {
         model.form.note = "half a tub"
         let saved = await model.save()
         XCTAssertEqual(saved, [original])
-        XCTAssertEqual(service.calls, [.update(original.id, PantryItemPatch(rawLabel: "Gochujang", quantity: nil, unit: nil, storageLocation: nil, note: "half a tub"))])
+        XCTAssertEqual(service.calls, [.update(original.id, PantryItemPatch(storageLocation: .some(nil), note: .some("half a tub")))],
+                       "only changed fields; a cleared location is sent as null")
+    }
+
+    func testUnchangedEditSendsNothing() async {
+        let service = FakePantryService()
+        let original = PantryFixtures.item()
+        let model = PantryItemEditorModel(mode: .edit(original), service: service)
+        let saved = await model.save()
+        XCTAssertEqual(saved, [original])
+        XCTAssertTrue(service.calls.isEmpty)
+    }
+
+    func testEditingQuantityOfEstimatedItemClearsEstimateMarker() async throws {
+        let service = FakePantryService()
+        let estimated = try PantryFixtures.decode(PantryItem.self, PantryFixtures.itemJSON(quantity: "3", unit: "\"count\"", estimate: true, source: "photo"))
+        // An older backend echoes the flag back; the client mirrors the new rule anyway.
+        service.updateHandler = { _, _ in estimated }
+        let model = PantryItemEditorModel(mode: .edit(estimated), service: service)
+        model.form.quantityText = "6"
+        let result = await model.save()
+        let saved = try XCTUnwrap(result?.first)
+        XCTAssertFalse(saved.quantityIsEstimate)
+        let row = PantryRowPresentation(item: saved, now: Date())
+        XCTAssertFalse(row.isEstimate, "no 'estimate' marker after the user typed a quantity")
+
+        // A note-only edit keeps the estimate.
+        let noteOnly = PantryItemEditorModel(mode: .edit(estimated), service: service)
+        noteOnly.form.note = "in the door"
+        let noteResult = await noteOnly.save()
+        XCTAssertTrue(try XCTUnwrap(noteResult?.first).quantityIsEstimate)
     }
 
     func testInvalidFormIsNotSent() async {

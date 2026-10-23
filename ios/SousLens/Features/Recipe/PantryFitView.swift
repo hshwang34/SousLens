@@ -89,17 +89,6 @@ struct PantryFitView: View {
                         .accessibilityLabel("\(section.kind.title), \(section.rows.count)")
                 }
             }
-            Section {
-                Button("Start cooking") {}
-                    .buttonStyle(SLButtonStyle(prominent: true))
-                    .disabled(true)
-                    .slDisabledAppearance(true)
-                    .listRowBackground(Color.clear)
-                Text("Substitutions and Start cooking are coming in a later build.")
-                    .font(SLFont.footnote)
-                    .foregroundStyle(SLColor.textSecondary)
-                    .listRowBackground(Color.clear)
-            }
         }
         .scrollContentBackground(.hidden)
         .refreshable { await model.load() }
@@ -172,22 +161,14 @@ private struct FitRowView: View {
                     .italic()
                     .foregroundStyle(SLColor.textSecondary)
             }
-            if row.canAddToPantry || row.canConfirmStillHave {
+            if !row.actions.isEmpty {
                 HStack(spacing: Spacing.sm) {
-                    if row.canAddToPantry {
-                        Button("Add to pantry", action: onAdd)
+                    ForEach(row.actions, id: \.self) { action in
+                        Button(action.title) { perform(action) }
                             .buttonStyle(.bordered)
                             .tint(SLColor.accent)
                             .frame(minHeight: Metrics.minTapTarget)
-                            .accessibilityLabel("Add \(row.name) to pantry")
-                    }
-                    if row.canConfirmStillHave {
-                        Button("Still have it", action: onStillHave)
-                            .buttonStyle(.bordered)
-                            .tint(SLColor.accent)
-                            .frame(minHeight: Metrics.minTapTarget)
-                            .disabled(isBusy)
-                            .accessibilityLabel("Still have \(row.name)")
+                            .disabled(action == .stillHaveIt && isBusy)
                     }
                 }
             }
@@ -195,5 +176,28 @@ private struct FitRowView: View {
         .padding(.vertical, Spacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(row.accessibilityLabel)
+        // The combined element swallows the buttons; expose each one as a named action.
+        .modifier(FitRowActions(row: row, perform: perform))
+    }
+
+    private func perform(_ action: FitRowPresentation.Action) {
+        switch action {
+        case .addToPantry: onAdd()
+        case .stillHaveIt: if !isBusy { onStillHave() }
+        }
+    }
+}
+
+private struct FitRowActions: ViewModifier {
+    let row: FitRowPresentation
+    let perform: (FitRowPresentation.Action) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityActions {
+                ForEach(row.actions, id: \.self) { action in
+                    Button(row.name.isEmpty ? action.title : "\(action.title): \(row.name)") { perform(action) }
+                }
+            }
     }
 }

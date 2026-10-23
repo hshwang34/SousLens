@@ -38,7 +38,7 @@ enum PantryFixtures {
        {"raw_label":"something red","canonical_name":null,"quantity":null,"unit":null,"quantity_is_estimate":false,
         "confidence":0.3,"confidence_bin":"unknown","evidence":"unclear","action":"ignore","duplicate_of":null}
      ],
-     "unknowns":[],"requires_confirmation":true,"expires_at":"2026-10-24T09:00:00Z"}
+     "unknowns":[],"requires_confirmation":true,"expires_at":"2099-10-24T09:00:00Z"}
     """
 
     static let observationPhotoJSON = """
@@ -51,7 +51,7 @@ enum PantryFixtures {
        {"raw_label":"unlabeled jar","canonical_name":null,"quantity":null,"unit":null,"quantity_is_estimate":false,
         "confidence":0.17,"confidence_bin":"unknown","evidence":"contents not identifiable","action":"ignore","duplicate_of":null}
      ],
-     "unknowns":["contents of the unlabeled jar"],"requires_confirmation":true,"expires_at":"2026-10-24T09:00:00.5Z"}
+     "unknowns":["contents of the unlabeled jar"],"requires_confirmation":true,"expires_at":"2099-10-24T09:00:00.5Z"}
     """
 
     static let fitJSON = """
@@ -125,6 +125,9 @@ final class FakePantryService: PantryService, @unchecked Sendable {
     var calls: [Call] { lock.withLock { _calls } }
     private func record(_ call: Call) { lock.withLock { _calls.append(call) } }
 
+    /// Optional suspension per call (after it is recorded); lets tests order responses.
+    var suspend: (@Sendable (Call) async -> Void)?
+
     var listHandler: @Sendable () throws -> [PantryItem] = { [] }
     var addHandler: @Sendable ([NewPantryItem], UUID?) throws -> [PantryItem] = { _, _ in [] }
     var updateHandler: @Sendable (UUID, PantryItemPatch) throws -> PantryItem = { _, _ in throw APIError.http(status: 599, correlationId: nil) }
@@ -134,7 +137,7 @@ final class FakePantryService: PantryService, @unchecked Sendable {
     var photoHandler: @Sendable (PantryPhotoUpload) throws -> PantryObservation = { _ in throw APIError.http(status: 599, correlationId: nil) }
     var fitHandler: @Sendable (UUID) throws -> PantryFit = { _ in throw APIError.http(status: 599, correlationId: nil) }
 
-    func listPantry() async throws -> [PantryItem] { record(.list); return try listHandler() }
+    func listPantry() async throws -> [PantryItem] { record(.list); await suspend?(.list); return try listHandler() }
     func addPantryItems(_ items: [NewPantryItem], observationId: UUID?) async throws -> [PantryItem] {
         record(.add(items, observationId)); return try addHandler(items, observationId)
     }
@@ -149,9 +152,46 @@ final class FakePantryService: PantryService, @unchecked Sendable {
     func observePhoto(_ photo: PantryPhotoUpload) async throws -> PantryObservation {
         record(.photo(photo)); return try photoHandler(photo)
     }
-    func fit(recipeVersionId: UUID) async throws -> PantryFit { record(.fit(recipeVersionId)); return try fitHandler(recipeVersionId) }
+    func fit(recipeVersionId: UUID) async throws -> PantryFit {
+        record(.fit(recipeVersionId)); await suspend?(.fit(recipeVersionId)); return try fitHandler(recipeVersionId)
+    }
 
     var addCalls: [[NewPantryItem]] {
         calls.compactMap { if case .add(let items, _) = $0 { return items } else { return nil } }
+    }
+}
+
+/// One-shot latch a test opens to release a suspended fake call.
+actor TestLatch {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
+/// Thread-safe counter for `@Sendable` fake hooks.
+final class TestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int { lock.withLock { value += 1; return value } }
+}
+
+/// Mutable value shared with `@Sendable` fake handlers.
+final class TestBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+    init(_ value: Value) { stored = value }
+    var value: Value {
+        get { lock.withLock { stored } }
+        set { lock.withLock { stored = newValue } }
     }
 }

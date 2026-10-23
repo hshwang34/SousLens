@@ -38,14 +38,22 @@ final class PantryViewModel {
 
     func item(id: UUID) -> PantryItem? { items.first { $0.id == id } }
 
+    /// Last request wins: a slow earlier load (or one that started before a local write) is dropped.
+    private var loadGeneration = 0
+
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         if items.isEmpty { phase = .loading }
         do {
-            items = Self.sorted(try await service.listPantry())
+            let fetched = try await service.listPantry()
+            guard generation == loadGeneration else { return }
+            items = Self.sorted(fetched)
             phase = .loaded
         } catch let error as APIError where error == .cancelled {
             return
         } catch {
+            guard generation == loadGeneration else { return }
             // Keep a list we already have; only an empty screen turns into an error screen.
             if items.isEmpty {
                 phase = .error(error.pantryMessage)
@@ -63,6 +71,7 @@ final class PantryViewModel {
         defer { busyItemIds.remove(id) }
         do {
             try await service.deletePantryItem(id: id)
+            loadGeneration += 1   // a load already in flight may still list it
             items.removeAll { $0.id == id }
             onChanged?()
         } catch {
@@ -86,6 +95,7 @@ final class PantryViewModel {
 
     /// Server-confirmed items from an add, merge or edit replace (or join) the list.
     func apply(_ updated: [PantryItem]) {
+        loadGeneration += 1   // a load already in flight predates these server-confirmed items
         var byId = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
         for item in updated { byId[item.id] = item }
         items = Self.sorted(Array(byId.values))
@@ -190,8 +200,17 @@ final class PantryItemEditorModel: Identifiable {
         isSaving = true
         error = nil
         defer { isSaving = false }
+        let patch = form.patch(from: item)
+        if patch.isEmpty {
+            saved = [item]
+            return [item]
+        }
         do {
-            let updated = try await service.updatePantryItem(id: item.id, form.patch())
+            var updated = try await service.updatePantryItem(id: item.id, patch)
+            // A quantity the user typed is not an estimate (the backend clears the flag too).
+            if patch.quantity != nil, updated.quantityIsEstimate {
+                updated = updated.withQuantityIsEstimate(false)
+            }
             saved = [updated]
             return [updated]
         } catch {

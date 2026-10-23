@@ -5,6 +5,9 @@ import Observation
 /// editable transcript. "Type instead" feeds the same text field, so the flow works without a
 /// microphone, without permission, and in the simulator. "Find items" sends the text as a
 /// transcript observation: candidates only, nothing is added to the pantry here.
+///
+/// Provenance (DECISIONS): text that was dictated (even if edited afterwards) is `voice`; text
+/// that was only typed is `manual`.
 @MainActor
 @Observable
 final class SpeakCaptureViewModel {
@@ -13,28 +16,47 @@ final class SpeakCaptureViewModel {
         case type
     }
 
+    /// How listening was started: holding the button, or a VoiceOver double-tap toggle.
+    enum ListenStyle: Equatable {
+        case hold
+        case toggle
+    }
+
+    static let holdExplainer = "SousLens listens only while you hold the button. What you say becomes text here; the audio isn’t kept."
+    static let toggleExplainer = "Double-tap to start. SousLens listens until you tap Stop, or 60 seconds at most. What you say becomes text here; the audio isn’t kept."
+
     var transcript = "" {
         didSet {
             if transcript.count > PantryLimits.transcript { transcript = String(transcript.prefix(PantryLimits.transcript)) }
+            if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { dictated = false }
         }
     }
     private(set) var mode: InputMode
     private(set) var isListening = false
     private(set) var isStarting = false
     private(set) var isSubmitting = false
+    private(set) var listenStyle: ListenStyle = .hold
+    /// True once any of the current text came from the microphone.
+    private(set) var dictated = false
     /// Permission / availability / request failure copy.
     private(set) var message: String?
     /// True when the message is a permission denial (the view offers "Open Settings").
     private(set) var permissionDenied = false
     /// Set once the server returns candidates; the view pushes Scan review.
     var observation: PantryObservation?
+    /// Provenance of the text that produced `observation`.
+    private(set) var observationSource: PantrySource = .manual
     /// The task draining the transcript stream; tests await it.
     private(set) var listenTask: Task<Void, Never>?
 
+    /// Toggle-mode listening stops by itself after this long.
+    var toggleAutoStop: Duration = .seconds(60)
+
     private let speech: any SpeechInput
     private let service: PantryService
-    /// A release that arrives while the start is still suspended (permission prompt) wins.
-    private var releaseRequested = false
+    /// Every press and every release bumps this; a start that resumes superseded tears down.
+    private var gate = CaptureStartGate()
+    private var autoStopTask: Task<Void, Never>?
 
     init(speech: any SpeechInput, service: PantryService) {
         self.speech = speech
@@ -47,11 +69,15 @@ final class SpeakCaptureViewModel {
 
     var canSpeak: Bool { speech.isAvailable }
 
+    /// The source the next "Find items" will record.
+    var transcriptSource: PantrySource { dictated ? .voice : .manual }
+
     /// PRD §6.1: always say which input is live. Only the phone microphone is claimed here; a
     /// glasses route is never named without a verified HFP route (CLAUDE.md "honest device state").
     var listeningIndicator: String? {
         guard isListening else { return nil }
-        return speech.kind == .phone ? "Listening… (iPhone microphone)" : "Listening…"
+        let base = listenStyle == .toggle ? "Listening until you tap Stop" : "Listening…"
+        return speech.kind == .phone ? "\(base) (iPhone microphone)" : base
     }
 
     var cleanTranscript: String { DraftText.multiLine(transcript, max: PantryLimits.transcript) }
@@ -67,58 +93,80 @@ final class SpeakCaptureViewModel {
         mode = .speak
     }
 
-    /// Press began.
-    func beginListening() async {
+    /// Press began (hold), or a VoiceOver toggle on.
+    func beginListening(style: ListenStyle = .hold) async {
         guard speech.isAvailable, !isListening, !isStarting, !isSubmitting else { return }
+        let token = gate.begin()
         isStarting = true
-        releaseRequested = false
+        listenStyle = style
         message = nil
         permissionDenied = false
-        defer { isStarting = false }
+        // A superseded start must not clear the flag of a newer one.
+        defer { if gate.isCurrent(token) { isStarting = false } }
         let stream: AsyncStream<TranscriptChunk>
         do {
             stream = try await speech.startListening()
         } catch let error as CaptureError {
-            handle(error)
+            if gate.isCurrent(token) { handle(error) }
             return
         } catch {
-            message = error.localizedDescription
+            if gate.isCurrent(token) { message = error.localizedDescription }
+            return
+        }
+        // Released (or stopped) while the start was suspended: tear down, never open the relay.
+        guard gate.isCurrent(token) else {
+            speech.stop()
             return
         }
         isListening = true
         let prefix = transcript.isEmpty ? "" : transcript + " "
         listenTask = Task { [weak self] in
             for await chunk in stream {
+                guard let self else { break }
                 // Chunks are cumulative (best transcription so far).
-                self?.transcript = prefix + chunk.text
+                if !chunk.text.isEmpty { self.dictated = true }
+                self.transcript = prefix + chunk.text
             }
             self?.isListening = false
+            self?.autoStopTask?.cancel()
         }
-        if releaseRequested {
-            endListening()
+        if style == .toggle {
+            let limit = toggleAutoStop
+            autoStopTask = Task { [weak self] in
+                try? await Task.sleep(for: limit)
+                guard !Task.isCancelled else { return }
+                self?.endListening()
+            }
         }
     }
 
-    /// Press ended (or VoiceOver toggled off). Audio stops at once; the final words still arrive.
+    /// Press ended (or toggle off / cancel / background). Always bumps the gate, so a start still
+    /// in flight gives up; audio stops at once and the final words still arrive.
     func endListening() {
-        if isStarting { releaseRequested = true }
+        gate.supersede()
+        isStarting = false
+        autoStopTask?.cancel()
+        autoStopTask = nil
         speech.stop()
     }
 
     /// VoiceOver can't press-and-hold: a double tap toggles instead.
     func toggleListening() async {
-        if isListening { endListening() } else { await beginListening() }
+        if isListening || isStarting { endListening() } else { await beginListening(style: .toggle) }
     }
 
     func findItems() async {
         let text = cleanTranscript
         guard !text.isEmpty, !isSubmitting else { return }
         if isListening { endListening(); await listenTask?.value }
+        let source = transcriptSource
         isSubmitting = true
         message = nil
         defer { isSubmitting = false }
         do {
-            observation = try await service.observeTranscript(text)
+            let result = try await service.observeTranscript(text)
+            observationSource = source
+            observation = result
         } catch let error as APIError where error == .cancelled {
             return
         } catch {
@@ -231,6 +279,11 @@ final class ScanCaptureViewModel {
         await camera.stopPreview()
         message = nil
         photoData = data
+    }
+
+    /// PhotosPicker couldn't hand over the image (iCloud download failed, unsupported format…).
+    func photoPickFailed() {
+        message = "That photo couldn’t be loaded. Try another one, or take a photo."
     }
 
     func discardPhoto() {

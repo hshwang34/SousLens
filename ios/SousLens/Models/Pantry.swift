@@ -4,16 +4,18 @@ import Foundation
 // exactly; enums decode unknown values leniently so an additive backend change never breaks the
 // pantry screen.
 
-/// Where a pantry item came from (PAN-05).
+/// Where a pantry item came from (PAN-05). DECISIONS: typed text is `manual`, dictated text is
+/// `voice`, photos are `photo`. The client only ever sends those three.
 enum PantrySource: String, Codable, Sendable, CaseIterable {
     case manual
     case voice
     case photo
+    /// Anything the server sends that this build doesn't know. Shown neutrally, never sent.
+    case other
 
     init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
-        // An unknown source is shown as the most conservative provenance we know: not "Manual".
-        self = PantrySource(rawValue: raw) ?? .photo
+        self = PantrySource(rawValue: raw) ?? .other
     }
 
     /// Provenance badge text.
@@ -22,6 +24,7 @@ enum PantrySource: String, Codable, Sendable, CaseIterable {
         case .manual: return "Manual"
         case .voice: return "Voice"
         case .photo: return "Photo"
+        case .other: return "Other"
         }
     }
 
@@ -30,20 +33,37 @@ enum PantrySource: String, Codable, Sendable, CaseIterable {
         case .manual: return "hand.point.up.left"
         case .voice: return "mic"
         case .photo: return "camera"
+        case .other: return "questionmark.circle"
         }
     }
 }
 
-enum StorageLocation: String, Codable, Sendable, CaseIterable, Identifiable {
+/// Storage location. A value this build doesn't know is kept verbatim (`unrecognized`) so an
+/// edit never overwrites it with something else.
+enum StorageLocation: Sendable, Hashable, Identifiable {
     case fridge
     case freezer
     case pantry
     case counter
     case other
+    case unrecognized(String)
 
-    init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        self = StorageLocation(rawValue: raw) ?? .other
+    /// The choices the editor offers.
+    static let known: [StorageLocation] = [.fridge, .freezer, .pantry, .counter, .other]
+
+    init(rawValue: String) {
+        self = Self.known.first { $0.rawValue == rawValue } ?? .unrecognized(rawValue)
+    }
+
+    var rawValue: String {
+        switch self {
+        case .fridge: return "fridge"
+        case .freezer: return "freezer"
+        case .pantry: return "pantry"
+        case .counter: return "counter"
+        case .other: return "other"
+        case .unrecognized(let raw): return raw
+        }
     }
 
     var id: String { rawValue }
@@ -55,7 +75,19 @@ enum StorageLocation: String, Codable, Sendable, CaseIterable, Identifiable {
         case .pantry: return "Pantry"
         case .counter: return "Counter"
         case .other: return "Other"
+        case .unrecognized(let raw): return raw.replacingOccurrences(of: "_", with: " ").capitalized
         }
+    }
+}
+
+extension StorageLocation: Codable {
+    init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 
@@ -89,6 +121,14 @@ struct PantryItem: Codable, Sendable, Identifiable, Hashable {
     let lastConfirmedAt: Date
     let createdAt: Date
     let updatedAt: Date
+
+    /// Same item with the estimate flag changed (a typed quantity is no longer an estimate).
+    func withQuantityIsEstimate(_ value: Bool) -> PantryItem {
+        PantryItem(id: id, rawLabel: rawLabel, normalizedName: normalizedName, ingredientId: ingredientId,
+                   quantity: quantity, unit: unit, quantityIsEstimate: value, storageLocation: storageLocation,
+                   note: note, source: source, confidence: confidence, lastConfirmedAt: lastConfirmedAt,
+                   createdAt: createdAt, updatedAt: updatedAt)
+    }
 }
 
 /// `{"merge_into": id}` or `{"keep_both": true}` (PAN-04). Only ever set by an explicit user choice.
@@ -157,24 +197,39 @@ struct CreatePantryItemsRequest: Encodable, Sendable {
     }
 }
 
-/// `PATCH /pantry/{id}`. The edit sheet sends every editable field; a field the user cleared is
-/// sent as JSON `null` (same convention as the Slice 1 draft PATCH).
+/// `PATCH /pantry/{id}`. Only fields the user changed are sent: the outer optional is "changed?",
+/// the inner one is the value (`nil` → JSON `null`, i.e. cleared).
 struct PantryItemPatch: Encodable, Sendable, Hashable {
-    var rawLabel: String
-    var quantity: Double?
-    var unit: String?
-    var storageLocation: StorageLocation?
-    var note: String?
+    var rawLabel: String?
+    var quantity: Double??
+    var unit: String??
+    var storageLocation: StorageLocation??
+    var note: String??
+
+    init(rawLabel: String? = nil, quantity: Double?? = .none, unit: String?? = .none,
+         storageLocation: StorageLocation?? = .none, note: String?? = .none) {
+        self.rawLabel = rawLabel
+        self.quantity = quantity
+        self.unit = unit
+        self.storageLocation = storageLocation
+        self.note = note
+    }
+
+    var isEmpty: Bool {
+        rawLabel == nil && quantity == nil && unit == nil && storageLocation == nil && note == nil
+    }
+
+    var changesQuantity: Bool { quantity != nil || unit != nil }
 
     private enum CodingKeys: String, CodingKey { case rawLabel, quantity, unit, storageLocation, note }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(rawLabel, forKey: .rawLabel)
-        try container.encode(quantity, forKey: .quantity)
-        try container.encode(unit, forKey: .unit)
-        try container.encode(storageLocation, forKey: .storageLocation)
-        try container.encode(note, forKey: .note)
+        try container.encodeIfPresent(rawLabel, forKey: .rawLabel)
+        if let quantity { try container.encode(quantity, forKey: .quantity) }
+        if let unit { try container.encode(unit, forKey: .unit) }
+        if let storageLocation { try container.encode(storageLocation, forKey: .storageLocation) }
+        if let note { try container.encode(note, forKey: .note) }
     }
 }
 

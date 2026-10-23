@@ -87,9 +87,10 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
         throw CaptureError.cancelled
     }
 
-    /// For `AVCaptureVideoPreviewLayer` only. Attaching a layer to a session is main-thread safe;
-    /// the session is configured and started inside `pipeline`.
-    var previewSession: AVCaptureSession { pipeline.previewSession }
+    /// Connects a viewfinder layer to the running session. The session itself is never handed out.
+    func attachPreview(to layer: AVCaptureVideoPreviewLayer) {
+        pipeline.attach(layer)
+    }
 
     func captureFrame() async throws -> CapturedFrame {
         guard activeIndicator else { throw CaptureError.notRunning }
@@ -141,15 +142,31 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
 /// A camera that can show a live viewfinder. Only the phone camera does today.
 @MainActor
 protocol CameraPreviewProviding: AnyObject {
-    var previewSession: AVCaptureSession { get }
+    func attachPreview(to layer: AVCaptureVideoPreviewLayer)
 }
 
 /// Owns the non-Sendable AVCapture objects and their notifications.
 private actor CameraPipeline {
-    /// Shared with the preview layer (main thread), which only reads frames from it.
+    /// Touched by this actor (configuration), by `sessionQueue` (start/stop, which block) and by
+    /// `attach` (main thread, preview layer only), the split Apple's AVCam sample uses.
     nonisolated(unsafe) private let session = AVCaptureSession()
+    /// `startRunning()` / `stopRunning()` block for a noticeable time; they run here instead of on
+    /// the actor's cooperative thread.
+    private let sessionQueue = DispatchQueue(label: "com.souslens.ios.camera.session")
 
-    nonisolated var previewSession: AVCaptureSession { session }
+    nonisolated func attach(_ layer: AVCaptureVideoPreviewLayer) {
+        layer.session = session
+    }
+
+    private func onSessionQueue(_ work: @escaping @Sendable (AVCaptureSession) -> Void) async {
+        let box = SessionBox(session: session)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            sessionQueue.async {
+                work(box.session)
+                continuation.resume()
+            }
+        }
+    }
     private let photoOutput = AVCapturePhotoOutput()
     private var configured = false
     private let observers = NotificationObserverBag()
@@ -176,18 +193,18 @@ private actor CameraPipeline {
         })
     }
 
-    func start() throws {
+    func start() async throws {
         if !configured {
             try configure()
         }
-        if !session.isRunning {
-            session.startRunning()
+        await onSessionQueue { session in
+            if !session.isRunning { session.startRunning() }
         }
     }
 
-    func stop() {
-        if session.isRunning {
-            session.stopRunning()
+    func stop() async {
+        await onSessionQueue { session in
+            if session.isRunning { session.stopRunning() }
         }
     }
 
@@ -216,6 +233,11 @@ private actor CameraPipeline {
         session.addOutput(photoOutput)
         configured = true
     }
+}
+
+/// Carries the session onto `sessionQueue`; access there is serialised by the queue.
+private struct SessionBox: @unchecked Sendable {
+    let session: AVCaptureSession
 }
 
 /// Bridges the delegate callback into a continuation. Retained by AVFoundation until the callback.

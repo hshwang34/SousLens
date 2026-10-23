@@ -14,7 +14,7 @@ struct ScanReviewView: View {
                         VStack(alignment: .leading, spacing: Spacing.xxs) {
                             Text("Demo mode — not a real detection")
                                 .font(SLFont.headline)
-                            Text("These items come from a fixed sample, not from your photo.")
+                            Text("These items come from a fixed sample, not from your photo, so none are ticked. Tick only what you really have.")
                                 .font(SLFont.footnote)
                         }
                     } icon: {
@@ -122,7 +122,8 @@ private struct ReviewRowView: View {
                     HStack(spacing: Spacing.sm) {
                         TextField("Qty", text: $row.quantityText)
                             .keyboardType(.decimalPad)
-                            .frame(maxWidth: 64)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: Metrics.minTapTarget, alignment: .leading)
                             .accessibilityLabel("Quantity")
                         Picker("Unit", selection: $row.unit) {
                             Text("no unit").tag(String?.none)
@@ -172,6 +173,9 @@ private struct ReviewRowView: View {
                             .accessibilityIdentifier(choice == .merge ? "review.merge" : "review.keepBoth")
                         }
                     }
+                    Text(DuplicateChoice.hint)
+                        .font(SLFont.footnote)
+                        .foregroundStyle(SLColor.textSecondary)
                     if row.needsDuplicateChoice {
                         Text("Choose one to continue.")
                             .font(SLFont.footnote)

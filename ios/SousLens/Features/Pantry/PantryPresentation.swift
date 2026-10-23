@@ -53,6 +53,9 @@ enum DuplicateChoice: String, Sendable, Hashable, CaseIterable {
         }
     }
 
+    /// One line, shown wherever the choice is offered (manual editor and scan review).
+    static let hint = "Merge updates your existing item; Keep both adds a second one."
+
     func resolution(existingId: UUID) -> PantryResolution {
         switch self {
         case .merge: return .mergeInto(existingId)
@@ -176,8 +179,18 @@ struct PantryItemForm: Equatable, Sendable {
         )
     }
 
-    func patch() -> PantryItemPatch {
-        PantryItemPatch(rawLabel: cleanName, quantity: quantity.value, unit: unit, storageLocation: location, note: cleanNote)
+    /// Only what differs from `original`; a cleared field becomes JSON `null`. An unrecognised
+    /// storage location the user didn't touch is therefore never sent back.
+    func patch(from original: PantryItem) -> PantryItemPatch {
+        var patch = PantryItemPatch()
+        if cleanName != original.rawLabel { patch.rawLabel = cleanName }
+        let newQuantity = quantity.value
+        if newQuantity != original.quantity { patch.quantity = .some(newQuantity) }
+        if unit != original.unit { patch.unit = .some(unit) }
+        if location != original.storageLocation { patch.storageLocation = .some(location) }
+        let originalNote = original.note.flatMap { $0.isEmpty ? nil : $0 }
+        if cleanNote != originalNote { patch.note = .some(cleanNote) }
+        return patch
     }
 }
 

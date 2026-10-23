@@ -15,14 +15,15 @@ struct ReviewRow: Identifiable, Equatable {
     var duplicateName: String?
     var duplicateChoice: DuplicateChoice?
 
-    init(index: Int, candidate: PantryCandidate, existingName: String?) {
+    init(index: Int, candidate: PantryCandidate, existingName: String?, isDemo: Bool = false) {
         id = index
         self.candidate = candidate
         name = candidate.rawLabel.isEmpty ? (candidate.canonicalName ?? "") : candidate.rawLabel
         quantityText = QuantityInput.text(candidate.quantity)
         unit = candidate.unit
-        // "Not sure" (and anything the server marked ignore) starts unticked.
-        accepted = candidate.confidenceBin != .unknown && candidate.action == .add
+        // "Not sure" (and anything the server marked ignore) starts unticked; so does every demo
+        // (mock photo) candidate, which describes a sample, not the user's photo.
+        accepted = !isDemo && candidate.confidenceBin != .unknown && candidate.action == .add
         duplicateOf = candidate.duplicateOf
         duplicateName = candidate.duplicateOf == nil ? nil : (existingName ?? candidate.canonicalName ?? candidate.rawLabel)
     }
@@ -84,18 +85,30 @@ final class ScanReviewViewModel {
     /// Server-confirmed items once Confirm succeeds.
     private(set) var confirmed: [PantryItem]?
 
+    /// Provenance sent with every item: `voice` for dictated text, `manual` for typed text,
+    /// `photo` for photos.
+    let source: PantrySource
     private let service: PantryService
+    private let now: @MainActor () -> Date
     private var existingNames: [UUID: String]
 
-    init(observation: PantryObservation, existingItems: [PantryItem], service: PantryService) {
+    static let expiredMessage = "This scan expired — scan again."
+
+    init(observation: PantryObservation, existingItems: [PantryItem], service: PantryService,
+         source: PantrySource? = nil, now: @escaping @MainActor () -> Date = { Date() }) {
         self.observation = observation
         self.service = service
+        self.now = now
+        self.source = source ?? observation.mode.source
         let names = Dictionary(existingItems.map { ($0.id, $0.rawLabel) }, uniquingKeysWith: { first, _ in first })
         existingNames = names
+        let isDemo = observation.isDemoPhoto
         rows = observation.candidates.enumerated().map { index, candidate in
-            ReviewRow(index: index, candidate: candidate, existingName: candidate.duplicateOf.flatMap { names[$0] })
+            ReviewRow(index: index, candidate: candidate, existingName: candidate.duplicateOf.flatMap { names[$0] }, isDemo: isDemo)
         }
     }
+
+    var isExpired: Bool { now() >= observation.expiresAt }
 
     var unknowns: [String] { observation.unknowns }
     var showsDemoBanner: Bool { observation.isDemoPhoto }
@@ -148,12 +161,16 @@ final class ScanReviewViewModel {
     /// the listed conflicts and sends nothing more until the user answers.
     @discardableResult
     func confirm() async -> [PantryItem]? {
+        guard !isExpired else {
+            error = Self.expiredMessage
+            return nil
+        }
         guard canConfirm else {
             error = blockingMessage
             return nil
         }
         let accepted = acceptedRows
-        let items = accepted.map { $0.newItem(source: observation.mode.source) }
+        let items = accepted.map { $0.newItem(source: source) }
         isConfirming = true
         error = nil
         conflictMessage = nil
@@ -165,6 +182,9 @@ final class ScanReviewViewModel {
         } catch let api as APIError {
             if let conflicts = api.pantryConflicts, !conflicts.isEmpty {
                 applyConflicts(conflicts, sent: accepted)
+            } else if api.status == 404 || api.status == 410 {
+                // Sent with an observation id: the observation row has expired (24 h TTL).
+                error = Self.expiredMessage
             } else {
                 error = "Couldn’t add: \(api.pantryMessage)"
             }
