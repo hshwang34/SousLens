@@ -150,4 +150,4 @@ def format_quantity(quantity: float) -> str:
 
 def display_unit(unit: str, quantity: float) -> str:
     singular, plural = _DISPLAY.get(unit, (unit, unit if unit.endswith("s") else unit + "s"))
-    return singular if quantity == 1 else plural
+    return singular if quantity <= 1 else plural

@@ -187,3 +187,13 @@ def draft_payload(**overrides: object) -> dict[str, object]:
     }
     payload.update(overrides)
     return payload
+
+
+@pytest.fixture
+async def ingredients(engine: AsyncEngine, clean_tables: None) -> None:
+    """Seed ``fixtures/ingredients.json`` (brief 004) so pantry/fit tests get aliases."""
+    from app.scripts.seed import seed_ingredients
+
+    async with make_sessionmaker(engine)() as session:
+        await seed_ingredients(session, FIXTURES_DIR)
+        await session.commit()

@@ -15,7 +15,7 @@ from starlette.requests import Request
 
 from app.core.errors import PayloadTooLarge, UnsupportedMediaType, ValidationError
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BYTES = 5_000_000  # matches the iOS client's limit
 MULTIPART_OVERHEAD = 64 * 1024
 MAX_BODY_BYTES = MAX_IMAGE_BYTES + MULTIPART_OVERHEAD
 MAX_PARTS = 8

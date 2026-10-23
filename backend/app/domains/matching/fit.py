@@ -25,7 +25,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.domains.matching.dictionary import IngredientDictionary, clean
+from app.domains.matching.dictionary import IngredientDictionary, clean, singularize_word
 from app.domains.matching.normalize import Normalized, alternatives, normalize
 from app.domains.matching.units import (
     canonical_unit,
@@ -121,7 +121,9 @@ def _plural(name: str) -> str:
 def _describe(quantity: float, unit: str, name: str) -> str:
     q = format_quantity(quantity)
     if unit == "count":
-        return f"{q} {name if quantity == 1 else _plural(name)}"
+        head, _, last = name.rpartition(" ")
+        singular = f"{head} {singularize_word(last)}".strip()
+        return f"{q} {singular if quantity == 1 else _plural(singular)}"
     return f"{q} {display_unit(unit, quantity)} of {name}"
 
 

@@ -117,9 +117,10 @@ class NewItem(_Strict):
 
     @model_validator(mode="after")
     def _estimate_only_for_photo_counts(self) -> NewItem:
-        # Contract: true only when the quantity came from a photo count (PRD §8.3).
+        # Contract: true only when the quantity came from a photo count (PRD §8.3). A client
+        # that cleared or typed the amount may still echo the candidate's flag; it is dropped.
         if self.quantity_is_estimate and (self.source != "photo" or self.quantity is None):
-            raise ValueError("quantity_is_estimate is only allowed for a photo quantity")
+            self.quantity_is_estimate = False
         return self
 
 
