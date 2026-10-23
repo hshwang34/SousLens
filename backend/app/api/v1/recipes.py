@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from app.core.errors import NotFound
@@ -19,6 +19,8 @@ from app.domains.matching.service import fit_version
 from app.domains.recipes import drafts, service
 from app.domains.recipes.draft_schemas import Draft, check_text
 from app.domains.recipes.schemas import RecipeDetail, RecipePage, SaveStatus, UnpublishResult
+from app.domains.sessions import service as sessions_service
+from app.domains.sessions.schemas import VariationAdaptation, VariationOut
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
@@ -109,3 +111,25 @@ async def fit_recipe_version(
     return await fit_version(
         session, user, _uuid_or_404(version_id, "Recipe version"), datetime.now(UTC)
     )
+
+
+@versions_router.get("/{version_id}/my-variation", response_model=VariationOut)
+async def get_my_variation(version_id: str, session: DbSession, user: CurrentUser) -> VariationOut:
+    """My private saved changes for this version's recipe (COOK-08); only swaps that still
+    apply to this version. 404 when there are none."""
+    variation, usable = await sessions_service.get_variation(
+        session, user, _uuid_or_404(version_id, "Recipe version")
+    )
+    return VariationOut(
+        adaptations=[VariationAdaptation.model_validate(a) for a in usable],
+        saved_at=variation.saved_at,
+        recipe_version_id=variation.recipe_version_id,
+    )
+
+
+@versions_router.delete("/{version_id}/my-variation", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_variation(version_id: str, session: DbSession, user: CurrentUser) -> Response:
+    await sessions_service.delete_variation(
+        session, user, _uuid_or_404(version_id, "Recipe version")
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

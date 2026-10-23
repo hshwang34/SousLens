@@ -15,7 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.errors import NotFound
-from app.db.models import Recipe, RecipeDraft, RecipeVersion, Save, User, Visibility
+from app.db.models import (
+    CookingSession,
+    Recipe,
+    RecipeDraft,
+    RecipeVersion,
+    Save,
+    User,
+    Visibility,
+)
 from app.domains.recipes import drafts
 from app.domains.recipes.pagination import FeedCursor
 from app.domains.recipes.schemas import (
@@ -209,11 +217,9 @@ async def get_accessible_version(
 
     * the recipe is currently public and published (visible to everyone), or
     * the caller owns the recipe, or
-    * the caller has a Save on the recipe.
-
-    TODO(Slice 3, brief 005): also allow a caller who owns a cooking session that pins this
-    ``recipe_version_id`` (``cooking_sessions.recipe_version_id == version.id``); sessions
-    must keep reading their pinned version after an unpublish.
+    * the caller has a Save on the recipe, or
+    * the caller owns a cooking session that pins this exact version (brief 005), so a
+      session keeps reading its pinned version after an unpublish.
 
     Anything else is a 404 indistinguishable from an unknown id. Returns
     ``(version, recipe, saved_by_caller)``. Shared by ``GET /recipe-versions/{id}`` and
@@ -233,7 +239,16 @@ async def get_accessible_version(
     is_saved = recipe.id in saved
     is_public = recipe.visibility == Visibility.PUBLIC and recipe.latest_version_id is not None
     if not (is_public or recipe.owner_user_id == user.id or is_saved):
-        raise NotFound("Recipe version not found")
+        pinned = await session.scalar(
+            select(CookingSession.id)
+            .where(
+                CookingSession.owner_user_id == user.id,
+                CookingSession.recipe_version_id == version.id,
+            )
+            .limit(1)
+        )
+        if pinned is None:
+            raise NotFound("Recipe version not found")
     return version, recipe, is_saved
 
 

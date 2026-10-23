@@ -1,5 +1,7 @@
 """Seed ``fixtures/ingredients.json`` and ``fixtures/seeded_recipes/*.json``, idempotently.
 
+* Substitution rules (brief 005): ``fixtures/substitution_rules.json`` upserted by target
+  canonical name; stale rows removed.
 * Ingredients (brief 004): upserted by ``canonical_name`` with deterministic uuid5 ids; aliases,
   category, allergens, qualifiers and ambiguity links are refreshed on every run. Rows no longer
   in the file are deleted (pantry items keep their ``normalized_name``; ``ingredient_id`` goes
@@ -34,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.engine import make_engine, make_sessionmaker
-from app.db.models import Ingredient, Recipe, RecipeVersion, Visibility
+from app.db.models import Ingredient, Recipe, RecipeVersion, SubstitutionRule, Visibility
 from app.domains.matching.dictionary import (
     IngredientDictionary,
     entries_from_file,
@@ -43,6 +45,7 @@ from app.domains.matching.dictionary import (
 )
 from app.domains.recipes.drafts import search_text_for
 from app.domains.recipes.schemas import IngredientOut, StepOut
+from app.domains.substitutions.rules import read_rules_file
 from app.domains.users import service as users_service
 
 log = logging.getLogger("souslens.seed")
@@ -237,8 +240,59 @@ async def seed_ingredients(session: AsyncSession, fixtures_dir: Path) -> Ingredi
     )
 
 
+@dataclass(frozen=True, slots=True)
+class RuleSeedResult:
+    created: int
+    updated: int
+    unchanged: int
+    removed: int
+
+
+async def seed_substitution_rules(session: AsyncSession, fixtures_dir: Path) -> RuleSeedResult:
+    """Upsert ``fixtures/substitution_rules.json`` (brief 005) keyed on the target's dictionary
+    canonical name; rows no longer in the file are deleted. Every target must be a dictionary
+    entry, so a typo fails the seed instead of silently never matching."""
+    data = read_rules_file(fixtures_dir)
+    dictionary = IngredientDictionary.build(entries_from_file(read_dictionary_file(fixtures_dir)))
+    unknown = [r.target for r in data.rules if dictionary.get(r.target) is None]
+    if unknown:
+        raise ValueError(f"substitution rule targets not in the dictionary: {unknown}")
+    existing = {
+        row.target: row for row in (await session.execute(select(SubstitutionRule))).scalars()
+    }
+    created = updated = unchanged = 0
+    for rule in data.rules:
+        payload = rule.model_dump(mode="json")
+        row = existing.get(rule.target)
+        if row is None:
+            session.add(
+                SubstitutionRule(
+                    id=seed_uuid("substitution_rule", rule.target),
+                    target=rule.target,
+                    rule_json=payload,
+                )
+            )
+            created += 1
+        elif row.rule_json != payload:
+            row.rule_json = payload
+            updated += 1
+        else:
+            unchanged += 1
+    wanted = {r.target for r in data.rules}
+    stale = [row for target, row in existing.items() if target not in wanted]
+    for row in stale:
+        await session.delete(row)
+    await session.flush()
+    log.info(
+        "seeded substitution rules",
+        extra={"rules_created": created, "rules_updated": updated, "rules_unchanged": unchanged},
+    )
+    return RuleSeedResult(created, updated, unchanged, len(stale))
+
+
 async def seed_fixtures(session: AsyncSession, fixtures_dir: Path) -> list[SeedResult]:
     await seed_ingredients(session, fixtures_dir)
+    await seed_substitution_rules(session, fixtures_dir)
     results = [await seed_recipe(session, fixture) for fixture in load_fixtures(fixtures_dir)]
     await session.commit()
     return results

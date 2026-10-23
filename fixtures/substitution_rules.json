@@ -1,0 +1,910 @@
+{
+  "version": 1,
+  "note": "Vetted seed substitutions (PRD §12.3). target = dictionary canonical name. Rules come first, then the SubstitutionAdvisor unless exhaustive. never = candidates that must never be offered for this target (e.g. gochugaru for gochujang). no_swap_reason = an explicit no-substitute entry.",
+  "rules": [
+    {
+      "target": "mirin",
+      "suggestions": [
+        {
+          "candidate": "rice vinegar + a pinch of sugar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tbsp rice vinegar + 1/2 tsp sugar per 1 tbsp mirin",
+          "rationale": "Mirin brings mild acidity and sweetness; vinegar plus sugar covers both.",
+          "impact_flavor": "Sharper and less rounded; no rice-wine depth.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Slightly sharper; add the sugar.",
+            "Not an exact match."
+          ]
+        },
+        {
+          "candidate": "dry sherry + a pinch of sugar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tbsp dry sherry + 1/2 tsp sugar per 1 tbsp mirin",
+          "rationale": "Sherry gives a similar fortified-wine depth; sugar replaces mirin's sweetness.",
+          "impact_flavor": "Nuttier, less sweet.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Contains alcohol.",
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "cucumber",
+      "suggestions": [],
+      "exhaustive": false,
+      "never": [],
+      "no_swap_reason": "The cucumber is the whole dish here; nothing keeps the same crunch. Add cucumbers to your shopping list or pick another recipe."
+    },
+    {
+      "target": "salt",
+      "suggestions": [
+        {
+          "candidate": "fine sea salt or table salt",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "about half the volume (finer grains pack more salt per spoon)",
+          "rationale": "Same seasoning, different grain size.",
+          "impact_flavor": "Same.",
+          "impact_texture": "None.",
+          "confidence": "high",
+          "risks": [
+            "Fine salt is much saltier by volume; add half, then taste."
+          ]
+        }
+      ],
+      "exhaustive": true,
+      "never": []
+    },
+    {
+      "target": "garlic",
+      "suggestions": [
+        {
+          "candidate": "garlic powder",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1/8 tsp garlic powder per clove",
+          "rationale": "Gives the garlic flavour without fresh cloves.",
+          "impact_flavor": "Flatter and less sharp; no sweet toasted notes.",
+          "impact_texture": "No slices or bits.",
+          "confidence": "medium",
+          "risks": [
+            "Burns quickly in hot oil; add it with liquid, not to a dry hot pan.",
+            "Where garlic is the star (garlic pasta) the dish will taste very different."
+          ]
+        },
+        {
+          "candidate": "shallot",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 small shallot per 2 cloves, minced",
+          "rationale": "An allium with a similar sweet-sharp base.",
+          "impact_flavor": "Milder and sweeter.",
+          "impact_texture": "Softer pieces.",
+          "confidence": "low",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "rice vinegar",
+      "suggestions": [
+        {
+          "candidate": "apple cider vinegar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1, plus a pinch of sugar",
+          "rationale": "Similar acidity; slightly fruitier.",
+          "impact_flavor": "Fruitier and a little sharper.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Add a pinch of sugar to soften the edge."
+          ]
+        },
+        {
+          "candidate": "lemon juice",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Fresh acidity in place of vinegar.",
+          "impact_flavor": "Brighter, citrusy.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "soy sauce",
+      "suggestions": [
+        {
+          "candidate": "tamari",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Japanese soy sauce, usually brewed without wheat.",
+          "impact_flavor": "Slightly richer, less sharp.",
+          "impact_texture": "None.",
+          "confidence": "high",
+          "risks": [
+            "Still soy. Most tamari is wheat-free but not all; check the label."
+          ]
+        },
+        {
+          "candidate": "coconut aminos + a pinch of salt",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1, then a pinch of salt",
+          "rationale": "Soy-free savoury seasoning.",
+          "impact_flavor": "Sweeter and much less salty.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Taste and add salt; it is far less salty than soy sauce."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "sesame oil",
+      "suggestions": [
+        {
+          "candidate": "neutral oil + crushed toasted sesame seeds",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tbsp neutral oil + 1 tsp crushed toasted sesame seeds",
+          "rationale": "Carries some toasted sesame aroma.",
+          "impact_flavor": "Less intense nutty aroma.",
+          "impact_texture": "A few seed bits.",
+          "confidence": "medium",
+          "risks": [
+            "Still sesame."
+          ]
+        },
+        {
+          "candidate": "neutral oil",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Keeps the fat in the dressing or marinade.",
+          "impact_flavor": "Loses the toasted nutty flavour.",
+          "impact_texture": "None.",
+          "confidence": "low",
+          "risks": [
+            "Not an exact match; the dish will taste plainer."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "sugar",
+      "suggestions": [
+        {
+          "candidate": "honey",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "3/4 of the amount",
+          "rationale": "Sweetness that dissolves easily.",
+          "impact_flavor": "Floral; slightly sweeter.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Not for babies under 1 year old."
+          ]
+        },
+        {
+          "candidate": "maple syrup",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "3/4 of the amount",
+          "rationale": "Liquid sweetener that dissolves instantly.",
+          "impact_flavor": "Light caramel note.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "chili crisp",
+      "suggestions": [
+        {
+          "candidate": "red pepper flakes in a little neutral oil",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "a pinch of flakes + 1 tsp neutral oil",
+          "rationale": "The creator suggests flakes; oil carries the heat.",
+          "impact_flavor": "Heat without the crunchy fried bits.",
+          "impact_texture": "No crunch.",
+          "confidence": "high",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "sesame seeds",
+      "suggestions": [
+        {
+          "candidate": "toasted pumpkin seeds, chopped",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "A toasted, nutty crunch on top.",
+          "impact_flavor": "Milder, less nutty.",
+          "impact_texture": "Bigger, crunchier bits.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "cilantro",
+      "suggestions": [
+        {
+          "candidate": "flat-leaf parsley",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "A fresh green herb finish.",
+          "impact_flavor": "Grassier, no citrus note.",
+          "impact_texture": "Same.",
+          "confidence": "medium",
+          "risks": []
+        },
+        {
+          "candidate": "scallion greens, thinly sliced",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Fresh green finish.",
+          "impact_flavor": "Mild onion flavour.",
+          "impact_texture": "Same.",
+          "confidence": "medium",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "egg",
+      "suggestions": [],
+      "exhaustive": false,
+      "never": [],
+      "no_swap_reason": "The eggs are the structure of this dish; no swap keeps it. Choose another recipe, or skip the egg topping where the recipe treats it as a topping."
+    },
+    {
+      "target": "tomato",
+      "suggestions": [
+        {
+          "candidate": "cherry tomatoes, halved",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1 by weight",
+          "rationale": "Same fruit, often riper out of season.",
+          "impact_flavor": "Sweeter.",
+          "impact_texture": "More skin; holds shape longer.",
+          "confidence": "high",
+          "risks": []
+        },
+        {
+          "candidate": "canned whole peeled tomatoes, drained",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "one 14-oz (400 g) can per 3 tomatoes",
+          "rationale": "Ripe tomato flavour any time of year.",
+          "impact_flavor": "Cooked, deeper flavour.",
+          "impact_texture": "Softer, breaks down faster.",
+          "confidence": "medium",
+          "risks": [
+            "Saucier result; cook a minute longer to thicken."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "neutral oil",
+      "suggestions": [
+        {
+          "candidate": "light olive oil",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Refined olive oil tolerates high heat.",
+          "impact_flavor": "Very mild.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": [
+            "Extra-virgin olive oil smokes earlier; use light/refined for high-heat steps."
+          ]
+        },
+        {
+          "candidate": "peanut oil",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "High smoke point, neutral taste.",
+          "impact_flavor": "Very mild.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "scallion",
+      "suggestions": [
+        {
+          "candidate": "chives",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Closest mild allium.",
+          "impact_flavor": "Milder.",
+          "impact_texture": "More delicate.",
+          "confidence": "high",
+          "risks": [
+            "No white part to fry; add a little onion for that step."
+          ]
+        },
+        {
+          "candidate": "red onion, very thinly sliced",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1/4 small onion per 2 scallions",
+          "rationale": "Same onion family.",
+          "impact_flavor": "Sharper.",
+          "impact_texture": "Crunchier.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "shaoxing wine",
+      "suggestions": [
+        {
+          "candidate": "dry sherry",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "The usual stand-in, and the creator's own suggestion.",
+          "impact_flavor": "Very close.",
+          "impact_texture": "None.",
+          "confidence": "high",
+          "risks": [
+            "Contains alcohol."
+          ]
+        },
+        {
+          "candidate": "dry white wine",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Adds wine depth.",
+          "impact_flavor": "Lighter, more acidic.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Contains alcohol.",
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "ketchup",
+      "suggestions": [
+        {
+          "candidate": "tomato paste + a pinch of sugar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tsp tomato paste + 1/4 tsp sugar",
+          "rationale": "Concentrated tomato for colour and depth.",
+          "impact_flavor": "Less sweet and tangy.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "cooked rice",
+      "suggestions": [
+        {
+          "candidate": "freshly cooked rice, spread on a tray to cool for 15 minutes",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Same rice; drying it limits steaming.",
+          "impact_flavor": "Same.",
+          "impact_texture": "Softer; fried rice crisps less.",
+          "confidence": "medium",
+          "risks": [
+            "Fresh rice clumps; break it up well and don't crowd the pan."
+          ]
+        },
+        {
+          "candidate": "cooked jasmine or long-grain rice",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Any cooked white rice works.",
+          "impact_flavor": "Lighter, more fragrant.",
+          "impact_texture": "Less sticky.",
+          "confidence": "high",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "spaghetti",
+      "suggestions": [
+        {
+          "candidate": "linguine",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "The creator's own alternative.",
+          "impact_flavor": "Same.",
+          "impact_texture": "Slightly flatter strands.",
+          "confidence": "high",
+          "risks": []
+        },
+        {
+          "candidate": "gluten-free spaghetti",
+          "kind": "structural_substitution",
+          "ratio_or_amount": "1:1",
+          "rationale": "Same shape without wheat.",
+          "impact_flavor": "Slightly different.",
+          "impact_texture": "Softens fast and the pasta water is less starchy, so the sauce emulsifies less.",
+          "confidence": "medium",
+          "risks": [
+            "Start tasting 2 minutes early.",
+            "Check the label for 'gluten-free' certification."
+          ]
+        },
+        {
+          "candidate": "penne",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Any dried pasta works with the sauce.",
+          "impact_flavor": "Same.",
+          "impact_texture": "Sauce clings less evenly.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "olive oil",
+      "suggestions": [
+        {
+          "candidate": "neutral oil",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Keeps the cold-oil garlic method.",
+          "impact_flavor": "Loses the fruity olive flavour.",
+          "impact_texture": "Same.",
+          "confidence": "medium",
+          "risks": [
+            "The dish will taste plainer."
+          ]
+        },
+        {
+          "candidate": "butter + a splash of neutral oil",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "3 tbsp butter + 1 tbsp neutral oil per 1/4 cup",
+          "rationale": "Rich fat for the sauce.",
+          "impact_flavor": "Richer, nutty.",
+          "impact_texture": "Silkier.",
+          "confidence": "low",
+          "risks": [
+            "Butter browns quickly; keep the heat very low with the garlic."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "red pepper flakes",
+      "suggestions": [
+        {
+          "candidate": "gochugaru",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Korean chili flakes.",
+          "impact_flavor": "Milder, fruitier, smokier.",
+          "impact_texture": "Same.",
+          "confidence": "medium",
+          "risks": []
+        },
+        {
+          "candidate": "cayenne",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1/8 tsp per 1/2 tsp flakes",
+          "rationale": "Ground chili heat.",
+          "impact_flavor": "Hotter and sharper.",
+          "impact_texture": "No flakes.",
+          "confidence": "medium",
+          "risks": [
+            "Very hot; start with less."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "gochugaru",
+      "suggestions": [
+        {
+          "candidate": "red pepper flakes",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "half the amount",
+          "rationale": "Dried chili flakes.",
+          "impact_flavor": "Hotter, less fruity.",
+          "impact_texture": "Coarser.",
+          "confidence": "low",
+          "risks": [
+            "Much hotter; start with half.",
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": [
+        "gochujang"
+      ],
+      "note": "Gochujang (fermented paste) is not a swap for gochugaru (chili flakes)."
+    },
+    {
+      "target": "parsley",
+      "suggestions": [
+        {
+          "candidate": "chives",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "A fresh green finish.",
+          "impact_flavor": "Mild onion.",
+          "impact_texture": "Same.",
+          "confidence": "medium",
+          "risks": []
+        },
+        {
+          "candidate": "basil",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1, torn",
+          "rationale": "A fresh herb finish.",
+          "impact_flavor": "Sweet, anise-like.",
+          "impact_texture": "Same.",
+          "confidence": "low",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "parmesan",
+      "suggestions": [
+        {
+          "candidate": "pecorino romano",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "a little less than the amount (it is saltier)",
+          "rationale": "Hard grating cheese.",
+          "impact_flavor": "Sharper and saltier.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": [
+            "Contains milk."
+          ]
+        },
+        {
+          "candidate": "a spoon of butter",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tbsp butter",
+          "rationale": "The creator's own suggestion for richness.",
+          "impact_flavor": "Rich but not cheesy.",
+          "impact_texture": "Silky.",
+          "confidence": "medium",
+          "risks": [
+            "Contains milk."
+          ]
+        },
+        {
+          "candidate": "nutritional yeast",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1-2 tbsp",
+          "rationale": "Dairy-free savoury, cheesy note.",
+          "impact_flavor": "Nutty, savoury, not cheese.",
+          "impact_texture": "Slightly grainy.",
+          "confidence": "low",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "lemon",
+      "suggestions": [
+        {
+          "candidate": "lime",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "zest of 1/2 lime per 1/2 lemon",
+          "rationale": "Citrus zest brightens the same way.",
+          "impact_flavor": "More floral.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        },
+        {
+          "candidate": "a few drops of rice vinegar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1/2 tsp",
+          "rationale": "A touch of acidity.",
+          "impact_flavor": "Sour without citrus aroma.",
+          "impact_texture": "None.",
+          "confidence": "low",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "chicken thigh",
+      "suggestions": [
+        {
+          "candidate": "chicken breast, cut the same size",
+          "kind": "structural_substitution",
+          "ratio_or_amount": "1:1 by weight",
+          "rationale": "Same meat, leaner cut.",
+          "impact_flavor": "Milder.",
+          "impact_texture": "Leaner; dries out if overcooked.",
+          "confidence": "medium",
+          "risks": [
+            "Cooks faster; start checking 2 minutes early."
+          ]
+        },
+        {
+          "candidate": "extra-firm tofu, pressed",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1 by weight",
+          "rationale": "A vegetarian option that takes the glaze.",
+          "impact_flavor": "Takes on the marinade; no meat flavour.",
+          "impact_texture": "Softer; browns less.",
+          "confidence": "low",
+          "risks": [
+            "Press 15 minutes; marinate 10 minutes only.",
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "gochujang",
+      "suggestions": [
+        {
+          "candidate": "red miso + gochugaru + a little honey",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "per 1 tbsp gochujang: 2 tsp red miso + 1 tsp gochugaru + 1/2 tsp honey",
+          "rationale": "Approximates gochujang's fermented funk, chili heat and sweetness.",
+          "impact_flavor": "Close in balance but clearly different; less rounded.",
+          "impact_texture": "Thinner paste.",
+          "confidence": "low",
+          "risks": [
+            "Not a true equivalent: gochujang is a fermented chili-rice paste and nothing replicates it exactly.",
+            "Gochugaru alone is NOT a swap for gochujang; it adds heat but no paste, sweetness or ferment.",
+            "Miso contains soy and some contains barley; check the label."
+          ]
+        },
+        {
+          "candidate": "sriracha + red miso",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "per 1 tbsp gochujang: 2 tsp sriracha + 1 tsp red miso",
+          "rationale": "Heat and garlic from sriracha, depth from miso.",
+          "impact_flavor": "Sharper, more garlicky, less sweet.",
+          "impact_texture": "Thinner.",
+          "confidence": "low",
+          "risks": [
+            "Not a true equivalent; the glaze will be thinner and more vinegary.",
+            "Miso contains soy; check the label."
+          ]
+        }
+      ],
+      "exhaustive": true,
+      "never": [
+        "gochugaru",
+        "red pepper flakes",
+        "chili paste"
+      ],
+      "note": "Gochujang has no true equivalent. Gochugaru (flakes) is not a swap for gochujang (paste)."
+    },
+    {
+      "target": "honey",
+      "suggestions": [
+        {
+          "candidate": "maple syrup",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Liquid sweetener for the glaze.",
+          "impact_flavor": "Lighter caramel note.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        },
+        {
+          "candidate": "brown sugar + a splash of water",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 tbsp brown sugar + 1 tsp water per 1 tbsp",
+          "rationale": "Sweetness and colour.",
+          "impact_flavor": "Molasses note.",
+          "impact_texture": "Glaze may be thinner.",
+          "confidence": "medium",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "ginger",
+      "suggestions": [
+        {
+          "candidate": "ground ginger",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1/4 tsp ground per 1 tbsp fresh",
+          "rationale": "Ginger warmth without fresh root.",
+          "impact_flavor": "Warmer, less zingy.",
+          "impact_texture": "No fibres.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "kimchi",
+      "suggestions": [
+        {
+          "candidate": "sauerkraut + gochugaru",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1 cup sauerkraut + 1 tsp gochugaru per cup of kimchi",
+          "rationale": "Fermented sour cabbage plus chili.",
+          "impact_flavor": "Sour and spicy but no garlic-ginger ferment.",
+          "impact_texture": "Finer, softer.",
+          "confidence": "low",
+          "risks": [
+            "Not a true equivalent; the dish will taste noticeably different."
+          ]
+        }
+      ],
+      "exhaustive": true,
+      "never": []
+    },
+    {
+      "target": "kimchi juice",
+      "suggestions": [
+        {
+          "candidate": "rice vinegar + gochugaru + a pinch of sugar",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "per 3 tbsp: 1 tbsp rice vinegar + 2 tbsp water + 1/2 tsp gochugaru + a pinch of sugar",
+          "rationale": "The creator adds rice vinegar for tang; chili adds colour.",
+          "impact_flavor": "Sour-spicy, less funky.",
+          "impact_texture": "None.",
+          "confidence": "medium",
+          "risks": [
+            "Not an exact match."
+          ]
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "spam",
+      "suggestions": [
+        {
+          "candidate": "ham, diced",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "Cured, salty pork that fries well.",
+          "impact_flavor": "Less salty.",
+          "impact_texture": "Firmer.",
+          "confidence": "medium",
+          "risks": []
+        },
+        {
+          "candidate": "smoked tofu, diced",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "A vegetarian, smoky option.",
+          "impact_flavor": "Smoky, no meat.",
+          "impact_texture": "Softer.",
+          "confidence": "low",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "bacon",
+      "suggestions": [
+        {
+          "candidate": "pancetta",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1:1",
+          "rationale": "Cured pork belly, unsmoked.",
+          "impact_flavor": "Less smoky.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        },
+        {
+          "candidate": "smoked tofu, diced",
+          "kind": "flavor_adaptation",
+          "ratio_or_amount": "1:1",
+          "rationale": "A vegetarian, smoky option.",
+          "impact_flavor": "Smoky, no meat.",
+          "impact_texture": "Softer.",
+          "confidence": "low",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    },
+    {
+      "target": "roasted seaweed",
+      "suggestions": [
+        {
+          "candidate": "nori, toasted and crumbled with a pinch of salt",
+          "kind": "close_equivalent",
+          "ratio_or_amount": "1 sheet",
+          "rationale": "Same seaweed, unseasoned.",
+          "impact_flavor": "Less salty and oily.",
+          "impact_texture": "Same.",
+          "confidence": "high",
+          "risks": []
+        }
+      ],
+      "exhaustive": false,
+      "never": []
+    }
+  ]
+}

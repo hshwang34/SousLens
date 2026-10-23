@@ -163,12 +163,24 @@ class StepSummary(StrictModel):
     warnings: list[str] = Field(default_factory=list)
     creator_note: str | None = None
     source_clip_id: str | None = None
+    ingredient_refs: list[str] = Field(default_factory=list)
+    suggested_timer_label: str | None = None
+    suggested_timer_seconds: int | None = Field(default=None, ge=1)
+
+
+class IngredientSummary(StrictModel):
+    id: str
+    name: str
+    amount: str | None = Field(default=None, description="Original quantity + unit, as written")
 
 
 class ApprovedSubstitution(StrictModel):
     ingredient_id: str
     replacement: str
     reason: str
+    adaptation_id: str | None = None
+    original: str | None = None
+    ratio_or_amount: str | None = None
 
 
 class TimerSummary(StrictModel):
@@ -189,6 +201,9 @@ class CoachRequest(StrictModel):
     title: str
     servings: int = Field(ge=1)
     ingredients: list[str] = Field(default_factory=list, description="Original amounts + units")
+    ingredient_items: list[IngredientSummary] = Field(default_factory=list)
+    creator_notes: list[str] = Field(default_factory=list)
+    dietary_warnings: list[str] = Field(default_factory=list)
     current_step: StepSummary
     previous_step: StepSummary | None = None
     next_step: StepSummary | None = None
@@ -202,8 +217,16 @@ class CoachRequest(StrictModel):
     visual_observation_id: str | None = None
 
 
+# Contract names (brief 005) plus the earlier internal aliases (recipe_ingredient → ingredient,
+# substitution → adaptation), which the ask endpoint maps.
 GroundingType = Literal[
-    "recipe_step", "recipe_ingredient", "creator_note", "visual_observation", "substitution"
+    "recipe_step",
+    "ingredient",
+    "recipe_ingredient",
+    "creator_note",
+    "adaptation",
+    "substitution",
+    "visual_observation",
 ]
 
 
