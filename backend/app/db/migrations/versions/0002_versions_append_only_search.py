@@ -121,13 +121,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('uq_recipe_drafts_one_open_per_recipe', table_name='recipe_drafts')
+    # IF EXISTS throughout: 0002 was revised before release, so a dev database may carry an
+    # earlier draft of it (without the index or the snapshot columns).
+    op.execute("DROP INDEX IF EXISTS uq_recipe_drafts_one_open_per_recipe")
     op.execute("DROP TRIGGER IF EXISTS recipe_versions_no_truncate ON recipe_versions")
     op.execute("DROP FUNCTION IF EXISTS recipe_versions_no_truncate()")
     op.execute("DROP TRIGGER IF EXISTS recipe_versions_immutable ON recipe_versions")
     op.execute("DROP FUNCTION IF EXISTS recipe_versions_immutable()")
-    op.drop_column('recipe_versions', 'cover_image_url')
-    op.drop_column('recipe_versions', 'tags')
-    op.drop_column('recipe_versions', 'summary')
-    op.drop_column('recipe_versions', 'title')
-    op.drop_column('recipe_versions', 'search_text')
+    op.execute(
+        "ALTER TABLE recipe_versions "
+        "DROP COLUMN IF EXISTS cover_image_url, DROP COLUMN IF EXISTS tags, "
+        "DROP COLUMN IF EXISTS summary, DROP COLUMN IF EXISTS title, "
+        "DROP COLUMN IF EXISTS search_text"
+    )
