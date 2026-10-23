@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, StateConflict, ValidationError
@@ -280,24 +281,53 @@ def slugify(title: str) -> str:
     return slug[:SLUG_MAX].strip("-") or "recipe"
 
 
-async def _unique_slug(session: AsyncSession, base: str) -> str:
-    taken = set(
-        (
-            await session.execute(
-                select(Recipe.slug).where(
-                    (Recipe.slug == base) | Recipe.slug.like(f"{base}-%", escape="\\")
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
+SLUG_ATTEMPTS = 5
+
+
+async def _taken_slugs(session: AsyncSession, base: str) -> set[str]:
+    pattern = base.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "-%"
+    stmt = select(Recipe.slug).where((Recipe.slug == base) | Recipe.slug.like(pattern, escape="\\"))
+    return set((await session.execute(stmt)).scalars().all())
+
+
+def _candidates(base: str, taken: set[str]):
     if base not in taken:
-        return base
+        yield base
     suffix = 2
-    while f"{base}-{suffix}" in taken:
+    while True:
+        candidate = f"{base}-{suffix}"
+        if candidate not in taken:
+            yield candidate
         suffix += 1
-    return f"{base}-{suffix}"
+
+
+async def _insert_recipe_with_unique_slug(session: AsyncSession, user: User, title: str) -> Recipe:
+    """First publish of a recipe: pick ``base``, ``base-2``, ... without ever 500ing.
+
+    1. ``pg_advisory_xact_lock(hashtext(base))`` serialises concurrent first publishes that
+       share a base slug (held until commit, so the loser sees the winner's row).
+    2. Belt and braces: each INSERT runs in a SAVEPOINT and a unique violation moves on to the
+       next free suffix, at most ``SLUG_ATTEMPTS`` times, then 409 ``STATE_CONFLICT``.
+    """
+    base = slugify(title)
+    await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(base))))
+    taken = await _taken_slugs(session, base)
+    candidates = _candidates(base, taken)
+    for _ in range(SLUG_ATTEMPTS):
+        recipe = Recipe(
+            owner_user_id=user.id,
+            slug=next(candidates),
+            visibility=Visibility.PRIVATE,
+            title=title,
+        )
+        try:
+            async with session.begin_nested():
+                session.add(recipe)
+                await session.flush()
+        except IntegrityError:
+            continue
+        return recipe
+    raise StateConflict("Could not allocate a unique link for this recipe; please retry")
 
 
 def search_text_for(title: str, ingredients: list[dict[str, Any]]) -> str:
@@ -347,14 +377,7 @@ async def publish(
         if recipe is None:
             raise NotFound("Recipe not found")
     if recipe is None:
-        recipe = Recipe(
-            owner_user_id=user.id,
-            slug=await _unique_slug(session, slugify(title)),
-            visibility=Visibility.PRIVATE,
-            title=title,
-        )
-        session.add(recipe)
-        await session.flush()
+        recipe = await _insert_recipe_with_unique_slug(session, user, title)
 
     next_number = (
         await session.execute(

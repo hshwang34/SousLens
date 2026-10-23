@@ -180,11 +180,6 @@ async def test_concurrent_publish_of_two_drafts_for_one_recipe_gets_distinct_ver
     assert latest == 4
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="DEFECT: _unique_slug is check-then-insert; concurrent first publishes with the same "
-    "title hit uq_recipes_slug and return 500 INTERNAL.",
-)
 async def test_concurrent_first_publishes_with_same_title_never_500(
     client: AsyncClient,
 ) -> None:
