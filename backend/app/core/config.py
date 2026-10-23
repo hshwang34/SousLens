@@ -66,6 +66,10 @@ class Settings(BaseSettings):
 
     fixtures_dir: Path = REPO_DIR / "fixtures"
 
+    # Public share link base (brief 003): share_url = f"{share_url_base}/{recipe_id}".
+    # The domain is not live yet; the iOS app also accepts souslens://recipe/{recipe_id}.
+    share_url_base: str = "https://souslens.app/r"
+
     cors_origins: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")

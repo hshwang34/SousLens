@@ -141,7 +141,9 @@ async def test_session_event_idempotency_key_unique_per_session_only(
     user = await users_service.get_or_create_by_email(
         db_session, email="u@example.com", display_name=None, auth_provider="dev"
     )
-    version_id = (await db_session.execute(text("select id from recipe_versions"))).scalar_one()
+    version_id = (
+        await db_session.execute(text("select id from recipe_versions limit 1"))
+    ).scalar_one()
     assert Recipe and RecipeVersion
     s1 = CookingSession(owner_user_id=user.id, recipe_version_id=version_id)
     s2 = CookingSession(owner_user_id=user.id, recipe_version_id=version_id)
@@ -163,17 +165,18 @@ async def test_session_event_idempotency_key_unique_per_session_only(
 
 
 async def test_published_version_content_untouched_after_reseed(db_session: AsyncSession) -> None:
-    await seed_fixtures(db_session, FIXTURES_DIR)
-    await db_session.execute(
-        text("update recipe_versions set ingredient_json='[]'::jsonb")
-    )  # simulate a drifted/edited row: reseed must NOT overwrite published content
+    first = await seed_fixtures(db_session, FIXTURES_DIR)
+    # Simulate an operator-repaired row (the append-only trigger needs the explicit unlock):
+    # a reseed must NOT overwrite published content.
+    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("update recipe_versions set ingredient_json='[]'::jsonb"))
     await db_session.commit()
     again = await seed_fixtures(db_session, FIXTURES_DIR)
     assert not any(r.created_version for r in again)
     count, ing = (
         await db_session.execute(
-            text("select count(*), min(ingredient_json::text) from recipe_versions")
+            text("select count(*), max(ingredient_json::text) from recipe_versions")
         )
     ).one()
-    assert count == 1 and ing == "[]"
+    assert count == len(first) == 5 and ing == "[]"
     assert datetime.now(UTC)

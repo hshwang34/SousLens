@@ -1,0 +1,117 @@
+{
+  "slug": "cucumber-salad",
+  "title": "Quick Cucumber Salad",
+  "summary": "Smashed cucumbers salted for ten minutes, then tossed in a garlicky soy, vinegar and sesame dressing. No heat, no knife skills, ready in fifteen minutes. The first recipe to try if you have never cooked.",
+  "tags": ["salad", "no-cook", "vegan", "beginner", "side"],
+  "cover_image_url": null,
+  "published_at": "2026-10-11T00:00:00Z",
+  "creator": { "display_name": "SousLens Kitchen" },
+  "servings": 4,
+  "prep_minutes": 15,
+  "cook_minutes": 0,
+  "ingredients": [
+    { "id": "ing-1", "name": "persian cucumber", "quantity": 6, "unit": null, "optional": false, "preparation": null, "notes": "or 2 english cucumbers; thin-skinned, seedless types work best" },
+    { "id": "ing-2", "name": "kosher salt", "quantity": 1, "unit": "tsp", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-3", "name": "garlic", "quantity": 2, "unit": "clove", "optional": false, "preparation": "finely minced or grated", "notes": null },
+    { "id": "ing-4", "name": "rice vinegar", "quantity": 2, "unit": "tbsp", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-5", "name": "soy sauce", "quantity": 1, "unit": "tbsp", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-6", "name": "toasted sesame oil", "quantity": 1, "unit": "tbsp", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-7", "name": "sugar", "quantity": 1, "unit": "tsp", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-8", "name": "chili crisp", "quantity": 1, "unit": "tbsp", "optional": true, "preparation": null, "notes": "or a pinch of red pepper flakes" },
+    { "id": "ing-9", "name": "toasted sesame seeds", "quantity": 1, "unit": "tsp", "optional": true, "preparation": null, "notes": null },
+    { "id": "ing-10", "name": "cilantro", "quantity": 2, "unit": "tbsp", "optional": true, "preparation": "roughly chopped", "notes": null }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Rinse the cucumbers and trim the ends. Lay each one on the board and press down firmly with the flat side of a wide knife or the bottom of a jar until it cracks open along its length.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 3,
+      "success_cues": ["Cucumber splits into craggy, uneven pieces with lots of exposed flesh"],
+      "warnings": ["If smashing with a knife, keep the blade edge pointed away from you and your fingers clear of the flat side."],
+      "creator_note": "Smashing instead of slicing is what makes the dressing cling. Rough, torn surfaces grab far more flavour than clean cuts.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Tear or cut the smashed cucumbers into bite-sized chunks. Put them in a colander, toss with the salt and leave them to drain for 10 minutes.",
+      "ingredient_refs": ["ing-1", "ing-2"],
+      "estimated_minutes": 10,
+      "success_cues": ["Beads of water appear on the cucumber and a small puddle drips out of the colander", "Pieces feel slightly limp and bend without snapping"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "While the cucumbers drain, stir together the garlic, rice vinegar, soy sauce, sesame oil and sugar in a large bowl until the sugar dissolves.",
+      "ingredient_refs": ["ing-3", "ing-4", "ing-5", "ing-6", "ing-7"],
+      "estimated_minutes": 2,
+      "success_cues": ["No sugar grains left when you drag a spoon across the bottom of the bowl", "Dressing tastes sharp and salty on its own; the cucumber will dilute it"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Shake the colander, then gently squeeze handfuls of cucumber to get rid of the extra water. Do not rinse. Add the cucumber to the bowl of dressing.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 1,
+      "success_cues": ["Cucumber pieces look slightly translucent at the edges and no longer drip"],
+      "warnings": [],
+      "creator_note": "Squeezing out the water is what keeps the salad crunchy instead of soupy after ten minutes on the table.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Toss well so every piece is coated. Add the chili crisp if using and toss once more. Taste a piece; add a splash more vinegar if it is flat or a pinch of sugar if it is too sharp.",
+      "ingredient_refs": ["ing-8"],
+      "estimated_minutes": 1,
+      "success_cues": ["Dressing clings to the torn surfaces instead of sitting in the bottom of the bowl", "A piece tastes salty, sour and nutty all at once"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-6",
+      "order": 5,
+      "instruction": "Pile into a serving bowl and top with the sesame seeds and cilantro. Serve within 30 minutes while it is still crunchy.",
+      "ingredient_refs": ["ing-9", "ing-10"],
+      "estimated_minutes": 1,
+      "success_cues": ["Pieces still snap when bitten"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "This is the recipe I give people who say they cannot cook. There is no heat and nothing can burn; the only skill is tasting and adjusting at the end.",
+    "It is best eaten the day it is made. Leftovers turn watery but still taste good spooned over rice."
+  ],
+  "dietary_warnings": [
+    "Contains soy and sesame. Soy sauce usually contains wheat; use tamari for gluten-free. Raw garlic is strong; halve it if serving children."
+  ]
+}
