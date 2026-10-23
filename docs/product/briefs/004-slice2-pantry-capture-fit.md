@@ -40,4 +40,26 @@ reconciliation (P1).
 None blocking; PRD §8.3 bins (>0.85 / 0.6–0.85 / <0.6) are the defaults.
 
 ## Engineering decisions
-- (filled in while building)
+- Contract committed to main before branching (`004-api-contract.md`); fit lives at
+  `POST /v1/recipe-versions/{id}/fit` with the same access rule as reading that version.
+- **Backend**: migration 0003 drops the Slice 0 `source_image_key` column (no image column anywhere),
+  renames source `transcript`→`voice` and status `applied`→`confirmed`, adds CHECKs, and keeps
+  `source_observation_id` without a foreign key so provenance survives the 24 h purge.
+- Photos are read with a hard size cap and processed in memory; a test fails on any write-mode file
+  open or tempfile use during an upload above Starlette's spool threshold.
+- Ingredient dictionary (`fixtures/ingredients.json`, 132 entries) is seeded idempotently; a seed with
+  two entries claiming one alias fails. Entries list the qualifiers they imply, so "dried cilantro"
+  ≠ cilantro and "cooked rice" ≠ rice; allergen-bearing words are never stripped (peanut oil ≠
+  vegetable oil). Generic names ("chicken", "pepper") match as uncertain in both directions.
+- Fit: an insufficient amount in a known unit is uncertain (PRD §17.2 scenario 3); recipe-only units
+  ("clove") are never converted; "X or Y" matches either; several pantry entries may add up.
+- Transcript parser never invents numbers ("some", "a few", packaging words → unknown amount).
+- Per-user advisory locks serialise pantry writes and observation creation; the rate limit counts
+  only created observations. Revisit holding the lock during the provider call in Slice 4.
+- Malformed provider output: retry once, then 502 `AI_OUTPUT_INVALID` (retryable).
+- Same ingredient twice in one request with no existing match → 422 (not 409); `merge_into` must
+  target the caller's own item with the same normalised name; `quantity_is_estimate` is forced false
+  unless the item is a photo item with a quantity; any quantity PATCH clears it.
+- Transcript eval: the 15 fixtures score precision/recall 1.0 against the deterministic mock parser.
+  They were written alongside the parser, so this proves coverage of listed cases, not real
+  speech-to-text accuracy (that is a Slice 4 measurement).
