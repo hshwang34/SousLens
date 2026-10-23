@@ -1,6 +1,6 @@
 # 004 — Slice 2: pantry capture and fit
 
-**Status:** in review · **Owner:** PM · **PR:** backend #5, iOS #6 · **Updated:** 2026-10-23
+**Status:** shipped (PRs #5, #6 merged 2026-10-23) · **Owner:** PM · **PR:** backend #5, iOS #6 · **Updated:** 2026-10-23
 
 ## Problem
 The learner cannot tell whether they can make a recipe with what they have. PRD §16 Slice 2,
