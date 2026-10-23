@@ -153,21 +153,28 @@ final class DraftEditorViewModel: Identifiable {
     /// Waits for the debounced autosave and any in-flight save (tests, publish).
     func flush() async {
         autosaveTask?.cancel()
-        await saveTask?.value
-        if dirty { await save() }
+        await save()
+        // Another save may have started meanwhile (the autosave task, or an edit made during the
+        // last PATCH). Keep going until nothing is in flight and nothing is waiting; a failed save
+        // stops the loop (its status stays `.failed`).
+        while saveTask != nil || (dirty && saveStatus == .pending) {
+            autosaveTask?.cancel()
+            await save()
+        }
     }
 
     private func save() async {
-        // Wait for any in-flight save; yield so its caller can clear `saveTask` before we re-check.
+        // One PATCH at a time. The in-flight task clears `saveTask` itself before it finishes, so
+        // this loop always makes progress (no spin on an already-completed task).
         while let inFlight = saveTask {
             await inFlight.value
-            await Task.yield()
         }
         guard dirty else { return }
         dirty = false
         saveStatus = .saving
         let patch = form.patch()
         let task = Task { [service, id] in
+            defer { self.saveTask = nil }
             do {
                 let updated = try await service.updateDraft(id: id, patch)
                 self.draft = updated
@@ -188,7 +195,6 @@ final class DraftEditorViewModel: Identifiable {
         }
         saveTask = task
         await task.value
-        saveTask = nil
         if dirty, case .pending = saveStatus {
             scheduleAutosave()
         }
