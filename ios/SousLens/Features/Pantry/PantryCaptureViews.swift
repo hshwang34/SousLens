@@ -9,8 +9,11 @@ struct SpeakCaptureView: View {
     @Bindable var model: SpeakCaptureViewModel
     let onObservation: (PantryObservation) -> Void
 
-    @State private var pressing = false
+    /// Resets to false on release *and* when the system cancels the gesture (scroll, sheet
+    /// dismissal, interruption), so the microphone can never stay on after the finger lifts.
+    @GestureState private var pressing = false
     @FocusState private var fieldFocused: Bool
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -55,6 +58,10 @@ struct SpeakCaptureView: View {
         }
         .navigationTitle("Speak")
         .navigationBarTitleDisplayMode(.inline)
+        .scrollDismissesKeyboard(.interactively)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { model.endListening() }
+        }
         .onChange(of: model.observation) { _, observation in
             if let observation {
                 model.observation = nil
@@ -85,17 +92,16 @@ struct SpeakCaptureView: View {
             .contentShape(Circle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        guard !pressing else { return }
-                        pressing = true
-                        fieldFocused = false
-                        Task { await model.beginListening() }
-                    }
-                    .onEnded { _ in
-                        pressing = false
-                        model.endListening()
-                    }
+                    .updating($pressing) { _, state, _ in state = true }
             )
+            .onChange(of: pressing) { _, isPressed in
+                if isPressed {
+                    fieldFocused = false
+                    Task { await model.beginListening() }
+                } else {
+                    model.endListening()
+                }
+            }
             .accessibilityElement()
             .accessibilityLabel(model.isListening ? "Stop listening" : "Hold to talk")
             .accessibilityHint("Double-tap to start listening, double-tap again to stop")
