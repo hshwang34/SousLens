@@ -64,3 +64,12 @@ gated PR still wait. *Lives in:* PR bodies #1/#2.
 session carries the PM's authority for brief approval, prioritisation, stacking, and merging
 fully green PRs, but not for deploys, deletions, account changes or spend. Merges are CI-gated:
 the eng lead merges when every check is green and the gate passed.
+
+#11 · 2026-10-23 · **Slice 2 product defaults (PRD-derived, logged rather than asked).** Photo scans
+in mock mode are labelled "Demo mode — not a real detection" (PRD Appendix C). Duplicate pantry
+items are always resolved by the user (merge or keep both), never silently (PAN-04). A pantry item
+last confirmed more than 14 days ago counts as "uncertain" for recipe fit. Pantry photos are
+processed in memory and never stored; candidate lists expire after 24 h. Confidence bins are
+PRD §8.3's (>0.85 high, 0.6–0.85 medium, <0.6 unknown) and are labelled as estimates. On iOS,
+"Type instead" and "Choose photo" sit beside the mic and camera so the flow works without a
+microphone or camera (and in the simulator). *Lives in:* `docs/product/briefs/004-api-contract.md`.

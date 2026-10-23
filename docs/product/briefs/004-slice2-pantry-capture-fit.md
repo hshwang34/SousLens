@@ -1,6 +1,6 @@
 # 004 — Slice 2: pantry capture and fit
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-23
 
 ## Problem
 The learner cannot tell whether they can make a recipe with what they have. PRD §16 Slice 2,
@@ -25,7 +25,7 @@ Learner at home, hands dirty, phone propped up.
 - [ ] `app/domains/matching`: normalization (casefold, singular/plural, alias dictionary seeded in
       `ingredients`), qualifiers preserved, available/uncertain/missing/optional_missing, coverage
       score with per-ingredient explanation, unit conversion tables without mass↔volume guessing
-      (FIT-01..03, §12.1–12.2). `POST /v1/recipes/{version_id}/fit`.
+      (FIT-01..03, §12.1–12.2). `POST /v1/recipe-versions/{version_id}/fit` (see 004-api-contract.md).
 - [ ] iOS: Pantry tab (list, add/edit/delete, provenance badges), mic push-to-talk → transcript →
       Scan review, photo capture → Scan review, item-level accept/reject; Pantry fit screen with
       rationale.
