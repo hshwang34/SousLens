@@ -132,7 +132,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         if typeInstead.waitForExistence(timeout: 3) { typeInstead.tap() }
         let transcript = app.descendants(matching: .any)["speak.transcript"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "no transcript field")
-        type("chicken thighs, two onions, gochujang and honey", into: transcript, in: app)
+        type("chicken thighs, two onions, 3 tbsp gochujang and honey", into: transcript, in: app)
         attach(app, "11-pantry-typed")
 
         let findItems = app.buttons["speak.findItems"]
@@ -171,12 +171,11 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["fit.headline"].waitForExistence(timeout: 15), "Pantry fit did not load")
         attach(app, "14-fit")
-        // gochujang is matched. The contract (§12.1, FIT-02) puts a matched item with no pantry
-        // quantity under Uncertain when the recipe states an amount, so accept either section;
-        // it must never be Missing.
+        // "3 tbsp gochujang" meets the recipe's 3 tbsp, so it must be Available (FIT-01/02).
+        // Chicken thighs and onions were said without the recipe's amounts → Uncertain, not Missing.
         let gochujang = NSPredicate(format: "label CONTAINS[c] 'gochujang'")
-        let matched = collect(in: app, identifiers: ["fit.available", "fit.uncertain"], matching: gochujang)
-        XCTAssertFalse(matched.isEmpty, "gochujang is not shown as Available (or Uncertain)")
+        let available = collect(in: app, identifiers: ["fit.available"], matching: gochujang)
+        XCTAssertFalse(available.isEmpty, "gochujang (3 tbsp in pantry) is not shown as Available")
         XCTAssertTrue(collect(in: app, identifiers: ["fit.missing"], matching: gochujang).isEmpty, "gochujang listed as Missing")
         let leftover = collect(in: app, identifiers: ["fit.missing", "fit.uncertain"], matching: NSPredicate(value: true))
         XCTAssertFalse(leftover.isEmpty, "expected something Missing or Uncertain (soy sauce, garlic, …)")
