@@ -1,6 +1,6 @@
 # 003 — Slice 1: browse, author, publish, share
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
 
 ## Problem
 Creators cannot yet put a recipe into the system; learners cannot save one. PRD §16 Slice 1,
@@ -35,7 +35,7 @@ Video import/extraction (Slice 5), forks/follows (P1), ratings.
 
 ## Open product questions
 1. **Who may publish in the pilot?** — Options: A (any signed-in tester), B (allowlisted creators).
-   **Recommendation:** A, pilot is 5–10 known people. → *Answer:* A (default; raise if you disagree).
+   **Recommendation:** A, pilot is 5–10 known people. → *Answer:* A — any signed-in tester may publish (DECISIONS #7).
 
 ## Engineering decisions
 - Built as two PRs (backend, iOS) stacked on the Slice 0 branches (DECISIONS #8); shared contract in
