@@ -159,7 +159,8 @@ async def list_public(
             )
         )
     if tag:
-        stmt = stmt.where(Recipe.tags.contains([tag.strip()]))
+        # Tags are stored trimmed + lowercased (draft_schemas); match case-insensitively.
+        stmt = stmt.where(Recipe.tags.contains([tag.strip().lower()]))
     if cursor:
         key = FeedCursor.decode(cursor)
         stmt = stmt.where(

@@ -216,6 +216,9 @@ async def test_tag_filter(client: AsyncClient, db_session: AsyncSession) -> None
     response = await client.get("/v1/recipes", params={"tag": "korean"})
     assert slugs(response) == [GOCHUJANG, "kimchi-fried-rice"]
     assert slugs(await client.get("/v1/recipes", params={"tag": "no-cook"})) == ["cucumber-salad"]
+    # Stored tags are lowercased, so the filter must be case-insensitive.
+    mixed = await client.get("/v1/recipes", params={"tag": "  Korean "})
+    assert slugs(mixed) == [GOCHUJANG, "kimchi-fried-rice"]
 
 
 async def test_cursor_pagination_walks_every_page_once(
