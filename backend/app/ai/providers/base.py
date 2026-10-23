@@ -76,9 +76,15 @@ class ExtractedRecipeDraft(StrictModel):
 
 
 class PantryObservationRequest(StrictModel):
+    """``image_bytes`` is the in-memory upload (never written anywhere, PRIV-01); it is excluded
+    from dumps and reprs so it cannot leak into logs. ``image_ref`` is a fixture key for the mock
+    provider only."""
+
     mode: Literal["transcript", "photo"]
     transcript: str | None = None
-    image_ref: str | None = Field(default=None, description="Transient storage key or filename")
+    image_ref: str | None = Field(default=None, description="Mock fixture key or filename")
+    image_bytes: bytes | None = Field(default=None, exclude=True, repr=False)
+    image_mime_type: str | None = None
 
 
 class PantryCandidate(StrictModel):
@@ -97,6 +103,9 @@ class PantryObservation(StrictModel):
     candidates: list[PantryCandidate]
     requires_confirmation: Literal[True] = True
     notes: list[str] = Field(default_factory=list)
+    unknowns: list[str] = Field(
+        default_factory=list, description="What could not be identified (PRD §8.3)"
+    )
 
 
 # --- 8.4 Substitution ---------------------------------------------------------------------

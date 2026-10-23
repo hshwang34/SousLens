@@ -73,3 +73,13 @@ processed in memory and never stored; candidate lists expire after 24 h. Confide
 PRD §8.3's (>0.85 high, 0.6–0.85 medium, <0.6 unknown) and are labelled as estimates. On iOS,
 "Type instead" and "Choose photo" sit beside the mic and camera so the flow works without a
 microphone or camera (and in the simulator). *Lives in:* `docs/product/briefs/004-api-contract.md`.
+
+#12 · 2026-10-23 · **Pantry provenance follows how the user entered it:** typed text is "Manual",
+dictated text is "Voice" (also when edited after dictation), photos are "Photo" (PAN-05). Items from
+a mock (demo) photo scan start unticked so demo data never lands in a real pantry by default.
+*Lives in:* iOS ScanReviewViewModel; backend stores the client-sent source.
+
+#13 · 2026-10-23 · **A photo-estimated quantity never makes a recipe line "available".** It caps
+the line at "uncertain" with "the amount is an estimate from a photo — check it", and estimates
+are never added up. Typing your own amount removes the estimate. *Why:* PRD §8.3 ("mark estimates
+as such; ask the user to confirm") and FIT-03 (never claim "you can make it" on uncertain data).

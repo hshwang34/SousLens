@@ -77,8 +77,16 @@ class ExtractionStatus(enum.StrEnum):
 
 class PantrySource(enum.StrEnum):
     MANUAL = "manual"
-    TRANSCRIPT = "transcript"
+    VOICE = "voice"
     PHOTO = "photo"
+
+
+class StorageLocation(enum.StrEnum):
+    FRIDGE = "fridge"
+    FREEZER = "freezer"
+    PANTRY = "pantry"
+    COUNTER = "counter"
+    OTHER = "other"
 
 
 class ObservationMode(enum.StrEnum):
@@ -87,8 +95,13 @@ class ObservationMode(enum.StrEnum):
 
 
 class ObservationStatus(enum.StrEnum):
+    # pending_provider: rate-limit slot reserved, provider call in flight (no candidates yet).
+    # failed: the provider call failed; the row still counts toward the hourly limit and is
+    # purged by the 24 h TTL like any other.
+    PENDING_PROVIDER = "pending_provider"
+    FAILED = "failed"
     PENDING = "pending"
-    APPLIED = "applied"
+    CONFIRMED = "confirmed"
     DISCARDED = "discarded"
     EXPIRED = "expired"
 
@@ -308,8 +321,15 @@ class Save(CreatedAtMixin, Base):
     )
 
 
-class Ingredient(CreatedAtMixin, Base):
-    """Controlled dictionary with aliases (scallion = green onion; gochujang ≠ gochugaru)."""
+class Ingredient(TimestampMixin, Base):
+    """Controlled dictionary with aliases (scallion = green onion; gochujang ≠ gochugaru).
+
+    Seeded from ``fixtures/ingredients.json`` by ``make seed`` (upsert by ``canonical_name``).
+    ``qualifiers`` are the identity qualifiers the entry implies (``cooked`` for cooked rice,
+    ``fresh`` for cilantro); a name carrying any other identity qualifier never resolves to it.
+    ``ambiguous_with`` lists entries a generic name may mean ("chicken" → chicken thigh), which
+    recipe fit reports as uncertain rather than available.
+    """
 
     __tablename__ = "ingredients"
 
@@ -318,10 +338,35 @@ class Ingredient(CreatedAtMixin, Base):
     aliases_json: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     category: Mapped[str | None] = mapped_column(String(64))
     allergen_flags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    qualifiers: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    ambiguous_with: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+
+
+STORAGE_LOCATION_VALUES = tuple(str(m.value) for m in StorageLocation)
 
 
 class PantryItem(TimestampMixin, Base):
+    """User-confirmed pantry truth (PAN-01/05). Only written after explicit confirmation."""
+
     __tablename__ = "pantry_items"
+    __table_args__ = (
+        Index("ix_pantry_items_owner_normalized_name", "owner_user_id", "normalized_name"),
+        CheckConstraint(
+            "storage_location IS NULL OR storage_location IN ("
+            + ", ".join(f"'{v}'" for v in STORAGE_LOCATION_VALUES)
+            + ")",
+            name="storage_location_valid",
+        ),
+        CheckConstraint("quantity IS NULL OR quantity >= 0", name="quantity_non_negative"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="confidence_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -334,18 +379,26 @@ class PantryItem(TimestampMixin, Base):
     normalized_name: Mapped[str] = mapped_column(String(120), nullable=False)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
     unit: Mapped[str | None] = mapped_column(String(32))
-    storage_location: Mapped[str | None] = mapped_column(String(64))
+    quantity_is_estimate: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    storage_location: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
     source: Mapped[PantrySource] = mapped_column(
         _enum(PantrySource, "pantry_source"), nullable=False
     )
     confidence: Mapped[float | None] = mapped_column(Float)
+    # Provenance only (no FK): observation rows are purged after 24 h, the link outlives them.
+    source_observation_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True))
     last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PantryObservation(CreatedAtMixin, Base):
-    """Uncommitted candidates with a short TTL. Never pantry truth."""
+    """Uncommitted candidates with a 24 h TTL. Never pantry truth, and never an image: only the
+    candidate JSON is stored (PRIV-01, PRD §13.2)."""
 
     __tablename__ = "pantry_observations"
+    __table_args__ = (Index("ix_pantry_observations_owner_created", "owner_user_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -354,14 +407,21 @@ class PantryObservation(CreatedAtMixin, Base):
     mode: Mapped[ObservationMode] = mapped_column(
         _enum(ObservationMode, "observation_mode"), nullable=False
     )
+    provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="mock", server_default=text("'mock'")
+    )
     candidate_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    unknowns_json: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
     status: Mapped[ObservationStatus] = mapped_column(
         _enum(ObservationStatus, "observation_status"),
         nullable=False,
         default=ObservationStatus.PENDING,
     )
-    source_image_key: Mapped[str | None] = mapped_column(Text)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
 
 
 class CookingSession(TimestampMixin, Base):

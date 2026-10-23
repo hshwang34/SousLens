@@ -4,15 +4,18 @@ owner actions on a published recipe (edit → new draft, unpublish; REC-05/06)."
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
-from pydantic import AfterValidator
+from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from app.core.errors import NotFound
 from app.core.security import CurrentUser, OptionalUser, SettingsDep
 from app.db.engine import DbSession
+from app.domains.matching.fit import FitResult
+from app.domains.matching.service import fit_version
 from app.domains.recipes import drafts, service
 from app.domains.recipes.draft_schemas import Draft, check_text
 from app.domains.recipes.schemas import RecipeDetail, RecipePage, SaveStatus, UnpublishResult
@@ -90,4 +93,19 @@ async def get_recipe_version(
         _uuid_or_404(version_id, "Recipe version"),
         user=user,
         share_url_base=settings.share_url_base,
+    )
+
+
+class FitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+@versions_router.post("/{version_id}/fit", response_model=FitResult)
+async def fit_recipe_version(
+    version_id: str, session: DbSession, user: CurrentUser, body: FitRequest | None = None
+) -> FitResult:
+    """Available / uncertain / missing per ingredient against the caller's confirmed pantry
+    (FIT-01..03). Same access rule as ``GET /recipe-versions/{id}``."""
+    return await fit_version(
+        session, user, _uuid_or_404(version_id, "Recipe version"), datetime.now(UTC)
     )
