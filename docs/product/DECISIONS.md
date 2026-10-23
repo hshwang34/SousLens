@@ -96,3 +96,12 @@ as such; ask the user to confirm") and FIT-03 (never claim "you can make it" on 
 - The coach answers typed questions only in Slice 3, from the recipe as published; food-safety
   questions always point to a thermometer / verified guidance.
 *Lives in:* `docs/product/briefs/005-api-contract.md`.
+
+#15 · 2026-10-23 · **The coach never answers "is it done / safe to eat?" in its own words.** Any
+doneness or safety question gets a fixed answer: what the recipe says to look for, how to check
+with a thermometer, and "I can't tell from a description or photo whether food is cooked". For
+high-risk foods (poultry, pork, ground meat, fish, eggs) this notice is attached to any question
+that isn't plain navigation. "Free-from" labels (lactose-free, gluten-free, nut-free) never clear an
+allergy match; the app asks you to check the label instead. Allergy entries the app can't
+recognise are shown back to you as not-checked. *Why:* PRD §13.1 hard requirements; reviewer
+found model-prose filtering bypassable and allergy matching too narrow.
