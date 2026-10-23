@@ -1,6 +1,6 @@
 # 003 — Slice 1: browse, author, publish, share
 
-**Status:** in review · **Owner:** PM · **PR:** backend #3, iOS #4 · **Updated:** 2026-10-23
+**Status:** shipped (PRs #3, #4 merged 2026-10-23) · **Owner:** PM · **PR:** backend #3, iOS #4 · **Updated:** 2026-10-23
 
 ## Problem
 Creators cannot yet put a recipe into the system; learners cannot save one. PRD §16 Slice 1,
