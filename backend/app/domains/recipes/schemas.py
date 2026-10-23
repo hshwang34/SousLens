@@ -63,6 +63,15 @@ class RecipeCard(BaseModel):
     published_at: datetime
     recipe_version_id: uuid.UUID
     version_number: int
+    saved: bool | None = None
+    """``true``/``false`` for an authenticated caller, ``null`` when anonymous (REC-02)."""
+
+
+class MyRecipe(RecipeCard):
+    """``GET /me/recipes`` row: a card plus the owner-only state (brief 003 contract)."""
+
+    visibility: Literal["public", "private", "unlisted"]
+    has_open_draft: bool
 
 
 class RecipeDetail(BaseModel):
@@ -85,11 +94,31 @@ class RecipeDetail(BaseModel):
     creator_notes: list[str]
     dietary_warnings: list[str]
     published_at: datetime
+    share_url: str
+    saved: bool | None = None
 
 
 class RecipePage(BaseModel):
     items: list[RecipeCard]
     next_cursor: str | None
+
+
+class RecipeCardList(BaseModel):
+    items: list[RecipeCard]
+
+
+class MyRecipeList(BaseModel):
+    items: list[MyRecipe]
+
+
+class SaveStatus(BaseModel):
+    recipe_id: uuid.UUID
+    saved: bool
+
+
+class UnpublishResult(BaseModel):
+    recipe_id: uuid.UUID
+    visibility: Literal["private"] = "private"
 
 
 class RecipeContent(BaseModel):

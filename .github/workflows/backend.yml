@@ -5,6 +5,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -15,7 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # ffmpeg is not needed until Slice 5 (video extraction); re-add it there. The apt mirror
+      # hung twice on 2026-10-23 and blocked an otherwise green PR.
       - working-directory: backend
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test

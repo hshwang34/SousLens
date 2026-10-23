@@ -1,0 +1,131 @@
+{
+  "slug": "egg-and-tomato-stir-fry",
+  "title": "Egg and Tomato Stir Fry",
+  "summary": "The Chinese home-cooking classic: soft-scrambled eggs folded through jammy, sweet-savoury tomatoes. Ten minutes, two pantry staples, and it teaches you to read egg texture by eye.",
+  "tags": ["chinese", "egg", "vegetarian", "weeknight", "quick"],
+  "cover_image_url": null,
+  "published_at": "2026-10-12T00:00:00Z",
+  "creator": { "display_name": "SousLens Kitchen" },
+  "servings": 2,
+  "prep_minutes": 5,
+  "cook_minutes": 8,
+  "ingredients": [
+    { "id": "ing-1", "name": "egg", "quantity": 4, "unit": null, "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-2", "name": "ripe tomato", "quantity": 3, "unit": null, "optional": false, "preparation": "cored and cut into wedges", "notes": "about 1 lb; soft, in-season tomatoes break down best" },
+    { "id": "ing-3", "name": "neutral oil", "quantity": 3, "unit": "tbsp", "optional": false, "preparation": "divided", "notes": null },
+    { "id": "ing-4", "name": "scallion", "quantity": 2, "unit": null, "optional": false, "preparation": "sliced", "notes": null },
+    { "id": "ing-5", "name": "sugar", "quantity": 1, "unit": "tsp", "optional": false, "preparation": null, "notes": "balances the tomato acidity" },
+    { "id": "ing-6", "name": "kosher salt", "quantity": 0.75, "unit": "tsp", "optional": false, "preparation": "divided", "notes": null },
+    { "id": "ing-7", "name": "shaoxing wine", "quantity": 1, "unit": "tsp", "optional": true, "preparation": null, "notes": "or dry sherry; goes into the eggs" },
+    { "id": "ing-8", "name": "toasted sesame oil", "quantity": 0.5, "unit": "tsp", "optional": true, "preparation": null, "notes": null },
+    { "id": "ing-9", "name": "ketchup", "quantity": 1, "unit": "tsp", "optional": true, "preparation": null, "notes": "for a deeper tomato colour when tomatoes are pale" },
+    { "id": "ing-10", "name": "cooked rice", "quantity": 2, "unit": "cup", "optional": true, "preparation": null, "notes": "for serving" }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Crack the eggs into a bowl with a quarter teaspoon of the salt and the shaoxing wine if using. Beat until no streaks of white remain.",
+      "ingredient_refs": ["ing-1", "ing-6", "ing-7"],
+      "estimated_minutes": 2,
+      "success_cues": ["Mixture is an even pale yellow with a thin layer of bubbles on top"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Heat 2 tablespoons of the oil in a wok or skillet over high heat until it shimmers and just begins to smoke. Pour in the eggs all at once.",
+      "ingredient_refs": ["ing-3", "ing-1"],
+      "estimated_minutes": 1,
+      "success_cues": ["Eggs puff and bubble dramatically at the edges the instant they land"],
+      "warnings": ["Oil near its smoke point: keep the handle turned in and have the eggs ready before the pan is hot."],
+      "creator_note": "Hot pan, plenty of oil. Timid heat gives you flat, rubbery eggs.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Let the eggs set for about 10 seconds, then push them from the edges to the centre in big, slow folds. Stop while they are still glossy and a little wet, then slide them onto a plate.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 1,
+      "success_cues": ["Large soft curds with a wet-looking sheen on the surface", "Eggs jiggle slightly on the plate; they are about 80 percent cooked"],
+      "warnings": [],
+      "creator_note": "Pull the eggs earlier than you think. They go back in the pan at the end and finish in the tomato juice.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Return the pan to high heat with the remaining tablespoon of oil. Add the scallion whites and the tomato wedges and stir-fry for 2 to 3 minutes, pressing on the wedges to help them release their juice.",
+      "ingredient_refs": ["ing-3", "ing-4", "ing-2"],
+      "estimated_minutes": 3,
+      "success_cues": ["Tomato skins wrinkle and start to slip off", "A pool of red juice forms in the bottom of the pan"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Add the sugar, the remaining half teaspoon of salt and the ketchup if using. Cook 1 minute more until the juice thickens slightly into a loose sauce.",
+      "ingredient_refs": ["ing-5", "ing-6", "ing-9"],
+      "estimated_minutes": 1,
+      "success_cues": ["Sauce coats the back of a spoon instead of running off like water", "Wedges hold their shape but are soft all the way through"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-6",
+      "order": 5,
+      "instruction": "Return the eggs to the pan and fold gently, just enough to coat them in sauce and finish cooking, about 30 seconds. Turn off the heat and add the sesame oil and scallion greens.",
+      "ingredient_refs": ["ing-1", "ing-8", "ing-4"],
+      "estimated_minutes": 1,
+      "success_cues": ["Egg curds are set through with no raw liquid, still soft and tender", "Everything is glossy red with eggs in visible yellow pieces, not scrambled into the sauce"],
+      "warnings": ["Eggs must be cooked until no liquid egg remains, especially for anyone pregnant, elderly, very young or immunocompromised."],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-7",
+      "order": 6,
+      "instruction": "Serve immediately over hot rice.",
+      "ingredient_refs": ["ing-10"],
+      "estimated_minutes": 1,
+      "success_cues": ["Sauce soaks into the rice at the edges"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "The dish is about texture: soft, barely set eggs against collapsing tomato. If your eggs come out firm, you held them in the pan too long at step 3.",
+    "Winter tomatoes are watery and pale; the optional ketchup and an extra pinch of sugar make up the difference."
+  ],
+  "dietary_warnings": [
+    "Contains egg. Sesame oil and shaoxing wine are optional; shaoxing wine contains wheat and alcohol."
+  ]
+}

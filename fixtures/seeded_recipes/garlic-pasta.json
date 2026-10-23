@@ -1,0 +1,129 @@
+{
+  "slug": "garlic-pasta",
+  "title": "Simple Garlic Pasta",
+  "summary": "Spaghetti with slow-toasted garlic, olive oil and a splash of starchy pasta water that turns into a glossy sauce. Five ingredients, one pot and one pan, and a timer so the pasta comes out al dente every time.",
+  "tags": ["italian", "pasta", "vegetarian", "weeknight", "pantry"],
+  "cover_image_url": null,
+  "published_at": "2026-10-13T00:00:00Z",
+  "creator": { "display_name": "SousLens Kitchen" },
+  "servings": 2,
+  "prep_minutes": 5,
+  "cook_minutes": 15,
+  "ingredients": [
+    { "id": "ing-1", "name": "spaghetti", "quantity": 8, "unit": "oz", "optional": false, "preparation": null, "notes": "or linguine; check the package for its own al dente time" },
+    { "id": "ing-2", "name": "garlic", "quantity": 6, "unit": "clove", "optional": false, "preparation": "thinly sliced", "notes": "slices, not minced, so they toast instead of burn" },
+    { "id": "ing-3", "name": "extra-virgin olive oil", "quantity": 0.25, "unit": "cup", "optional": false, "preparation": null, "notes": null },
+    { "id": "ing-4", "name": "red pepper flakes", "quantity": 0.5, "unit": "tsp", "optional": true, "preparation": null, "notes": null },
+    { "id": "ing-5", "name": "kosher salt", "quantity": 1.5, "unit": "tbsp", "optional": false, "preparation": null, "notes": "for the pasta water" },
+    { "id": "ing-6", "name": "flat-leaf parsley", "quantity": 2, "unit": "tbsp", "optional": true, "preparation": "chopped", "notes": null },
+    { "id": "ing-7", "name": "parmesan", "quantity": 0.25, "unit": "cup", "optional": true, "preparation": "finely grated", "notes": null },
+    { "id": "ing-8", "name": "lemon", "quantity": 0.5, "unit": null, "optional": true, "preparation": "zested", "notes": null }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Bring a large pot of water to a rolling boil and add the salt. Slice the garlic while you wait.",
+      "ingredient_refs": ["ing-5", "ing-2"],
+      "estimated_minutes": 8,
+      "success_cues": ["Water is at a full, rolling boil, not just steaming", "Water tastes noticeably salty, like a mild broth"],
+      "warnings": [],
+      "creator_note": "Salt the water more than feels right. It is the only chance to season the pasta itself.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Add the spaghetti and stir for the first 30 seconds so it does not stick. Set a timer for 2 minutes less than the package time; you will finish the pasta in the pan.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 8,
+      "success_cues": ["Strands have gone limp and are fully under the water", "Timer is running"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Meanwhile, put the olive oil and sliced garlic in a cold, wide skillet and set it over medium-low heat. Let the garlic warm up slowly with the oil, swirling now and then, for 4 to 6 minutes.",
+      "ingredient_refs": ["ing-3", "ing-2", "ing-4"],
+      "estimated_minutes": 6,
+      "success_cues": ["Garlic slices turn pale gold and smell sweet, not sharp", "Tiny steady bubbles around each slice, never a loud sizzle"],
+      "warnings": ["If the garlic turns brown it is bitter; start again with fresh garlic rather than pushing on. Keep the heat low."],
+      "creator_note": "Starting the garlic in cold oil is the whole recipe. Hot oil browns the outside before the inside sweetens.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "When the garlic is golden, add the red pepper flakes if using, then ladle about half a cup of the starchy pasta water into the skillet. It will spit for a second and then calm down. Keep the pan on low.",
+      "ingredient_refs": ["ing-4"],
+      "estimated_minutes": 1,
+      "success_cues": ["Oil and water come together into a cloudy, slightly thickened liquid"],
+      "warnings": ["Hot oil spits when water hits it; add the water away from your body and stand back."],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "When the timer goes, bite a strand: it should be al dente, tender with a thin, firm white core in the centre. Scoop another cup of pasta water out of the pot, then drain the pasta.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 1,
+      "success_cues": ["A strand bends without snapping", "Bitten through, there is a pinpoint of firm, chalky white at the centre"],
+      "warnings": [],
+      "creator_note": "Al dente means it still has bite. If there is no white core, you are already past it; drain immediately.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-6",
+      "order": 5,
+      "instruction": "Tip the drained pasta into the skillet. Raise the heat to medium and toss constantly for 1 to 2 minutes, adding splashes of the reserved water, until the oil and water tighten into a sauce that coats every strand.",
+      "ingredient_refs": ["ing-1"],
+      "estimated_minutes": 2,
+      "success_cues": ["Sauce looks glossy and clings to the pasta instead of pooling in the pan", "No watery puddle left when you tilt the skillet"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-7",
+      "order": 6,
+      "instruction": "Off the heat, toss in the parsley, parmesan and lemon zest if using. Taste for salt and serve right away.",
+      "ingredient_refs": ["ing-6", "ing-7", "ing-8"],
+      "estimated_minutes": 1,
+      "success_cues": ["Cheese melts into the sauce without clumping", "Strands still slide apart rather than sticking in a block"],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Package times are usually a minute or two too long for al dente. Pull it early; it keeps cooking in the pan.",
+    "No parmesan? A spoon of butter at the end gives the same richness."
+  ],
+  "dietary_warnings": [
+    "Contains wheat (gluten). Parmesan is optional and contains milk."
+  ]
+}

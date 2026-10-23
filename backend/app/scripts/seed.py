@@ -5,7 +5,8 @@
 * Content is published as version 1 the first time only. Published versions are immutable, so a
   re-run never touches an existing version (edit → new version is a Slice 1 flow).
 * Owned by the seeded creator ``creator@souslens.dev``.
-* IDs and ``published_at`` are deterministic (uuid5) so ``fixtures/expected_outputs`` stays stable.
+* IDs are deterministic (uuid5) and each fixture carries its own ``published_at`` so
+  ``fixtures/expected_outputs`` (and the feed order) stays stable.
 
 Run: ``uv run python -m app.scripts.seed`` (or ``make seed``).
 """
@@ -28,6 +29,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.engine import make_engine, make_sessionmaker
 from app.db.models import Recipe, RecipeVersion, Visibility
+from app.domains.recipes.drafts import search_text_for
 from app.domains.recipes.schemas import IngredientOut, StepOut
 from app.domains.users import service as users_service
 
@@ -70,6 +72,7 @@ class SeedRecipe(BaseModel):
     steps: list[SeedStep]
     creator_notes: list[str] = Field(default_factory=list)
     dietary_warnings: list[str] = Field(default_factory=list)
+    published_at: datetime = SEED_PUBLISHED_AT
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +127,7 @@ async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
 
     created_version = recipe.latest_version_id is None
     if created_version:
+        ingredients = [i.model_dump(mode="json") for i in fixture.ingredients]
         version = RecipeVersion(
             id=seed_uuid("version", f"{fixture.slug}:1"),
             recipe_id=recipe.id,
@@ -131,17 +135,22 @@ async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
             servings=fixture.servings,
             prep_minutes=fixture.prep_minutes,
             cook_minutes=fixture.cook_minutes,
-            ingredient_json=[i.model_dump(mode="json") for i in fixture.ingredients],
+            ingredient_json=ingredients,
             step_json=[s.model_dump(mode="json") for s in fixture.steps],
             warning_json={
                 "creator_notes": list(fixture.creator_notes),
                 "dietary_warnings": list(fixture.dietary_warnings),
             },
+            search_text=search_text_for(fixture.title, ingredients),
+            title=fixture.title,
+            summary=fixture.summary,
+            tags=list(fixture.tags),
+            cover_image_url=fixture.cover_image_url,
         )
         session.add(version)
         await session.flush()
         recipe.latest_version_id = version.id
-        recipe.published_at = recipe.published_at or SEED_PUBLISHED_AT
+        recipe.published_at = recipe.published_at or fixture.published_at
         await session.flush()
         version_id = version.id
     else:

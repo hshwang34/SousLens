@@ -35,6 +35,32 @@ per email (a sixth invalidates the oldest). Wrong, expired, reused or unknown �
 UNAUTHORIZED` "Invalid or expired sign-in code". Tests set `DEV_LOGIN_ECHO_CODE=true`
 (allowed only when `ENVIRONMENT=test`) so the 202 body also carries `code`.
 
+## API (`/v1`)
+
+Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
+`docs/product/briefs/003-api-contract.md`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | public |
+| POST | `/auth/dev-login`, `/auth/dev-login/verify` | dev mode only (two-step, code in the server log) |
+| GET | `/me` | current user |
+| GET | `/me/saved` | saved recipes, newest save first |
+| GET | `/me/recipes` | my published recipes (any visibility) + `has_open_draft` |
+| GET | `/recipes?query=&tag=&cursor=&limit=` | public feed; `query` matches title or any ingredient; `saved` is `null` when anonymous |
+| GET | `/recipes/{id}` | latest version; 404 unless public or mine; `share_url` |
+| POST/DELETE | `/recipes/{id}/save` | idempotent |
+| POST | `/recipes/{id}/edit` | owner: new draft from the latest version (409 `details.draft_id` if one is open) |
+| POST | `/recipes/{id}/unpublish` | owner: visibility → private; versions untouched |
+| GET | `/recipe-versions/{version_id}` | exact version; only if public, mine, or saved by me |
+| POST/GET | `/recipes/drafts` | create / list mine |
+| GET/PATCH/DELETE | `/recipes/drafts/{id}` | owner; PATCH merges top-level fields, arrays replace whole; published → 409 |
+| POST | `/recipes/drafts/{id}/publish` | 201 `PublishResult`; 422 with `details.problems` |
+
+`recipe_versions` is append-only: a `BEFORE UPDATE OR DELETE` trigger (migration 0002) raises on
+every row. Operator repairs need `SET LOCAL souslens.unlock_versions = 'on'` in the same
+transaction; the app never sets it.
+
 ## Check
 
 ```bash
@@ -49,7 +75,7 @@ alembic migration at session start and truncate every table between tests.
 ```
 app/core        config (env + .env), errors (PRD envelope), security (JWT, AuthProvider), logging
 app/db          models for every PRD §10 table, async engine, alembic migrations
-app/domains     users, recipes (public read side), ownership, sessions/oracle (Step Oracle), safety
+app/domains     users, recipes (public read side, drafts/publish), ownership, sessions/oracle, safety
 app/ai          provider Protocols + schemas, MockAIProvider, Gemini stub, registry
 app/api/v1      health, auth, me, recipes
 app/scripts     seed

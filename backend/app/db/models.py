@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -176,8 +177,16 @@ class Recipe(TimestampMixin, Base):
 class RecipeVersion(CreatedAtMixin, Base):
     """Immutable once published (PRD §10.1 versioning rule).
 
-    TODO(brief 003 / Slice 1): add DB-level immutability (UPDATE/DELETE trigger on published
-    versions) when the publish flow lands; Slice 0 relies on the seed/service never rewriting.
+    Append-only at the database level: migration 0002 installs a ``BEFORE UPDATE OR DELETE``
+    trigger that raises on every row. The only escape hatch is an explicit
+    ``SET LOCAL souslens.unlock_versions = 'on'`` in the same transaction (operator repairs,
+    account deletion flows); application code never sets it.
+
+    ``title``/``summary``/``tags``/``cover_image_url`` are snapshotted too, so
+    ``GET /recipe-versions/{id}`` is byte-identical for the life of the row.
+
+    ``search_text`` is a denormalised, lowercased ``title + ingredient names`` string written at
+    publish time so the public search can match ingredients with a plain ILIKE (REC-02).
     """
 
     __tablename__ = "recipe_versions"
@@ -194,6 +203,17 @@ class RecipeVersion(CreatedAtMixin, Base):
     ingredient_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     step_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     warning_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    search_text: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=text("''")
+    )
+    # Display metadata snapshotted at publish so a version is immutable *as served*. Nullable
+    # only for rows written before migration 0002 (backfilled) and ad-hoc test rows; readers
+    # fall back to the mutable ``recipes`` columns when null. ``recipes.title/summary/tags/
+    # cover_image_url`` stay as listing/search metadata, mirrored from the latest publish.
+    title: Mapped[str | None] = mapped_column(String(200))
+    summary: Mapped[str | None] = mapped_column(Text)
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    cover_image_url: Mapped[str | None] = mapped_column(Text)
     source_video_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_media.id", use_alter=True, ondelete="SET NULL")
     )
@@ -219,8 +239,22 @@ class RecipeMedia(CreatedAtMixin, Base):
     )
 
 
+OPEN_DRAFT_STATUS_VALUES = ("editing", "extracting", "review")
+
+
 class RecipeDraft(TimestampMixin, Base):
     __tablename__ = "recipe_drafts"
+    __table_args__ = (
+        # At most one open (editing/extracting/review) draft per published recipe (REC-06).
+        Index(
+            "uq_recipe_drafts_one_open_per_recipe",
+            "recipe_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN (" + ", ".join(f"'{s}'" for s in OPEN_DRAFT_STATUS_VALUES) + ")"
+            ),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
