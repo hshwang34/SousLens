@@ -22,7 +22,9 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
     func testSignInWithLoggedCodeAndOpenSeededRecipe() throws {
         let app = try launchSignedIn(email: browseEmail)
 
-        // Explore shows the seeded recipe from the live API
+        // Explore shows the seeded recipe from the live API. Search for it: recipes published by
+        // earlier smoke runs sort above the seed and can push it off-screen.
+        searchExplore(app, for: "Gochujang")
         let card = app.staticTexts["Gochujang Chicken Thighs"].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "Explore did not list the seeded recipe")
         attach(app, "3-explore")
@@ -53,15 +55,13 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         // Type-agnostic: a vertical-axis TextField may surface as a text view or a text field.
         let titleField = app.descendants(matching: .any)["draft.title"].firstMatch
         XCTAssertTrue(titleField.waitForExistence(timeout: 10), "editor did not open")
-        titleField.tap()
-        titleField.typeText(title)
+        type(title, into: titleField, in: app)
 
         // One ingredient
         app.buttons["draft.addIngredient"].tap()
         let name = app.textFields["ingredient.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5), "ingredient editor did not open")
-        name.tap()
-        name.typeText("bread")
+        type("bread", into: name, in: app)
         app.buttons["ingredient.done"].tap()
 
         // One step
@@ -70,8 +70,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         addStep.tap()
         let instruction = app.descendants(matching: .any)["step.instruction"].firstMatch
         XCTAssertTrue(instruction.waitForExistence(timeout: 5), "step editor did not open")
-        instruction.tap()
-        instruction.typeText("Toast the bread until golden.")
+        type("Toast the bread until golden.", into: instruction, in: app)
         app.buttons["step.done"].tap()
         attach(app, "5-draft")
 
@@ -95,15 +94,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         app.buttons["published.done"].tap()
 
         // Explore: search by title (REC-02) and open it
-        app.tabBars.buttons["Explore"].tap()
-        let search = app.searchFields.firstMatch
-        if !(search.waitForExistence(timeout: 3) && search.isHittable) {
-            app.swipeDown()  // the search bar collapses under the large title once scrolled
-        }
-        XCTAssertTrue(search.waitForExistence(timeout: 5), "Explore search not found")
-        XCTAssertTrue(search.isHittable, "Explore search is not on screen")
-        search.tap()
-        search.typeText(title)
+        searchExplore(app, for: title)
         let card = app.staticTexts[title].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15), "published recipe not found in Explore")
         attach(app, "8-explore")
@@ -132,9 +123,10 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
             "SOUSLENS_SMOKE_LOG must point at the backend log (use `make ios-smoke`)"
         )
         let app = XCUIApplication()
-        app.launchArguments += ["-serverBaseURL", "http://localhost:8000"]
+        // `-auth.hasLaunched NO` overrides that UserDefaults key for this launch only, so the app
+        // takes its fresh-install path and discards any session a previous run left behind.
+        app.launchArguments += ["-serverBaseURL", "http://localhost:8000", "-auth.hasLaunched", "NO"]
         app.launch()
-        signOutIfNeeded(app)
 
         // Step 1: email
         let emailField = app.textFields.firstMatch
@@ -159,26 +151,30 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         return app
     }
 
-    /// A previous run may have left a session behind (Keychain survives reinstall when the
-    /// uninstall step is skipped). Start every smoke from the sign-in screen. Sign out sits at the
-    /// bottom of Profile's list, below My recipes and Drafts, so scroll until it is on screen.
-    private func signOutIfNeeded(_ app: XCUIApplication) {
-        let profileTab = app.tabBars.buttons["Profile"]
-        guard profileTab.waitForExistence(timeout: 5) else { return }
-        profileTab.tap()
-        let signOut = app.buttons["Sign out"].firstMatch
-        var swipes = 0
-        while !(signOut.exists && signOut.isHittable), swipes < 8 {
-            app.swipeUp()
-            swipes += 1
+    /// Explore's search bar collapses under the large title once the list scrolls; pull it back.
+    private func searchExplore(_ app: XCUIApplication, for text: String) {
+        app.tabBars.buttons["Explore"].tap()
+        let search = app.searchFields.firstMatch
+        if !search.waitForExistence(timeout: 3) { app.swipeDown() }
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Explore search not found")
+        type(text, into: search, in: app)
+    }
+
+    /// Fields inside a sheet that is still animating in can ignore the first tap, and typeText
+    /// then fails with "neither element nor any descendant has keyboard focus". Tap, wait for the
+    /// keyboard, retap once near the field's leading edge if needed, then type.
+    private func type(_ text: String, into field: XCUIElement, in app: XCUIApplication) {
+        let keyboard = app.keyboards.firstMatch
+        for attempt in 0..<3 {
+            if attempt == 0 {
+                field.tap()
+            } else {
+                field.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
+            }
+            if keyboard.waitForExistence(timeout: 2) { break }
         }
-        if signOut.exists {
-            XCTAssertTrue(signOut.isHittable, "Sign out is not on screen after scrolling")
-            signOut.tap()
-            let confirm = app.buttons["Sign out"].firstMatch  // confirmation sheet, if any
-            if confirm.waitForExistence(timeout: 2) { confirm.tap() }
-        }
-        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 10), "could not sign out")
+        XCTAssertTrue(keyboard.exists, "keyboard never appeared for \(field.identifier)")
+        field.typeText(text)
     }
 
     private func wait(for element: XCUIElement, enabled: Bool, timeout: TimeInterval) -> Bool {
