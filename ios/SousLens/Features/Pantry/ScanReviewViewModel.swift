@@ -84,6 +84,11 @@ final class ScanReviewViewModel {
     private(set) var conflictMessage: String?
     /// Server-confirmed items once Confirm succeeds.
     private(set) var confirmed: [PantryItem]?
+    /// 409 `STATE_CONFLICT`: this review was already confirmed (e.g. a retried request). The view
+    /// says so and closes; nothing is retried.
+    private(set) var alreadyAdded = false
+
+    static let alreadyAddedMessage = "These items were already added."
 
     /// Provenance sent with every item: `voice` for dictated text, `manual` for typed text,
     /// `photo` for photos.
@@ -132,7 +137,7 @@ final class ScanReviewViewModel {
         return nil
     }
 
-    var canConfirm: Bool { blockingMessage == nil && !isConfirming && confirmed == nil }
+    var canConfirm: Bool { blockingMessage == nil && !isConfirming && confirmed == nil && !alreadyAdded }
 
     var confirmTitle: String {
         let count = acceptedRows.count
@@ -182,6 +187,9 @@ final class ScanReviewViewModel {
         } catch let api as APIError {
             if let conflicts = api.pantryConflicts, !conflicts.isEmpty {
                 applyConflicts(conflicts, sent: accepted)
+            } else if api.isObservationAlreadyConfirmed {
+                alreadyAdded = true
+                error = nil
             } else if api.status == 404 || api.status == 410 {
                 // Sent with an observation id: the observation row has expired (24 h TTL).
                 error = Self.expiredMessage

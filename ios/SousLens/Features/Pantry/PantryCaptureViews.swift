@@ -36,7 +36,8 @@ struct SpeakCaptureView: View {
                 transcriptField
 
                 if let message = model.message {
-                    MessageBlock(text: message, isWarning: true, showsSettings: model.permissionDenied)
+                    MessageBlock(text: message, isWarning: true, showsSettings: model.permissionDenied,
+                                 retry: model.canRetry ? { Task { await model.findItems() } } : nil)
                 }
 
                 Button {
@@ -194,7 +195,8 @@ struct ScanCaptureView: View {
                 viewfinder
 
                 if let message = model.message {
-                    MessageBlock(text: message, isWarning: true, showsSettings: model.permissionDenied)
+                    MessageBlock(text: message, isWarning: true, showsSettings: model.permissionDenied,
+                                 retry: model.canRetry ? { Task { await model.findItems() } } : nil)
                 }
 
                 actions
@@ -359,6 +361,7 @@ struct MessageBlock: View {
     let text: String
     var isWarning = false
     var showsSettings = false
+    var retry: (() -> Void)? = nil
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -373,6 +376,12 @@ struct MessageBlock: View {
                 Button("Open Settings") { openURL(url) }
                     .font(SLFont.callout.weight(.semibold))
                     .frame(minHeight: Metrics.minTapTarget)
+            }
+            if let retry {
+                Button("Retry", action: retry)
+                    .font(SLFont.callout.weight(.semibold))
+                    .frame(minHeight: Metrics.minTapTarget)
+                    .accessibilityIdentifier("capture.retry")
             }
         }
         .padding(Spacing.md)

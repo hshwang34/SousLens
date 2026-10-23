@@ -83,7 +83,12 @@ cues and warnings.
   it). The transcript stays editable, then **Find items** posts a transcript observation.
   **Type instead** is always there and feeds the same call, so the flow works without a mic,
   without permission and in the simulator (where the sheet opens straight in typing mode).
-  VoiceOver: double-tap toggles listening instead of press-and-hold.
+  VoiceOver: double-tap toggles listening ("Listening until you tap Stop", auto-stop after 60 s).
+  Press and release share one start gate, so a tap released before the mic has started never
+  leaves it on. **Provenance:** text that was dictated (even if edited afterwards) is saved as
+  `voice`; text that was only typed is `manual`; photos are `photo`. An unknown server source
+  shows an "Other" badge. A 503 `PROVIDER_UNAVAILABLE` / 502 `AI_OUTPUT_INVALID` shows "Couldn’t
+  read that right now — try again" with **Retry**, keeping the text or photo in memory.
 - **Scan**: **Start camera** (explicit tap) runs `PhoneCameraSource` with a live viewfinder and a red
   **Camera on** badge; **Take photo** grabs one frame and stops the camera immediately. **Choose
   photo** (PhotosPicker, no library permission needed) is the same path. The photo is previewed,
@@ -94,7 +99,10 @@ cues and warnings.
 - **Scan review**: one row per candidate with editable name / quantity / unit, the confidence bin
   as an estimate (**Likely / Maybe / Not sure**), the evidence text and an accept checkbox ("Not
   sure" and `action: ignore` start unticked). Unknowns get their own section. Mock photo results
-  show **Demo mode — not a real detection**. A candidate with `duplicate_of` shows "You already
+  show **Demo mode — not a real detection** and every candidate starts unticked (opt in).
+  An expired scan (`expires_at` passed, or 404/410 on confirm) says "This scan expired — scan
+  again"; 409 `STATE_CONFLICT` (already confirmed) says "These items were already added" and
+  closes. Quantities must be > 0. A candidate with `duplicate_of` shows "You already
   have X" with **Merge / Keep both**; Confirm stays disabled until each is answered. A 409
   `DUPLICATE_PANTRY_ITEM` re-opens that choice for exactly the rows in `details.conflicts` and
   sends nothing more until the user answers. Confirm posts only the ticked rows plus the
@@ -105,8 +113,11 @@ cues and warnings.
   conversion note). The headline is **Can make it** only when `can_make` is true *and* no
   required line is uncertain or missing; otherwise "You’re missing N" or "Check N items". Coverage
   reads "X of Y ingredients" (required only), never as a guarantee. Missing lines offer **Add to
-  pantry** (manual sheet, name prefilled only); stale matches offer **Still have it**; either
-  re-runs the fit. **Start cooking** stays disabled until Slice 3.
+  pantry** (manual sheet, name prefilled only); stale matches offer **Still have it**; a match
+  whose amount is a photo estimate offers **Fix amount** (opens the editor). Every change re-runs
+  the fit once (via `pantryRevision`; the last request wins). VoiceOver reads each row's status
+  and exposes its buttons as named actions. Edits PATCH only the fields that changed; an
+  unrecognised storage location is kept as is.
 - Debug builds only: launch with `-pantry.photoFixture gochujang_jar` to send `fixture=<stem>` with
   photos (honoured by the backend only when `AI_PROVIDER=mock`).
 

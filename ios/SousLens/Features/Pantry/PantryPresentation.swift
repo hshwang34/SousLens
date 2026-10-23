@@ -194,6 +194,27 @@ struct PantryItemForm: Equatable, Sendable {
     }
 }
 
+extension APIError {
+    /// 503 `PROVIDER_UNAVAILABLE` / 502 `AI_OUTPUT_INVALID` on an observation: the AI couldn't
+    /// answer this time; the same input can be retried.
+    var isReadFailure: Bool {
+        if case .server(let status, let code, _, _, _, _) = self {
+            return code == "PROVIDER_UNAVAILABLE" || code == "AI_OUTPUT_INVALID" || status == 502 || status == 503
+        }
+        return status == 502 || status == 503
+    }
+
+    /// 409 `STATE_CONFLICT` without `details.conflicts` on `POST /pantry` with an observation id:
+    /// that review was already confirmed.
+    var isObservationAlreadyConfirmed: Bool {
+        guard case .server(409, let code, _, _, _, _) = self else { return false }
+        return code == "STATE_CONFLICT" && pantryConflicts == nil
+    }
+}
+
+/// Copy for an observation the AI couldn't read (503 / 502).
+let observationReadFailureMessage = "Couldn’t read that right now — try again."
+
 extension Error {
     /// The copy shown inline for any pantry failure.
     var pantryMessage: String {

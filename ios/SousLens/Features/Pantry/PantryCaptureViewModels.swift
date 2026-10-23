@@ -42,6 +42,8 @@ final class SpeakCaptureViewModel {
     private(set) var message: String?
     /// True when the message is a permission denial (the view offers "Open Settings").
     private(set) var permissionDenied = false
+    /// The last "Find items" failed in a retryable way (503/502); the text is kept for Retry.
+    private(set) var canRetry = false
     /// Set once the server returns candidates; the view pushes Scan review.
     var observation: PantryObservation?
     /// Provenance of the text that produced `observation`.
@@ -162,6 +164,7 @@ final class SpeakCaptureViewModel {
         let source = transcriptSource
         isSubmitting = true
         message = nil
+        canRetry = false
         defer { isSubmitting = false }
         do {
             let result = try await service.observeTranscript(text)
@@ -169,6 +172,9 @@ final class SpeakCaptureViewModel {
             observation = result
         } catch let error as APIError where error == .cancelled {
             return
+        } catch let error as APIError where error.isReadFailure {
+            message = observationReadFailureMessage
+            canRetry = true
         } catch {
             message = error.pantryMessage
         }
@@ -204,6 +210,8 @@ final class ScanCaptureViewModel {
     private(set) var photoData: Data?
     private(set) var message: String?
     private(set) var permissionDenied = false
+    /// The last "Find items" failed in a retryable way (503/502); the photo is kept for Retry.
+    private(set) var canRetry = false
     var observation: PantryObservation?
 
     let camera: any CameraSource
@@ -294,6 +302,7 @@ final class ScanCaptureViewModel {
         guard let data = photoData, !isSubmitting else { return }
         isSubmitting = true
         message = nil
+        canRetry = false
         defer { isSubmitting = false }
         do {
             var upload = try await encode(data)
@@ -304,6 +313,10 @@ final class ScanCaptureViewModel {
             observation = result
         } catch let error as APIError where error == .cancelled {
             return
+        } catch let error as APIError where error.isReadFailure {
+            // Kept in memory only, for the Retry button; dropped when the sheet closes.
+            message = observationReadFailureMessage
+            canRetry = true
         } catch {
             // Kept in memory only so "Find items" can be retried; dropped when the sheet closes.
             message = error.pantryMessage

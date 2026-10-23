@@ -79,6 +79,11 @@ struct PantryFitView: View {
                             },
                             onStillHave: {
                                 if let id = row.pantryItemId { Task { await model.confirmStillHave(pantryItemId: id) } }
+                            },
+                            onFixAmount: {
+                                if let item = model.pantryItem(for: row) {
+                                    editor = PantryItemEditorModel(mode: .edit(item), service: environment.api)
+                                }
                             }
                         )
                         .accessibilityIdentifier("fit.\(section.kind.rawValue)")
@@ -138,6 +143,7 @@ private struct FitRowView: View {
     let isBusy: Bool
     let onAdd: () -> Void
     let onStillHave: () -> Void
+    let onFixAmount: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -184,6 +190,7 @@ private struct FitRowView: View {
         switch action {
         case .addToPantry: onAdd()
         case .stillHaveIt: if !isBusy { onStillHave() }
+        case .fixAmount: onFixAmount()
         }
     }
 }

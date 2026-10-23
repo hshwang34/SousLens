@@ -95,6 +95,10 @@ struct ScanReviewView: View {
         .background(SLColor.background)
         .navigationTitle("Review items")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(ScanReviewViewModel.alreadyAddedMessage, isPresented: Binding(get: { model.alreadyAdded }, set: { _ in })) {
+            // Closes the review; the pantry list reloads and shows them.
+            Button("OK") { onAdded([]) }
+        }
     }
 }
 

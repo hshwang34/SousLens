@@ -13,8 +13,10 @@ struct FitRowPresentation: Identifiable, Equatable {
     let pantryItemId: UUID?
     /// The matched pantry item was confirmed more than 14 days ago → offer "Still have it".
     let isStale: Bool
+    /// The matched pantry amount is a photo estimate → offer "Fix amount" instead.
+    let hasEstimatedAmount: Bool
 
-    init(item: FitItem, isStale: Bool) {
+    init(item: FitItem, isStale: Bool, hasEstimatedAmount: Bool = false) {
         id = item.ingredientRef
         name = item.name
         status = item.status
@@ -24,20 +26,24 @@ struct FitRowPresentation: Identifiable, Equatable {
         conversionNote = item.conversionNote.flatMap { $0.isEmpty ? nil : $0 }
         pantryItemId = item.pantryItemId
         self.isStale = isStale
+        self.hasEstimatedAmount = hasEstimatedAmount && item.pantryItemId != nil
     }
 
     /// Missing items can be added to the pantry from here.
     var canAddToPantry: Bool { status == .missing || status == .optionalMissing }
-    var canConfirmStillHave: Bool { isStale && pantryItemId != nil }
+    var canConfirmStillHave: Bool { isStale && pantryItemId != nil && !hasEstimatedAmount }
+    var canFixAmount: Bool { hasEstimatedAmount }
 
     enum Action: String, CaseIterable {
         case addToPantry
         case stillHaveIt
+        case fixAmount
 
         var title: String {
             switch self {
             case .addToPantry: return "Add to pantry"
             case .stillHaveIt: return "Still have it"
+            case .fixAmount: return "Fix amount"
             }
         }
     }
@@ -47,6 +53,7 @@ struct FitRowPresentation: Identifiable, Equatable {
     var actions: [Action] {
         var actions: [Action] = []
         if canAddToPantry { actions.append(.addToPantry) }
+        if canFixAmount { actions.append(.fixAmount) }
         if canConfirmStillHave { actions.append(.stillHaveIt) }
         return actions
     }
@@ -208,9 +215,12 @@ final class PantryFitViewModel {
         guard let fit else { return [] }
         let reference = now()
         let staleIds = Set(pantryItems.filter { PantryFreshness.isStale(lastConfirmedAt: $0.lastConfirmedAt, now: reference) }.map(\.id))
+        let estimatedIds = Set(pantryItems.filter { $0.quantityIsEstimate && $0.quantity != nil }.map(\.id))
         func rows(_ predicate: (FitItem) -> Bool) -> [FitRowPresentation] {
             fit.items.filter(predicate).map { item in
-                FitRowPresentation(item: item, isStale: item.pantryItemId.map(staleIds.contains) ?? false)
+                FitRowPresentation(item: item,
+                                   isStale: item.pantryItemId.map(staleIds.contains) ?? false,
+                                   hasEstimatedAmount: item.pantryItemId.map(estimatedIds.contains) ?? false)
             }
         }
         let all: [FitSection] = [
@@ -241,6 +251,12 @@ final class PantryFitViewModel {
 
     /// Prefilled manual add for a missing ingredient. Only the name is filled: the recipe's amount
     /// is not what the user has.
+    /// The pantry item behind a row ("Fix amount" opens the editor on it).
+    func pantryItem(for row: FitRowPresentation) -> PantryItem? {
+        guard let id = row.pantryItemId else { return nil }
+        return pantryItems.first { $0.id == id }
+    }
+
     func addForm(for row: FitRowPresentation) -> PantryItemForm {
         PantryItemForm(name: row.name)
     }
