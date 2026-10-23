@@ -15,10 +15,14 @@ struct RootView: View {
                 SignInView()
             case .signedIn:
                 MainTabView()
+                    .onAppear { environment.applyPendingDeepLink() }
             }
         }
         .task {
             await environment.auth.restore()
+        }
+        .onOpenURL { url in
+            environment.open(url: url)
         }
     }
 }

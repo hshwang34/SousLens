@@ -26,11 +26,59 @@ type it on the code screen and tap **Verify**. Codes expire after the server's `
 keeps you on the code step. Explore then lists the seeded recipes; tap one for ingredients, steps,
 cues and warnings.
 
+## Slice 1: author, publish, save, share (brief 003)
+
+- **Create:** Profile → **Create recipe** opens the editor on a new server draft
+  (`POST /v1/recipes/drafts`). Title, summary, tag chips, servings stepper, prep/cook minutes;
+  ingredients (name, quantity, unit, optional, preparation, notes) and steps (instruction, minutes,
+  ingredients used, success cues, warnings, creator note). Swipe to delete; **Reorder** (top right) moves ingredients and steps. Numeric fields commit on every keystroke.
+- **Autosave:** every change is PATCHed after an 800 ms debounce (whole form; arrays replace whole,
+  steps sent in display order). A field the creator empties (title, summary, servings, prep/cook
+  minutes) is sent as JSON `null`, which the backend reads as "clear"; omitted keys mean "unchanged".
+  Steps keep their original provenance (`evidence_origin`, source clip) when edited.
+- **Text rules:** fields cap at the backend's limits as you type (`DraftLimits`: title 120,
+  summary 1000, tag 40, ingredient name 200 / unit 32 / preparation 200 / notes 500, instruction
+  2000, notes/warnings/cues 500). Before sending, `DraftText` strips control and bidi characters,
+  turns newlines in single-line fields into spaces, trims, and lowercases + dedupes tags. If the
+  server still refuses a PATCH (422), the bar shows "Couldn’t save · <server reason>" with no Retry;
+  the next edit saves again. The bar shows **Saving… / Saved / Couldn’t save · Retry**. Closing
+  with an unsaved change asks before discarding.
+- **Validation:** the server's `validation.problems` are shown inline next to the field or row
+  (`title`, `ingredients`, `steps[1].instruction`, …). **Publish** is enabled only when the last
+  saved state has `validation.publishable == true`.
+- **Publish:** always behind a confirmation sheet ("Publish version N? This snapshot can’t be
+  edited; later edits create a new version"). Pending edits are saved first; a failed save blocks
+  the publish. If the publish request fails in transit, the app re-reads the draft and reports
+  success if it was in fact published. Success shows the version, the share link and a share sheet.
+- **Share links are always built from the recipe id** (`ShareLinks`); the server's `share_url` is
+  never shown or shared.
+- **Preview** renders the draft through the real detail layout under a "Draft preview" banner.
+- **Edit a published recipe:** owner sees **Edit** / **Unpublish** on the detail screen. Edit calls
+  `POST /v1/recipes/{id}/edit`; a 409 means a draft is already open and that draft is opened
+  instead. A PATCH that returns 409 (draft already published) turns the editor read-only: fields are
+  disabled, nothing more is sent, and Close does not ask about unsaved changes.
+- **Profile** lists *My recipes* (visibility pill, version, "Draft in progress"; swipe to Unpublish
+  with confirmation) and *Drafts* (tap to continue, swipe to delete with confirmation).
+- **Save:** Save/Unsave on the detail screen flips immediately and rolls back with an inline message
+  if the idempotent POST/DELETE fails. The **Saved** tab is `GET /v1/me/saved` and refreshes
+  whenever a save changes anywhere in the app.
+- **Share / deep links:** `souslens://recipe/{id}` (registered in `CFBundleURLTypes`) and
+  `https://souslens.app/r/{id}` (exact host only; associated-domains entry is a stub, the domain is not live) both
+  open the recipe on the Explore stack from any tab. A link that arrives while signed out is
+  applied after sign-in. Try it: `xcrun simctl openurl booted souslens://recipe/<recipe-id>`.
+- Search placeholder is "Search recipes or ingredients" (the backend matches title or ingredient).
+
 ## Tests
 
 ```bash
 make ios-check                   # xcodegen generate + xcodebuild test on "iPhone 15" (SIM=... to override)
+make ios-smoke                   # live XCUITests (needs `make backend-dev` + `make seed`); not in ios-check
 ```
+
+`SousLensSmoke` (separate scheme, never in `SousLens`) has two tests: sign in → open the seeded
+recipe, and `testAuthorPublishAndSave` (Profile → Create recipe → title, one ingredient, one step →
+Publish → confirm → find it via Explore search → Save → see it in Saved). Each signs in with its own
+email and only accepts a code logged after it tapped Continue.
 
 The Makefile signs the simulator build ad hoc (`CODE_SIGN_IDENTITY=-`). That needs no Apple
 certificate, but it does embed the `keychain-access-groups` entitlement that the simulator Keychain
@@ -64,7 +112,10 @@ On a device, the app starts with **no** server configured and asks for one; the 
 ```
 SousLens/
   App/            SousLensApp, AppEnvironment (composition root), RootView (sign-in vs tabs)
-  Features/       Explore, Recipe (detail), Saved, Pantry, Profile (sign-in, profile, server settings)
+  App/DeepLink    souslens:// and souslens.app/r/{id} parsing (`DeepLink`, `ShareLinks`)
+  Features/       Explore, Recipe (detail + view model), Creator (draft editor, ingredient/step
+                  editors, publish confirmation, preview), Saved, Pantry, Profile (my recipes,
+                  drafts, sign-in, server settings)
   Models/         Codable DTOs mirroring the backend's snake_case JSON
   Services/API    APIClient (async/await, PRD error envelope, X-Correlation-Id logging), ServerSettings
   Services/Auth   AuthStore (@Observable), KeychainTokenStore (Security framework)
@@ -105,5 +156,5 @@ behaviours are **device-only** and must be checked on an iPhone before Slice 4 r
 - Capture adapters sit behind `UserDefaults` feature flags (`feature.capture.phoneCamera`,
   `feature.capture.phoneSpeech`, `feature.capture.systemAudio`, default on); off → the fake adapter
   is injected.
-- Logs: `os.Logger` subsystem `com.souslens.ios`, categories `api`, `auth`, `camera`, `speech`.
+- Logs: `os.Logger` subsystem `com.souslens.ios`, categories `api`, `auth`, `editor`, `camera`, `speech`.
   Filter in Console.app or `xcrun simctl spawn booted log stream --predicate 'subsystem == "com.souslens.ios"'`.

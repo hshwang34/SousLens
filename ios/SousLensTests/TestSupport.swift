@@ -85,15 +85,54 @@ final class FakeRecipeService: RecipeService, @unchecked Sendable {
         let limit: Int
     }
 
+    /// Every brief-003 call in order, e.g. `"PATCH draft <id>"`, `"POST save <id>"`.
+    enum AuthoringCall: Hashable {
+        case createDraft(DraftPatch)
+        case listDrafts
+        case draft(UUID)
+        case updateDraft(UUID, DraftPatch)
+        case deleteDraft(UUID)
+        case publishDraft(UUID)
+        case editRecipe(UUID)
+        case unpublishRecipe(UUID)
+        case saveRecipe(UUID)
+        case unsaveRecipe(UUID)
+        case mySaved
+        case myRecipes
+        case recipeVersion(UUID)
+    }
+
     private let lock = NSLock()
     private var _calls: [Call] = []
+    private var _authoringCalls: [AuthoringCall] = []
     var calls: [Call] { lock.withLock { _calls } }
+    var authoringCalls: [AuthoringCall] { lock.withLock { _authoringCalls } }
 
     /// Called for each list request; may throw.
     var listHandler: @Sendable (Call) throws -> RecipePage
     var detailHandler: @Sendable (UUID) throws -> RecipeDetail
     /// Optional suspension point before a list request resolves (lets tests observe `.loading`).
     var beforeList: (@Sendable () async -> Void)?
+
+    private static func unscripted<T>(_ name: String) -> @Sendable (UUID) throws -> T {
+        { _ in throw APIError.http(status: 599, correlationId: "unscripted-\(name)") }
+    }
+
+    var createDraftHandler: @Sendable (DraftPatch) throws -> Draft = { _ in throw APIError.http(status: 599, correlationId: "unscripted-createDraft") }
+    var listDraftsHandler: @Sendable () throws -> [DraftSummary] = { [] }
+    var draftHandler: @Sendable (UUID) throws -> Draft = unscripted("draft")
+    var updateDraftHandler: @Sendable (UUID, DraftPatch) throws -> Draft = { _, _ in throw APIError.http(status: 599, correlationId: "unscripted-updateDraft") }
+    var deleteDraftHandler: @Sendable (UUID) throws -> Void = { _ in }
+    var publishDraftHandler: @Sendable (UUID) throws -> PublishResult = unscripted("publish")
+    var editRecipeHandler: @Sendable (UUID) throws -> Draft = unscripted("edit")
+    var unpublishRecipeHandler: @Sendable (UUID) throws -> UnpublishResult = { id in UnpublishResult(recipeId: id, visibility: .private) }
+    var saveRecipeHandler: @Sendable (UUID) throws -> SaveResult = { id in SaveResult(recipeId: id, saved: true) }
+    var unsaveRecipeHandler: @Sendable (UUID) throws -> SaveResult = { id in SaveResult(recipeId: id, saved: false) }
+    var mySavedHandler: @Sendable () throws -> [RecipeCard] = { [] }
+    var myRecipesHandler: @Sendable () throws -> [MyRecipe] = { [] }
+    var recipeVersionHandler: @Sendable (UUID) throws -> RecipeDetail = unscripted("recipeVersion")
+    /// Optional suspension point before any authoring/save request resolves.
+    var beforeAuthoring: (@Sendable (AuthoringCall) async -> Void)?
 
     init(listHandler: @escaping @Sendable (Call) throws -> RecipePage = { _ in RecipePage(items: [], nextCursor: nil) },
          detailHandler: @escaping @Sendable (UUID) throws -> RecipeDetail = { _ in throw APIError.http(status: 404, correlationId: nil) }) {
@@ -110,6 +149,51 @@ final class FakeRecipeService: RecipeService, @unchecked Sendable {
 
     func recipe(id: UUID) async throws -> RecipeDetail {
         try detailHandler(id)
+    }
+
+    private func record(_ call: AuthoringCall) async {
+        lock.withLock { _authoringCalls.append(call) }
+        await beforeAuthoring?(call)
+    }
+
+    func createDraft(_ patch: DraftPatch) async throws -> Draft {
+        await record(.createDraft(patch)); return try createDraftHandler(patch)
+    }
+    func listDrafts() async throws -> [DraftSummary] {
+        await record(.listDrafts); return try listDraftsHandler()
+    }
+    func draft(id: UUID) async throws -> Draft {
+        await record(.draft(id)); return try draftHandler(id)
+    }
+    func updateDraft(id: UUID, _ patch: DraftPatch) async throws -> Draft {
+        await record(.updateDraft(id, patch)); return try updateDraftHandler(id, patch)
+    }
+    func deleteDraft(id: UUID) async throws {
+        await record(.deleteDraft(id)); try deleteDraftHandler(id)
+    }
+    func publishDraft(id: UUID) async throws -> PublishResult {
+        await record(.publishDraft(id)); return try publishDraftHandler(id)
+    }
+    func editRecipe(id: UUID) async throws -> Draft {
+        await record(.editRecipe(id)); return try editRecipeHandler(id)
+    }
+    func unpublishRecipe(id: UUID) async throws -> UnpublishResult {
+        await record(.unpublishRecipe(id)); return try unpublishRecipeHandler(id)
+    }
+    func saveRecipe(id: UUID) async throws -> SaveResult {
+        await record(.saveRecipe(id)); return try saveRecipeHandler(id)
+    }
+    func unsaveRecipe(id: UUID) async throws -> SaveResult {
+        await record(.unsaveRecipe(id)); return try unsaveRecipeHandler(id)
+    }
+    func mySaved() async throws -> [RecipeCard] {
+        await record(.mySaved); return try mySavedHandler()
+    }
+    func myRecipes() async throws -> [MyRecipe] {
+        await record(.myRecipes); return try myRecipesHandler()
+    }
+    func recipeVersion(id: UUID) async throws -> RecipeDetail {
+        await record(.recipeVersion(id)); return try recipeVersionHandler(id)
     }
 }
 

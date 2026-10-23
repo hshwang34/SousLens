@@ -1,6 +1,14 @@
 import Foundation
 import Observation
 
+/// Explore stack destinations. A card is carried when we have one (list tap) so the header can
+/// paint before the detail loads; a deep link only has the id.
+enum RecipeRoute: Hashable {
+    case recipe(id: UUID, card: RecipeCard?)
+
+    static func card(_ card: RecipeCard) -> RecipeRoute { .recipe(id: card.recipeId, card: card) }
+}
+
 /// Composition root. Everything a screen needs is injected from here via `.environment(_:)`.
 @MainActor
 @Observable
@@ -19,6 +27,16 @@ final class AppEnvironment {
     let audio: any AudioOutput
 
     var selectedTab: Tab = .explore
+    /// Explore's navigation stack. Deep links push onto it from any tab.
+    var exploreRoutes: [RecipeRoute] = []
+    /// A link that arrived while signed out; applied once the user is signed in.
+    private(set) var pendingDeepLink: DeepLink?
+    /// Bumped whenever a recipe's saved state changes anywhere; the Saved tab refreshes on change.
+    private(set) var savedRevision = 0
+
+    func noteSavedChanged() {
+        savedRevision += 1
+    }
 
     init(serverSettings: ServerSettings,
          api: APIClient,
@@ -36,7 +54,54 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
+        // Recipe ids belong to one server: a link (or an open stack) from the old server is stale.
+        let previous = serverSettings.onEffectiveBaseURLChanged
+        serverSettings.onEffectiveBaseURLChanged = { [weak self] oldValue, newValue in
+            previous?(oldValue, newValue)
+            self?.discardNavigationState()
+        }
     }
+
+    func discardNavigationState() {
+        pendingDeepLink = nil
+        exploreRoutes = []
+    }
+
+    // MARK: - Deep links (brief 003 REC-01)
+
+    /// `onOpenURL` entry point. Unrecognised URLs are ignored. Returns the parsed link for tests.
+    @discardableResult
+    func open(url: URL) -> DeepLink? {
+        guard let link = DeepLink.parse(url) else { return nil }
+        open(link)
+        return link
+    }
+
+    func open(_ link: DeepLink) {
+        guard auth.isSignedIn else {
+            pendingDeepLink = link
+            return
+        }
+        pendingDeepLink = nil
+        switch link {
+        case .recipe(let id):
+            selectedTab = .explore
+            exploreRoutes = [.recipe(id: id, card: nil)]
+        }
+    }
+
+    /// Called when the signed-in UI appears.
+    func applyPendingDeepLink() {
+        guard let link = pendingDeepLink else { return }
+        open(link)
+    }
+
+    #if DEBUG
+    /// Tests only: mark the session signed in with a placeholder user, no network.
+    func forceSignedInForTests() {
+        auth.forceSignedInForTests()
+    }
+    #endif
 
     /// Production wiring: Keychain token, UserDefaults server URL, real capture adapters behind flags.
     static func live(defaults: UserDefaults = .standard) -> AppEnvironment {

@@ -20,6 +20,9 @@ struct RecipeCard: Codable, Sendable, Identifiable, Hashable {
     let publishedAt: Date
     let recipeVersionId: UUID
     let versionNumber: Int
+    /// Brief 003: true/false for a signed-in caller, null when unauthenticated. Absent in Slice 0
+    /// payloads, so it stays optional.
+    var saved: Bool? = nil
 
     var id: UUID { recipeId }
     var coverImageURL: URL? { coverImageUrl.flatMap(URL.init(string:)) }
@@ -50,9 +53,14 @@ struct RecipeDetail: Codable, Sendable, Identifiable, Hashable {
     let creatorNotes: [String]
     let dietaryWarnings: [String]
     let publishedAt: Date
+    /// Brief 003 additions; optional so Slice 0 fixtures still decode.
+    var saved: Bool? = nil
+    var shareUrl: String? = nil
 
     var id: UUID { recipeId }
     var coverImageURL: URL? { coverImageUrl.flatMap(URL.init(string:)) }
+    /// Always built from the id (`ShareLinks`); the server's `share_url` is never displayed or shared.
+    var shareURL: URL { ShareLinks.universal(recipeId: recipeId) }
     var orderedSteps: [RecipeStep] { steps.sorted { $0.order < $1.order } }
 
     /// Header label (PRD §13.4): the least creator-authored origin present wins.
@@ -72,6 +80,18 @@ struct Ingredient: Codable, Sendable, Identifiable, Hashable {
     let optional: Bool
     let preparation: String?
     let notes: String?
+
+    /// Encodes absent optionals as explicit `null` so a PATCH body matches the detail shape exactly.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(quantity, forKey: .quantity)
+        try container.encode(unit, forKey: .unit)
+        try container.encode(optional, forKey: .optional)
+        try container.encode(preparation, forKey: .preparation)
+        try container.encode(notes, forKey: .notes)
+    }
 }
 
 /// PRD §13.4 transparency label source. Unrecognised values (a future backend enum member) decode
@@ -116,5 +136,22 @@ struct RecipeStep: Codable, Sendable, Identifiable, Hashable {
     /// Per-step transparency label; nil for creator-authored steps (the header already says so).
     var provenanceLabel: String? {
         evidenceOrigin.isCreatorAuthored ? nil : evidenceOrigin.label
+    }
+
+    /// Explicit `null`s on the wire (see `Ingredient.encode`).
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(order, forKey: .order)
+        try container.encode(instruction, forKey: .instruction)
+        try container.encode(ingredientRefs, forKey: .ingredientRefs)
+        try container.encode(estimatedMinutes, forKey: .estimatedMinutes)
+        try container.encode(successCues, forKey: .successCues)
+        try container.encode(warnings, forKey: .warnings)
+        try container.encode(creatorNote, forKey: .creatorNote)
+        try container.encode(sourceClipId, forKey: .sourceClipId)
+        try container.encode(sourceStartMs, forKey: .sourceStartMs)
+        try container.encode(sourceEndMs, forKey: .sourceEndMs)
+        try container.encode(evidenceOrigin, forKey: .evidenceOrigin)
     }
 }

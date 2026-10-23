@@ -74,6 +74,21 @@ Video import/extraction (Slice 5), forks/follows (P1), ratings.
   a denial-of-service guard. Step `order` is derived from array position.
 - A presented-but-invalid bearer on a public route is a 401, never silently anonymous.
 
+- **iOS**: the editor autosaves the whole form (800 ms debounce, one save in flight, pending flag),
+  sends explicit `null` to clear a field, and normalises text to the backend's rules as you type
+  (limits, control/bidi stripping, single-line newlines, lowercase tags) so limits are visible
+  instead of failed saves. A PATCH 422 shows the server's reason inline without a retry loop.
+- Publish always goes through a "Publish version N?" confirmation, flushes pending edits first, is
+  refused after a failed save, and after a network drop re-reads the draft before reporting failure.
+- Share links are built by the app from the recipe id; a server-supplied `share_url` is never shown
+  or shared. `souslens.app` link pages aren't live; the success screen says so.
+- Published drafts open read-only; edited steps keep their original evidence origin.
+- Deep links: `souslens://recipe/{uuid}` and `https://souslens.app/r/{uuid}` only; applied after
+  sign-in if received while signed out; cleared on server change.
+- Live smoke (`make ios-smoke`) resets the session with `-auth.hasLaunched NO` and covers
+  author → publish → search → save → Saved. Each run publishes a "Smoke Garlic Toast" recipe to the
+  dev DB.
+
 ## Risks
 - Validation too strict blocks creators; too loose publishes junk. Keep required set minimal and
   show inline reasons.
