@@ -1,6 +1,6 @@
 # 002 — Slice 0: iOS foundation
 
-**Status:** in review (PR #2) · **Owner:** PM · **PR:** https://github.com/hshwang34/SousLens/pull/2 · **Updated:** 2026-10-20
+**Status:** shipped (PR #2 merged 2026-10-20) · **Owner:** PM · **PR:** https://github.com/hshwang34/SousLens/pull/2 · **Updated:** 2026-10-20
 
 ## Problem
 No app exists. Slice 0 must prove the SwiftUI shell, API client, dev sign-in, and the device

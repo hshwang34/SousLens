@@ -1,0 +1,9 @@
+{
+  "candidates": [
+    {"raw_label": "Gochujang", "canonical_name": "gochujang", "quantity": null, "unit": null,
+     "confidence": 0.91, "evidence": "package label", "action": "add"},
+    {"raw_label": "unlabeled jar", "canonical_name": null, "quantity": null, "unit": null,
+     "confidence": 0.17, "evidence": "contents not identifiable", "action": "ignore"}
+  ],
+  "notes": ["Fixture-driven mock observation for fixtures/pantry_images/gochujang_jar.*"]
+}

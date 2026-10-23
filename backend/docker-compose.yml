@@ -1,0 +1,22 @@
+# Local Postgres 16 for SousLens. Host port 5433 (5432 is often taken by brew postgresql@16).
+services:
+  postgres:
+    image: postgres:16
+    container_name: souslens-postgres
+    environment:
+      POSTGRES_USER: souslens
+      POSTGRES_PASSWORD: souslens
+      POSTGRES_DB: souslens
+    ports:
+      - "5433:5432"
+    volumes:
+      - souslens-pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U souslens -d souslens"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  souslens-pgdata:
