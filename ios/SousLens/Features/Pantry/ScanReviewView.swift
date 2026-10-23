@@ -144,9 +144,12 @@ private struct ReviewRowView: View {
                                 .foregroundStyle(SLColor.textSecondary)
                         }
                     }
-                    HStack(spacing: Spacing.sm) {
+                    // Stacked rather than side by side: next to the evidence text the pill was
+                    // squeezed to "Likely · estim…", hiding the word that makes it honest.
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
                         MetadataPill(text: row.confidenceText, systemImage: binImage,
                                      accessibilityLabel: "Confidence: \(row.candidate.confidenceBin.label), an estimate")
+                            .fixedSize(horizontal: true, vertical: false)
                         if let evidence = row.evidenceText {
                             Text(evidence)
                                 .font(SLFont.footnote)
