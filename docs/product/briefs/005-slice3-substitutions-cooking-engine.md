@@ -1,6 +1,6 @@
 # 005 — Slice 3: substitutions and cooking engine
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-20
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-23
 
 ## Problem
 Nobody can cook with the app yet. PRD §16 Slice 3, SUB-01..05, COOK-01..04 (typed), COOK-06..08,
@@ -42,7 +42,7 @@ Voice input, real coach/vision models (Slice 4), glasses (6), public variants (P
 
 ## Open product questions
 1. **Timer suggestion copy** — Options: A ("Start a 10-min simmer timer?" with Start/Skip),
-   B (auto-create paused timer). **Recommendation:** A per PRD §6.1. → *Answer:* A (default).
+   B (auto-create paused timer). **Recommendation:** A per PRD §6.1. → *Answer:* A (DECISIONS #14).
 
 ## Engineering decisions
 - (filled in while building)

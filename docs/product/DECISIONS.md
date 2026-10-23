@@ -83,3 +83,16 @@ a mock (demo) photo scan start unticked so demo data never lands in a real pantr
 the line at "uncertain" with "the amount is an estimate from a photo — check it", and estimates
 are never added up. Typing your own amount removes the estimate. *Why:* PRD §8.3 ("mark estimates
 as such; ask the user to confirm") and FIT-03 (never claim "you can make it" on uncertain data).
+
+#14 · 2026-10-23 · **Slice 3 product defaults (PRD-derived, logged rather than asked).**
+- A suggested timer is offered as "Start a 10-min simmer timer?" with Start / Skip; nothing starts
+  without a tap (brief 005 Q1, PRD §6.1).
+- Profile gains "Allergies & foods to avoid" (SUB-02 is P0). Allergies are hard blocks on
+  substitutions; "avoid" is a soft preference. The app never says a substitute is "safe for you".
+- Swaps are labelled "Common swap" (vetted seed table) or "AI suggested adaptation"; adapted step
+  text always shows the original one tap away, and any swap can be reverted mid-cook.
+- Finishing a cook offers a private note and "Save my changes" (a private variation reused next
+  time via "Use my changes from last time"). No public forks until P1.
+- The coach answers typed questions only in Slice 3, from the recipe as published; food-safety
+  questions always point to a thermometer / verified guidance.
+*Lives in:* `docs/product/briefs/005-api-contract.md`.
