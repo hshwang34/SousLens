@@ -58,7 +58,15 @@ final class SpeakCaptureViewModel {
     private let service: PantryService
     /// Every press and every release bumps this; a start that resumes superseded tears down.
     private var gate = CaptureStartGate()
+    /// The press whose start is in flight or live; nil once released.
+    private var activeStart: Int?
     private var autoStopTask: Task<Void, Never>?
+
+    /// Taken synchronously when the finger goes down, so a release that lands before the async
+    /// start runs always wins.
+    struct StartToken: Equatable, Sendable {
+        fileprivate let value: Int
+    }
 
     init(speech: any SpeechInput, service: PantryService) {
         self.speech = speech
@@ -95,14 +103,29 @@ final class SpeakCaptureViewModel {
         mode = .speak
     }
 
-    /// Press began (hold), or a VoiceOver toggle on.
-    func beginListening(style: ListenStyle = .hold) async {
-        guard speech.isAvailable, !isListening, !isStarting, !isSubmitting else { return }
+    /// Finger down (hold) or VoiceOver toggle on. Synchronous: call it directly from the gesture,
+    /// then run `beginListening(token:)` in a Task. Nil when listening can't start now.
+    @discardableResult
+    func pressBegan(style: ListenStyle = .hold) -> StartToken? {
+        guard speech.isAvailable, !isListening, !isStarting, !isSubmitting else { return nil }
         let token = gate.begin()
+        activeStart = token
         isStarting = true
         listenStyle = style
         message = nil
         permissionDenied = false
+        return StartToken(value: token)
+    }
+
+    /// Convenience for callers already on an async path (tests): press, then start.
+    func beginListening(style: ListenStyle = .hold) async {
+        await beginListening(token: pressBegan(style: style))
+    }
+
+    func beginListening(token startToken: StartToken?) async {
+        // Released before this ran: nothing is started at all.
+        guard let startToken, gate.isCurrent(startToken.value) else { return }
+        let token = startToken.value
         // A superseded start must not clear the flag of a newer one.
         defer { if gate.isCurrent(token) { isStarting = false } }
         let stream: AsyncStream<TranscriptChunk>
@@ -115,9 +138,11 @@ final class SpeakCaptureViewModel {
             if gate.isCurrent(token) { message = error.localizedDescription }
             return
         }
-        // Released (or stopped) while the start was suspended: tear down, never open the relay.
+        // Released (or stopped) while the start was suspended: never open the relay. Tear the
+        // audio down only if no newer press is starting or live, or we'd kill that session.
         guard gate.isCurrent(token) else {
-            speech.stop()
+            let newerInFlight = activeStart != nil && activeStart != token
+            if !newerInFlight && !isListening { speech.stop() }
             return
         }
         isListening = true
@@ -132,7 +157,7 @@ final class SpeakCaptureViewModel {
             self?.isListening = false
             self?.autoStopTask?.cancel()
         }
-        if style == .toggle {
+        if listenStyle == .toggle {
             let limit = toggleAutoStop
             autoStopTask = Task { [weak self] in
                 try? await Task.sleep(for: limit)
@@ -146,15 +171,26 @@ final class SpeakCaptureViewModel {
     /// in flight gives up; audio stops at once and the final words still arrive.
     func endListening() {
         gate.supersede()
+        activeStart = nil
         isStarting = false
         autoStopTask?.cancel()
         autoStopTask = nil
         speech.stop()
     }
 
-    /// VoiceOver can't press-and-hold: a double tap toggles instead.
+    /// VoiceOver can't press-and-hold: a double tap toggles instead. Synchronous part: returns
+    /// the token to start with, or nil when this tap stopped listening.
+    func toggleTapped() -> StartToken? {
+        if isListening || isStarting {
+            endListening()
+            return nil
+        }
+        return pressBegan(style: .toggle)
+    }
+
     func toggleListening() async {
-        if isListening || isStarting { endListening() } else { await beginListening(style: .toggle) }
+        guard let token = toggleTapped() else { return }
+        await beginListening(token: token)
     }
 
     func findItems() async {

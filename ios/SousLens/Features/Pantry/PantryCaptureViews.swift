@@ -99,7 +99,9 @@ struct SpeakCaptureView: View {
             .onChange(of: pressing) { _, isPressed in
                 if isPressed {
                     fieldFocused = false
-                    Task { await model.beginListening() }
+                    // Token taken now, before the Task: a release that beats the Task still wins.
+                    let token = model.pressBegan()
+                    Task { await model.beginListening(token: token) }
                 } else {
                     model.endListening()
                 }
@@ -108,7 +110,11 @@ struct SpeakCaptureView: View {
             .accessibilityLabel(model.isListening ? "Stop" : "Start listening")
             .accessibilityHint(model.isListening ? "Stops listening" : "Listens until you tap Stop, 60 seconds at most")
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { Task { await model.toggleListening() } }
+            .accessibilityAction {
+                if let token = model.toggleTapped() {
+                    Task { await model.beginListening(token: token) }
+                }
+            }
             .accessibilityIdentifier("speak.mic")
             .frame(maxWidth: .infinity)
 

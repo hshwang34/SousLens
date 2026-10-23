@@ -191,8 +191,7 @@ final class ScanReviewViewModel {
                 alreadyAdded = true
                 error = nil
             } else if api.status == 404 || api.status == 410 {
-                // Sent with an observation id: the observation row has expired (24 h TTL).
-                error = Self.expiredMessage
+                handleNotFound(api, sent: accepted)
             } else {
                 error = "Couldn’t add: \(api.pantryMessage)"
             }
@@ -201,6 +200,44 @@ final class ScanReviewViewModel {
             self.error = "Couldn’t add: \(error.pantryMessage)"
             return nil
         }
+    }
+
+    static let mergeTargetGoneMessage = "That item no longer exists — pick Merge again or Keep both."
+
+    /// 404/410 on confirm: either the observation expired (24 h TTL) or a `merge_into` target was
+    /// deleted meanwhile. Only the latter reopens the choice.
+    private func handleNotFound(_ api: APIError, sent: [ReviewRow]) {
+        let mergeRows = sent.filter { $0.duplicateChoice == .merge && $0.duplicateOf != nil }
+        if api.status == 410 || mergeRows.isEmpty || Self.refersToObservation(api) {
+            error = Self.expiredMessage
+            return
+        }
+        let target = Self.missingTarget(api)
+        let affected = mergeRows.filter { target == nil || $0.duplicateOf == target }
+        for row in (affected.isEmpty ? mergeRows : affected) {
+            update(row.id) { $0.duplicateChoice = nil }
+        }
+        error = Self.mergeTargetGoneMessage
+    }
+
+    private static func refersToObservation(_ api: APIError) -> Bool {
+        guard case .server(_, _, let message, _, _, let details) = api else { return false }
+        if message.localizedCaseInsensitiveContains("observation") { return true }
+        guard let details else { return false }
+        if details["observation_id"] != nil { return true }
+        for key in ["field", "resource", "param"] {
+            if let value = details[key]?.stringValue, value.localizedCaseInsensitiveContains("observation") { return true }
+        }
+        return false
+    }
+
+    /// The pantry id the 404 names, when it says (`details.merge_into` or `details.id`).
+    private static func missingTarget(_ api: APIError) -> UUID? {
+        guard let details = api.details else { return nil }
+        for key in ["merge_into", "id", "pantry_item_id"] {
+            if let raw = details[key]?.stringValue, let id = UUID(uuidString: raw) { return id }
+        }
+        return nil
     }
 
     private func applyConflicts(_ conflicts: [PantryConflict], sent: [ReviewRow]) {
