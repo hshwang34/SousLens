@@ -170,8 +170,9 @@ async def create_items(
                 row.quantity_is_estimate = item.quantity_is_estimate
                 row.source = PantrySource(item.source)
                 row.confidence = _confidence(item)
-                if body.observation_id is not None:
-                    row.source_observation_id = body.observation_id
+                # The new amount's provenance replaces the old one entirely, including the link
+                # to the scan it came from (None for a typed amount).
+                row.source_observation_id = body.observation_id
             if item.storage_location is not None:
                 row.storage_location = item.storage_location
             if item.note is not None:

@@ -162,3 +162,28 @@ def test_salt_and_pepper_needs_both(d: IngredientDictionary) -> None:
     assert "pepper" in missing.reason
     # a shared amount can't be split between the parts → never better than uncertain
     assert line(d, "salt and pepper", 1, "tsp", salt, pepper).status == "uncertain"
+
+
+# --- dietary identity inside parentheses (lead fix after re-review) ---------------------------
+
+
+@pytest.mark.parametrize(
+    "recipe_line",
+    ["soy sauce (gluten-free)", "Soy Sauce (Gluten-Free)", "soy sauce (gluten-free, low sodium)"],
+)
+def test_dietary_identity_in_parentheses_is_kept(d: IngredientDictionary, recipe_line: str) -> None:
+    """A recipe's "(gluten-free)" must not be dropped: plain soy sauce is not gluten-free."""
+    assert normalize(recipe_line, d).key != normalize("soy sauce", d).key
+    assert normalize(recipe_line, d).key == normalize("gluten-free soy sauce", d).key
+
+
+@pytest.mark.parametrize("recipe_line", ["butter (dairy-free)", "mayonnaise (vegan)"])
+def test_unknown_dietary_variants_never_match_the_plain_ingredient(
+    d: IngredientDictionary, recipe_line: str
+) -> None:
+    plain = recipe_line.split(" (")[0]
+    assert normalize(recipe_line, d).key != normalize(plain, d).key
+
+
+def test_preparation_parentheticals_are_still_dropped(d: IngredientDictionary) -> None:
+    assert normalize("onion (finely chopped)", d).key == normalize("onion", d).key

@@ -63,3 +63,14 @@ None blocking; PRD §8.3 bins (>0.85 / 0.6–0.85 / <0.6) are the defaults.
 - Transcript eval: the 15 fixtures score precision/recall 1.0 against the deterministic mock parser.
   They were written alongside the parser, so this proves coverage of listed cases, not real
   speech-to-text accuracy (that is a Slice 4 measurement).
+- Fix round 1: "X or Y" lines never add the alternatives together; photo-estimated amounts cap a
+  line at uncertain (DECISIONS #13) unless the recipe states no amount; observation TTL enforced on
+  every read and write; the rate-limit slot is reserved in its own transaction before the provider
+  call, so no lock is held during a (future) Gemini call and failed attempts still count; provider
+  errors → 503, malformed output → retry once → 502; 30 s provider timeout.
+- A dietary identity in a recipe's parentheses ("soy sauce (gluten-free)") is kept in the matching
+  key, so it never matches the plain ingredient; preparation notes in parentheses are still dropped.
+- **iOS**: typed text is "Manual", dictated text "Voice" (DECISIONS #12); mock-photo candidates start
+  unticked; push-to-talk takes its start token synchronously so a release always wins; PATCH sends
+  only changed fields; reloads are last-request-wins; photos are decoded as ≤1600 px thumbnails off
+  the main thread and re-encoded without EXIF/GPS; VoiceOver users get a 60 s auto-stopping toggle.

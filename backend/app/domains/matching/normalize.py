@@ -64,6 +64,8 @@ MODIFIERS = frozenset(
     {"low-sodium", "reduced-sodium", "less-sodium", "low-salt", "no-salt-added", "lite"}
 )
 _PAREN_RE = re.compile(r"\([^)]*\)")
+# Inside parentheses, these words mark a dietary identity that must survive normalisation.
+_DIETARY_IDENTITY_RE = re.compile(r"\b(?:[a-z]+-free|free of [a-z]+|vegan|kosher|halal)\b")
 _SODIUM_RE = re.compile(r"\b(low|reduced|less) sodium\b")
 
 
@@ -106,7 +108,18 @@ def _normalize(text: str, dictionary: IngredientDictionary) -> Normalized:
     if (entry := dictionary.lookup(phrase)) is not None:
         return _hit(entry)
 
+    # Parentheticals are usually preparation notes ("(finely chopped)") and are dropped, but a
+    # dietary identity ("(gluten-free)", "(dairy-free)", "(vegan)") changes WHAT the ingredient
+    # is. Dropping it would let "soy sauce (gluten-free)" match plain soy sauce, a false
+    # "available" for someone avoiding gluten. Hoist those words in front of the name instead.
+    identity = [
+        word
+        for m in _PAREN_RE.finditer(phrase)
+        for word in _DIETARY_IDENTITY_RE.findall(m.group(0))
+    ]
     without_paren = re.sub(r"\s+", " ", _PAREN_RE.sub(" ", phrase)).strip(" ,")
+    if identity and without_paren:
+        without_paren = " ".join([*identity, without_paren])
     if without_paren and (entry := dictionary.lookup(without_paren)) is not None:
         return _hit(entry)
     phrase = without_paren or phrase
