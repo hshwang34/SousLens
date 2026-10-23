@@ -79,7 +79,7 @@ final class APIClient: Sendable, RecipeService, AuthService {
     private let baseURLProvider: BaseURLProviding
     private let tokenProvider: TokenProviding
     private let decoder = JSONCoding.makeDecoder()
-    private let encoder = JSONCoding.makeEncoder()
+    let encoder = JSONCoding.makeEncoder()
     private let logger = Logger(subsystem: "com.souslens.ios", category: "api")
 
     init(session: URLSessionProtocol = URLSession.shared,
@@ -183,9 +183,9 @@ final class APIClient: Sendable, RecipeService, AuthService {
         try await send(.get("/v1/recipe-versions/\(Self.pathId(id))"))
     }
 
-    private static let emptyObject = Data("{}".utf8)
+    static let emptyObject = Data("{}".utf8)
 
-    private static func pathId(_ id: UUID) -> String { id.uuidString.lowercased() }
+    static func pathId(_ id: UUID) -> String { id.uuidString.lowercased() }
 
     // MARK: - Transport
 
@@ -194,6 +194,9 @@ final class APIClient: Sendable, RecipeService, AuthService {
         let path: String
         var query: [URLQueryItem] = []
         var body: Data? = nil
+        /// Sent with `body`. JSON unless a multipart upload says otherwise.
+        var contentType = "application/json"
+        var timeout: TimeInterval = 15
 
         static func get(_ path: String, query: [URLQueryItem] = []) -> Endpoint {
             Endpoint(method: "GET", path: path, query: query)
@@ -209,6 +212,12 @@ final class APIClient: Sendable, RecipeService, AuthService {
 
         static func delete(_ path: String) -> Endpoint {
             Endpoint(method: "DELETE", path: path)
+        }
+
+        /// `multipart/form-data` POST (pantry photo). Uploads get a longer timeout (PRD §14: 15 s
+        /// vision target plus transfer).
+        static func multipart(_ path: String, form: MultipartFormData) -> Endpoint {
+            Endpoint(method: "POST", path: path, body: form.encoded(), contentType: form.contentType, timeout: 30)
         }
     }
 
@@ -287,11 +296,11 @@ final class APIClient: Sendable, RecipeService, AuthService {
 
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method
-        request.timeoutInterval = 15
+        request.timeoutInterval = endpoint.timeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body = endpoint.body {
             request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(endpoint.contentType, forHTTPHeaderField: "Content-Type")
         }
         if authenticated, let token = tokenProvider.currentToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

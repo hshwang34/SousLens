@@ -55,8 +55,14 @@ final class FakeSpeechInput: SpeechInput {
         self.scriptedChunks = scriptedChunks
     }
 
+    /// Optional suspension before the stream opens (stands in for the permission prompt).
+    var beforeStart: (@MainActor () async -> Void)?
+    private(set) var startCount = 0
+
     func startListening() async throws -> AsyncStream<TranscriptChunk> {
         guard isAvailable else { throw CaptureError.unavailable(kind, reason: "Fake source marked unavailable.") }
+        startCount += 1
+        if let beforeStart { await beforeStart() }
         let (stream, continuation) = AsyncStream<TranscriptChunk>.makeStream()
         self.continuation = continuation
         isListening = true

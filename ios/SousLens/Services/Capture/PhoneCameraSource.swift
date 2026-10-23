@@ -26,11 +26,11 @@ enum CameraRunState {
 /// AVFoundation-backed `CameraSource`. The session lives inside `pipeline` (an actor) so
 /// `startRunning()` never blocks the main thread and non-Sendable AV objects stay isolated.
 ///
-/// Slice 0 does not expose a preview surface (`AVCaptureVideoPreviewLayer`); that arrives with the
-/// pantry-scan screen. `startPreview()` here means "run the session so frames can be captured".
+/// `startPreview()` runs the session so frames can be captured; the pantry-scan screen shows it
+/// through `CameraPreviewProviding` (an `AVCaptureVideoPreviewLayer`, device only).
 @MainActor
 @Observable
-final class PhoneCameraSource: CameraSource {
+final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
     let kind: CaptureSourceKind = .phone
     let isAvailable: Bool
     private(set) var activeIndicator = false
@@ -87,6 +87,11 @@ final class PhoneCameraSource: CameraSource {
         throw CaptureError.cancelled
     }
 
+    /// Connects a viewfinder layer to the running session. The session itself is never handed out.
+    func attachPreview(to layer: AVCaptureVideoPreviewLayer) {
+        pipeline.attach(layer)
+    }
+
     func captureFrame() async throws -> CapturedFrame {
         guard activeIndicator else { throw CaptureError.notRunning }
         let data = try await pipeline.capturePhoto()
@@ -134,9 +139,37 @@ final class PhoneCameraSource: CameraSource {
     )
 }
 
+/// A camera that can show a live viewfinder. Only the phone camera does today.
+@MainActor
+protocol CameraPreviewProviding: AnyObject {
+    func attachPreview(to layer: AVCaptureVideoPreviewLayer)
+}
+
 /// Owns the non-Sendable AVCapture objects and their notifications.
 private actor CameraPipeline {
-    private let session = AVCaptureSession()
+    /// Touched by this actor (configuration), by `sessionQueue` (start/stop, which block) and by
+    /// `attach` (main thread, preview layer only), the split Apple's AVCam sample uses.
+    /// Held in a Sendable box rather than `nonisolated(unsafe)`: older Swift 6 compilers (CI's
+    /// Xcode) reject a non-Sendable value leaving a nonisolated(unsafe) context in `attach`.
+    private let box = SessionBox(session: AVCaptureSession())
+    private var session: AVCaptureSession { box.session }
+    /// `startRunning()` / `stopRunning()` block for a noticeable time; they run here instead of on
+    /// the actor's cooperative thread.
+    private let sessionQueue = DispatchQueue(label: "com.souslens.ios.camera.session")
+
+    nonisolated func attach(_ layer: AVCaptureVideoPreviewLayer) {
+        layer.session = box.session
+    }
+
+    private func onSessionQueue(_ work: @escaping @Sendable (AVCaptureSession) -> Void) async {
+        let box = self.box
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            sessionQueue.async {
+                work(box.session)
+                continuation.resume()
+            }
+        }
+    }
     private let photoOutput = AVCapturePhotoOutput()
     private var configured = false
     private let observers = NotificationObserverBag()
@@ -163,18 +196,18 @@ private actor CameraPipeline {
         })
     }
 
-    func start() throws {
+    func start() async throws {
         if !configured {
             try configure()
         }
-        if !session.isRunning {
-            session.startRunning()
+        await onSessionQueue { session in
+            if !session.isRunning { session.startRunning() }
         }
     }
 
-    func stop() {
-        if session.isRunning {
-            session.stopRunning()
+    func stop() async {
+        await onSessionQueue { session in
+            if session.isRunning { session.stopRunning() }
         }
     }
 
@@ -203,6 +236,11 @@ private actor CameraPipeline {
         session.addOutput(photoOutput)
         configured = true
     }
+}
+
+/// Carries the session onto `sessionQueue`; access there is serialised by the queue.
+private struct SessionBox: @unchecked Sendable {
+    let session: AVCaptureSession
 }
 
 /// Bridges the delegate callback into a continuation. Retained by AVFoundation until the callback.

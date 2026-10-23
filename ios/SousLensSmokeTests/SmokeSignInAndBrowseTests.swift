@@ -8,6 +8,8 @@ import XCTest
 /// - `testSignInWithLoggedCodeAndOpenSeededRecipe`: PRD §16 Slice 0 gate.
 /// - `testAuthorPublishAndSave`: brief 003 — create a draft from Profile, fill title / one
 ///   ingredient / one step, publish (with confirmation), find it in Explore, save it, see it in Saved.
+/// - `testTypeIntoPantryAndCheckFit`: brief 004 — Pantry → Speak → Type instead → Find items →
+///   review → Add, then the seeded recipe's Check my pantry shows the match and what's left.
 @MainActor
 final class SmokeSignInAndBrowseTests: XCTestCase {
     private let browseEmail = "smoke@souslens.dev"
@@ -114,6 +116,72 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         attach(app, "10-saved-tab")
     }
 
+    // MARK: - Brief 004
+
+    func testTypeIntoPantryAndCheckFit() throws {
+        // A fresh account per run, so the pantry starts empty and no duplicate prompt appears.
+        let app = try launchSignedIn(email: "smoke-pantry-\(Int(Date().timeIntervalSince1970))@souslens.dev")
+
+        // Pantry → Speak. The simulator has no speech recognizer, so the sheet may already be in
+        // typing mode; tap "Type instead" when it is offered.
+        app.tabBars.buttons["Pantry"].tap()
+        let speak = app.buttons["pantry.speak"]
+        XCTAssertTrue(speak.waitForExistence(timeout: 10), "Pantry has no Speak button")
+        speak.tap()
+        let typeInstead = app.buttons["speak.typeInstead"]
+        if typeInstead.waitForExistence(timeout: 3) { typeInstead.tap() }
+        let transcript = app.descendants(matching: .any)["speak.transcript"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "no transcript field")
+        type("chicken thighs, two onions, 3 tbsp gochujang and honey", into: transcript, in: app)
+        attach(app, "11-pantry-typed")
+
+        let findItems = app.buttons["speak.findItems"]
+        XCTAssertTrue(wait(for: findItems, enabled: true, timeout: 5))
+        findItems.tap()
+
+        // Scan review: candidates, then an explicit confirm.
+        let confirm = app.buttons["review.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 15), "Scan review did not open")
+        attach(app, "12-review")
+        // Defensive: if the backend flags a duplicate anyway, answer it explicitly (never silent).
+        for merge in app.buttons.matching(identifier: "review.merge").allElementsBoundByIndex where merge.isHittable {
+            merge.tap()
+        }
+        scrollUntilHittable(confirm, in: app)
+        XCTAssertTrue(wait(for: confirm, enabled: true, timeout: 5), "Confirm stayed disabled")
+        confirm.tap()
+
+        // Back on the pantry list with the new rows.
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "pantry.row").firstMatch.waitForExistence(timeout: 15),
+                      "pantry did not list the added items")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'pantry.row' AND label CONTAINS[c] 'gochujang'")).firstMatch.exists,
+                      "gochujang not in the pantry")
+        attach(app, "13-pantry-list")
+
+        // Explore → seeded recipe → Check my pantry.
+        searchExplore(app, for: "Gochujang")
+        let card = app.staticTexts["Gochujang Chicken Thighs"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "Explore did not list the seeded recipe")
+        card.tap()
+        let check = app.buttons["recipe.checkPantry"]
+        XCTAssertTrue(check.waitForExistence(timeout: 10), "no Check my pantry button")
+        scrollUntilHittable(check, in: app)
+        XCTAssertTrue(wait(for: check, enabled: true, timeout: 10))
+        check.tap()
+
+        XCTAssertTrue(app.staticTexts["fit.headline"].waitForExistence(timeout: 15), "Pantry fit did not load")
+        attach(app, "14-fit")
+        // "3 tbsp gochujang" meets the recipe's 3 tbsp, so it must be Available (FIT-01/02).
+        // Chicken thighs and onions were said without the recipe's amounts → Uncertain, not Missing.
+        let gochujang = NSPredicate(format: "label CONTAINS[c] 'gochujang'")
+        let available = collect(in: app, identifiers: ["fit.available"], matching: gochujang)
+        XCTAssertFalse(available.isEmpty, "gochujang (3 tbsp in pantry) is not shown as Available")
+        XCTAssertTrue(collect(in: app, identifiers: ["fit.missing"], matching: gochujang).isEmpty, "gochujang listed as Missing")
+        let leftover = collect(in: app, identifiers: ["fit.missing", "fit.uncertain"], matching: NSPredicate(value: true))
+        XCTAssertFalse(leftover.isEmpty, "expected something Missing or Uncertain (soy sauce, garlic, …)")
+        attach(app, "15-fit-scrolled")
+    }
+
     // MARK: - Helpers
 
     /// Launches, signs out any leftover session, then signs in with the code from the server log.
@@ -175,6 +243,32 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         }
         XCTAssertTrue(keyboard.exists, "keyboard never appeared for \(field.identifier)")
         field.typeText(text)
+    }
+
+    /// Lists are lazy: swipe up until the element can be tapped (or give up after a few tries).
+    private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
+        var swipes = 0
+        while !(element.exists && element.isHittable) && swipes < maxSwipes {
+            app.swipeUp()
+            swipes += 1
+        }
+    }
+
+    /// Labels of every element with one of `identifiers` matching `predicate`, scrolling the
+    /// (lazy) list down a few screens so off-screen sections are seen too.
+    private func collect(in app: XCUIApplication, identifiers: [String], matching predicate: NSPredicate, screens: Int = 4) -> Set<String> {
+        var labels = Set<String>()
+        for screen in 0..<screens {
+            for identifier in identifiers {
+                let query = app.descendants(matching: .any).matching(identifier: identifier).matching(predicate)
+                for element in query.allElementsBoundByIndex where element.exists {
+                    labels.insert(element.label)
+                }
+            }
+            if screen < screens - 1 { app.swipeUp() }
+        }
+        for _ in 0..<(screens - 1) { app.swipeDown() }
+        return labels
     }
 
     private func wait(for element: XCUIElement, enabled: Bool, timeout: TimeInterval) -> Bool {
