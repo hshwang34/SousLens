@@ -38,6 +38,21 @@ final class AppEnvironment {
         savedRevision += 1
     }
 
+    /// Bumped after any confirmed pantry write (add, merge, edit, delete, "still have it") so the
+    /// Pantry tab and an open recipe fit re-read from the server.
+    private(set) var pantryRevision = 0
+
+    func notePantryChanged() {
+        pantryRevision += 1
+    }
+
+    #if DEBUG
+    /// Mock-mode photo fixture stem (`-pantry.photoFixture gochujang_jar`); debug builds only.
+    var pantryPhotoFixture: String? { UserDefaults.standard.string(forKey: "pantry.photoFixture") }
+    #else
+    var pantryPhotoFixture: String? { nil }
+    #endif
+
     init(serverSettings: ServerSettings,
          api: APIClient,
          auth: AuthStore,

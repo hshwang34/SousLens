@@ -14,6 +14,7 @@ struct RecipeDetailView: View {
     @State private var editor: DraftEditorViewModel?
     @State private var isOpeningEditor = false
     @State private var showUnpublishConfirmation = false
+    @State private var showPantryFit = false
 
     var body: some View {
         Group {
@@ -37,6 +38,12 @@ struct RecipeDetailView: View {
         }
         .fullScreenCover(item: $editor, onDismiss: { Task { await model?.load() } }) { editor in
             DraftEditorView(model: editor)
+        }
+        .navigationDestination(isPresented: $showPantryFit) {
+            if let detail = model?.detail {
+                // The fit is for exactly the version on screen (sessions pin versions too).
+                PantryFitView(recipeVersionId: detail.recipeVersionId, recipeTitle: detail.title)
+            }
         }
     }
 
@@ -121,15 +128,21 @@ struct RecipeDetailView: View {
                 ownerActions(model)
             }
 
-            Button("Check my pantry") {}
-                .buttonStyle(SLButtonStyle(prominent: false))
-                .disabled(true)
-                .slDisabledAppearance(true)
+            Button {
+                showPantryFit = true
+            } label: {
+                Label("Check my pantry", systemImage: "basket")
+            }
+            .buttonStyle(SLButtonStyle(prominent: false))
+            .disabled(!loaded)
+            .slDisabledAppearance(!loaded)
+            .accessibilityIdentifier("recipe.checkPantry")
+            .accessibilityHint("Shows which ingredients you have, which to check, and which are missing")
             Button("Start cooking") {}
                 .buttonStyle(SLButtonStyle(prominent: true))
                 .disabled(true)
                 .slDisabledAppearance(true)
-            Text("Check my pantry and Start cooking are coming in a later build")
+            Text("Start cooking is coming in a later build")
                 .font(SLFont.footnote)
                 .foregroundStyle(SLColor.textSecondary)
                 .multilineTextAlignment(.center)

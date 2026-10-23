@@ -26,11 +26,11 @@ enum CameraRunState {
 /// AVFoundation-backed `CameraSource`. The session lives inside `pipeline` (an actor) so
 /// `startRunning()` never blocks the main thread and non-Sendable AV objects stay isolated.
 ///
-/// Slice 0 does not expose a preview surface (`AVCaptureVideoPreviewLayer`); that arrives with the
-/// pantry-scan screen. `startPreview()` here means "run the session so frames can be captured".
+/// `startPreview()` runs the session so frames can be captured; the pantry-scan screen shows it
+/// through `CameraPreviewProviding` (an `AVCaptureVideoPreviewLayer`, device only).
 @MainActor
 @Observable
-final class PhoneCameraSource: CameraSource {
+final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
     let kind: CaptureSourceKind = .phone
     let isAvailable: Bool
     private(set) var activeIndicator = false
@@ -87,6 +87,10 @@ final class PhoneCameraSource: CameraSource {
         throw CaptureError.cancelled
     }
 
+    /// For `AVCaptureVideoPreviewLayer` only. Attaching a layer to a session is main-thread safe;
+    /// the session is configured and started inside `pipeline`.
+    var previewSession: AVCaptureSession { pipeline.previewSession }
+
     func captureFrame() async throws -> CapturedFrame {
         guard activeIndicator else { throw CaptureError.notRunning }
         let data = try await pipeline.capturePhoto()
@@ -134,9 +138,18 @@ final class PhoneCameraSource: CameraSource {
     )
 }
 
+/// A camera that can show a live viewfinder. Only the phone camera does today.
+@MainActor
+protocol CameraPreviewProviding: AnyObject {
+    var previewSession: AVCaptureSession { get }
+}
+
 /// Owns the non-Sendable AVCapture objects and their notifications.
 private actor CameraPipeline {
-    private let session = AVCaptureSession()
+    /// Shared with the preview layer (main thread), which only reads frames from it.
+    nonisolated(unsafe) private let session = AVCaptureSession()
+
+    nonisolated var previewSession: AVCaptureSession { session }
     private let photoOutput = AVCapturePhotoOutput()
     private var configured = false
     private let observers = NotificationObserverBag()
