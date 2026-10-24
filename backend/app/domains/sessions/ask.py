@@ -10,7 +10,10 @@
 * Deterministic safety wins over the coach (DECISIONS #15): a doneness / safe-to-eat question
   or a raw-tasting question is answered from a fixed template (the step's cues, the
   thermometer / verified-guidance notice, "I can't tell from a description or photo") and the
-  model is not called at all; there is no model prose to filter.
+  model is not called at all. Every other model answer is post-filtered as a second line of
+  defence: when the query or answer touches doneness / safety / readiness, every sentence that
+  could certify it is dropped, the thermometer notice is attached, and an emptied answer
+  falls back to the template.
 * Rate limits: 120 asks per user per hour across all sessions (``usage_events``, survives
   session deletion) and 60 per session per hour; both reserved and committed before the
   provider call so no lock spans it.
@@ -56,6 +59,8 @@ from app.domains.safety.content import (
     doneness_notice,
     is_doneness_question,
     is_raw_tasting_request,
+    mentions_safety_terms,
+    strip_certifications,
 )
 from app.domains.sessions import intent, service
 from app.domains.sessions.schemas import (
@@ -335,6 +340,17 @@ def _postprocess(
             grounding.append(g)
     if not grounding:
         grounding.append(GroundingOut(type="recipe_step", id=current.id))
+
+    # Second line of defence: a question the detectors missed must still never come back with
+    # a model sentence certifying doneness or safety (security review of bab9b53).
+    if mentions_safety_terms(body.query) or mentions_safety_terms(answer):
+        context = [current.instruction, *current.warnings, *names.values()]
+        notice = doneness_notice_for(body.query, context)
+        answer, _dropped = strip_certifications(answer)
+        if not answer:
+            return _template(packet, notice, refusal=False)
+        safety_notice = notice
+        uncertainty = "high" if uncertainty == "high" else "medium"
     return {
         "answer_text": answer,
         "grounding": grounding,

@@ -787,10 +787,13 @@ _WIDE_RE = re.compile(
     r"hot enough|warm enough|cooked enough)\b"
 )
 _PROGRESS_TALK_RE = re.compile(r"\b(i'?m|i am|we'?re|we are) done\b|\bdone with\b")
+# Short definition / quantity questions only, matched against the WHOLE query; they exempt the
+# wide vocabulary ("what does serve mean") but never a strict doneness word (handled first).
 _DEFINITION_RE = re.compile(
-    r"^\s*(what does .* mean|what is (a |an |the )?(?!it\b)\w+( \w+)?\??$|what'?s (a|an) |"
-    r"define |meaning of |how much |how many |how do (i|you) (say|spell|pronounce)|"
-    r"where (is|are|do) )"
+    r"^\s*(?:what does ['\"]?[\w' -]{1,40}['\"]? mean|what is (?:a |an |the )?(?!it\b)"
+    r"[\w' -]{1,40}|what'?s (?:a|an) [\w' -]{1,40}|define [\w' -]{1,40}|"
+    r"meaning of [\w' -]{1,40}|how (?:much|many) [\w' -]{1,60}|"
+    r"where (?:is|are|do) [\w' -]{1,60})\s*[?.!]?\s*$"
 )
 _TASTE_RE = re.compile(r"\b(taste|tasting|lick|try|sample|nibble|sip)\b")
 _RAW_CONTEXT_RE = re.compile(
@@ -857,8 +860,9 @@ def is_doneness_question(query: str, context: Iterable[str] = ()) -> bool:
     """ "Is the chicken done?" always. "Is it ready?" / "Can I serve it?" when the step or recipe
     involves a high-risk food. "I'm done with this step", "set a timer", "what does X mean" no."""
     q = _PROGRESS_TALK_RE.sub(" ", _plain(query))
-    strict = _STRICT_RE.search(q) is not None
-    if strict and not _DEFINITION_RE.search(q):
+    if _STRICT_RE.search(q) is not None:
+        # The definition exemption never overrides a strict word: "what does 'done' mean, is my
+        # chicken done?" is a doneness question (security review of bab9b53).
         return True
     if _pure_intent(q):
         return False
@@ -1010,3 +1014,51 @@ def candidate_food_safety_verdict(candidate: str) -> RuleVerdict | None:
             source="raw_candidate",
         )
     return None
+
+
+# --------------------------------------------------------------------------- answer post-filter
+
+# Second line of defence (security review of bab9b53): questions the detectors miss still reach
+# the model, so every model answer is filtered. Conservative on purpose: a sentence that names a
+# doneness / safety / readiness term AND carries any affirmative or verdict word is dropped,
+# whatever its phrasing. Only sentences that point to a thermometer or say we can't tell survive.
+_SAFETY_TERM_RE = re.compile(
+    r"\b(done|doneness|cooked|cook(?:ed)? through|undercooked|overcooked|safe|safely|unsafe|"
+    r"ready|edible|eat|eaten|eating|serve|raw|pink|bloody|runny|rare|set|finished|"
+    r"temperature|temp|°f|°c|bacteria|salmonella|food poisoning|spoiled)\b"
+)
+_VERDICT_RE = re.compile(
+    r"\b(yes|yeah|yep|yup|sure|absolutely|definitely|certainly|indeed|correct|right|"
+    r"is|are|it'?s|its|they'?re|was|were|be|been|looks?|seems?|appears?|sounds?|should|will|"
+    r"would|must|can|could|may|fine|ok|okay|good|great|perfect|perfectly|fully|completely|"
+    r"totally|thoroughly|properly|enough|now|already|go ahead|done|safe|ready)\b"
+)
+_BARE_YES_RE = re.compile(
+    r"^\W*(yes|yeah|yep|yup|sure|absolutely|definitely|certainly|of course|correct|"
+    r"you bet|looks good|all good|good to go)\W*$"
+)
+_DEFER_RE = re.compile(r"thermometer|can'?t (tell|confirm|see|verify)|cannot (tell|confirm|verify)")
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def mentions_safety_terms(text: str) -> bool:
+    return _SAFETY_TERM_RE.search(_plain(text)) is not None
+
+
+def strip_certifications(answer: str) -> tuple[str, int]:
+    """Drop every sentence that could certify doneness or safety; return (kept, dropped)."""
+    kept: list[str] = []
+    dropped = 0
+    for sentence in _SENTENCE_RE.split(answer.strip()):
+        plain = _plain(sentence)
+        if not plain:
+            continue
+        if _DEFER_RE.search(plain):
+            kept.append(sentence)
+        elif _BARE_YES_RE.match(plain) or (
+            _SAFETY_TERM_RE.search(plain) and _VERDICT_RE.search(plain)
+        ):
+            dropped += 1
+        else:
+            kept.append(sentence)
+    return " ".join(kept).strip(), dropped
