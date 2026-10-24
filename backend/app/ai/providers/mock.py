@@ -26,6 +26,7 @@ from app.ai.providers.base import (
     SubstitutionResponse,
     SubstitutionSuggestion,
 )
+from app.domains.safety.content import is_doneness_question
 from app.domains.sessions import intent
 
 PHOTO_FIXTURE_SUBDIR = "pantry_observations"
@@ -173,12 +174,6 @@ _SPLIT_RE = re.compile(r",|;|\.(?=\s|$)|\band\b(?! a half)|\bplus\b|\balso\b|\bb
 _NUMERIC_RE = re.compile(r"^(\d+(?:\.\d+)?|\d+/\d+)$")
 _CORR = "@corr"
 _DROP_WORDS = frozenset({"some", "the", "of", "an", "a", "my", "our", "fresh-ish"})
-_SAFETY_WORDS = ("done", "safe", "cooked through", "raw", "undercooked", "temperature", "pink")
-
-
-def _without_progress_talk(query: str) -> str:
-    """ "I'm done with this step" is progress, not a doneness question."""
-    return re.sub(r"\b(i'?m|i am|we'?re|we are) done\b|\bdone with\b", " ", query)
 
 
 def _names_ingredient(query: str, name: str) -> bool:
@@ -529,7 +524,8 @@ class MockAIProvider:
 
         safety_notice = step.warnings[0] if step.warnings else None
         uncertainty = "low"
-        doneness = any(word in _without_progress_talk(query) for word in _SAFETY_WORDS)
+        context = [step.instruction, *step.warnings, *(i.name for i in request.ingredient_items)]
+        doneness = is_doneness_question(request.query, context)
         if doneness:
             safety_notice = (
                 "I can't confirm doneness or safety from a description or image. Check with an"

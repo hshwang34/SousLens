@@ -12,7 +12,8 @@ resources return identical 404s for foreign and missing ids. Additive to Slices 
 
 ```jsonc
 // Preferences
-{"allergies": ["peanut", "shellfish"], "avoid": ["cilantro"], "updated_at": "iso|null"}
+{"allergies": ["peanut", "shellfish"], "avoid": ["cilantro"], "updated_at": "iso|null",
+ "unrecognized": ["dragon fruit"]}   // entries that map to no allergen class or dictionary food
 ```
 Entries are short free text (≤ 60 chars, ≤ 30 each), normalised server-side against the ingredient
 dictionary and its allergen flags (`"peanuts"` → `peanut`; `"tree nuts"` covers almond, walnut, …).
@@ -71,7 +72,9 @@ pantry > preference > creativity):
     {"id": "uuid", "ingredient_ref": "ing-3", "original": "mirin",
      "replacement": "rice vinegar + a pinch of sugar", "ratio_or_amount": "...",
      "source": "rule|ai", "label": "Common swap|AI suggested adaptation",
-     "reason": "mirin unavailable", "approved_at": "iso"}
+     "reason": "mirin unavailable", "approved_at": "iso",
+     "allergy_warning": "string|null", "risks": ["..."],   // copied from the suggestion; null/[] free-form
+     "conflicts_with_allergies": false}                     // re-checked on every read
   ],
   "steps": [                                       // the session's view of each step
     {"step_id": "step-2", "order": 1,
@@ -187,3 +190,47 @@ session pinning that version (the Slice 1 TODO).
 - `cancel_timer` on an unknown timer → 404; on an already cancelled timer → 409 `INVALID_TRANSITION`.
   `revert_adaptation` on an unknown id → 404; already reverted → 409 `INVALID_TRANSITION`.
 - `GET /sessions` without `status` lists all of the caller's sessions (newest first, max 50).
+
+## Clarifications (fix round)
+
+- **Preferences:** entries are parsed (split on commas / "and"; "allergic to", "no", "-free",
+  "intolerant" stripped; "lactose intolerant" → `milk`, "gluten free" → `gluten`, "finfish" →
+  `fish`). The response gains `unrecognized`: stored entries that map to neither an allergen class
+  nor a dictionary food. They are still stored and matched word by word; the app should ask the
+  user to check them.
+- **Allergy matching is conservative:** "free-from" claims never clear an allergen ("gluten-free
+  spaghetti" still conflicts with a wheat/gluten allergy), "may contain" counts as contains
+  (tamari → wheat, chili crisp → peanut), bare "nuts" means tree nuts and peanut. Foods with no
+  vetted record (sherry, pecorino, sriracha, …) get "We don't know what X contains" in
+  `allergy_warning` for any user with allergies.
+- **Doneness / safe-to-eat and raw-tasting questions** (DECISIONS #15) are answered from a fixed
+  template and the model is not called: `answer_text` = "The recipe says (step N): <success cues>.
+  My suggestion: <notice> I can't tell from a description or photo whether the food has cooked
+  through."; `safety_notice` = the thermometer notice (USDA safe minimum internal temperatures),
+  `uncertainty: "high"`, `proposed_action: null`. With a high-risk food in the step or recipe,
+  "ready", "can I eat / serve it", "finished", "off the heat", "long enough", "medium rare" etc.
+  all count.
+- **`proposed_action` arguments** come only from the user's words (step number, duration) or the
+  current step's `suggested_timer`, never from the model.
+- **Session adaptations** carry `allergy_warning` and `risks` (copied from the suggestion on
+  approve; `null`/`[]` for free-form) and `conflicts_with_allergies` (re-checked on every read;
+  such swaps are never saved by `save_changes`). The same fields appear in `my-variation`.
+- **Free-form adaptations** (`{ingredient_ref, replacement, …}`) are labelled `source: "rule"` /
+  "Common swap" only when the replacement is a vetted seed suggestion for that ingredient;
+  otherwise `source` is forced to `"ai"`. They go through the same blockers as suggestions
+  (allergy, creator "do not substitute" warning or creator note, seed no-swap / never list,
+  structural rules) → 422.
+- **`POST /sessions/{id}/notes`** accepts an optional `Idempotency-Key`: a retry with the same key
+  returns the same 201 note (no second row); the same key with a different text → 409
+  `STATE_CONFLICT`. Without the header, behaviour is unchanged.
+- **Limits:** `POST /substitutions/suggest` → 429 `RATE_LIMITED` after 60 advisor calls per user
+  per hour (rule-only answers don't count); at most 200 live suggestions per user (older ones are
+  dropped, so an old `suggestion_id` may 422). Commands → 429 after 600 per session per hour;
+  `metadata` string values ≤ 200 chars.
+- **Replay window:** only the last 50 command responses per session are kept for replay; replaying
+  an older `Idempotency-Key` → 409 `STATE_CONFLICT` with `details.session` (latest).
+- **409 `INVALID_TRANSITION`** for an already reverted adaptation or an already cancelled timer
+  also carries `details.session`.
+- **Seeded recipe v2:** the gochujang chicken fixture now reserves marinade before the raw chicken
+  goes in (food-safety fix); the seed publishes it as version 2. Sessions pinned to v1 stay on v1.
+

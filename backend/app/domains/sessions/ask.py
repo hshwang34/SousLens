@@ -7,8 +7,10 @@
 * Recipe text, notes and the query are untrusted data. The coach never changes state; its
   ``proposed_action`` is kept only when the user's own query asked for it and it is legal right
   now, and it always ``requires_confirmation``.
-* Deterministic safety wins over the coach: a doneness / safety question always carries the
-  thermometer notice and never a certification; tasting anything raw is refused.
+* Deterministic safety wins over the coach (DECISIONS #15): a doneness / safe-to-eat question
+  or a raw-tasting question is answered from a fixed template (the step's cues, the
+  thermometer / verified-guidance notice, "I can't tell from a description or photo") and the
+  model is not called at all; there is no model prose to filter.
 * Rate limits: 120 asks per user per hour across all sessions (``usage_events``, survives
   session deletion) and 60 per session per hour; both reserved and committed before the
   provider call so no lock spans it.
@@ -18,12 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pydantic
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers.base import (
@@ -39,6 +41,7 @@ from app.ai.providers.base import (
 from app.core.errors import (
     AppError,
     InvalidTransition,
+    NotFound,
     ProviderOutputInvalid,
     ProviderUnavailable,
     RateLimited,
@@ -47,8 +50,11 @@ from app.db.models import CookingSession, MessageRole, SessionMessage, User
 from app.domains import usage
 from app.domains.recipes.schemas import IngredientOut, StepOut
 from app.domains.safety.content import (
+    CANT_TELL,
+    DONENESS_NOTICE,
     RAW_TASTING_NOTICE,
     doneness_notice,
+    is_doneness_question,
     is_raw_tasting_request,
 )
 from app.domains.sessions import intent, service
@@ -78,11 +84,6 @@ _GROUNDING_MAP = {
     "adaptation": "adaptation",
     "substitution": "adaptation",
 }
-_CERTIFY_RE = re.compile(
-    r"[^.!?]*\b(is|are|it'?s|they'?re|looks?|seems?)\s+(fully\s+)?"
-    r"(done|safe(\s+to\s+eat)?|cooked\s+through|ready\s+to\s+eat)\b[^.!?]*[.!?]?",
-    re.IGNORECASE,
-)
 
 
 def _amount(i: IngredientOut) -> str | None:
@@ -257,12 +258,26 @@ async def ask(
     session.add(user_turn)
     await session.commit()
 
-    response = await _coach(provider, packet)
-
-    out = _postprocess(response, body, packet, ctx.steps, names, idx, adaptations)
+    # Deterministic safety first (DECISIONS #15): a raw-tasting or doneness / safe-to-eat
+    # question never reaches the model and never carries model prose.
+    current = ctx.steps[idx]
+    raw_context = [
+        *(st.instruction for st in ctx.steps[: idx + 1]),
+        *current.warnings,
+    ]
+    risk_context = [current.instruction, *current.warnings, *names.values()]
+    if is_raw_tasting_request(body.query, raw_context):
+        out = _template(packet, RAW_TASTING_NOTICE, refusal=True)
+    elif is_doneness_question(body.query, risk_context):
+        out = _template(packet, doneness_notice_for(body.query, risk_context), refusal=False)
+    else:
+        response = await _coach(provider, packet)
+        out = _postprocess(response, body, packet, ctx.steps, names, idx, adaptations)
     current_revision = await session.scalar(
         select(CookingSession.revision).where(CookingSession.id == row.id)
     )
+    if current_revision is None:
+        raise NotFound("Session not found")  # deleted while the assistant was answering
     stale = (
         body.grounded_revision is not None and body.grounded_revision != grounded_revision
     ) or (current_revision != grounded_revision)
@@ -276,7 +291,10 @@ async def ask(
         created_at=datetime.now(UTC),
     )
     session.add(reply)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:  # the session was deleted between the check and the insert
+        raise NotFound("Session not found") from exc
     return AskOut(
         message_id=reply.id,
         grounded_session_revision=grounded_revision,
@@ -298,24 +316,7 @@ def _postprocess(
     answer = response.answer_text.strip()
     safety_notice = response.safety_notice
     uncertainty = response.uncertainty
-    proposed = _gate_action(response, body.query, len(steps), idx)
-
-    context = [current.instruction, *current.warnings, *names.values()]
-    if is_raw_tasting_request(body.query, context):
-        answer = (
-            f"My suggestion: {RAW_TASTING_NOTICE} The recipe says (step {current.order + 1}): "
-            f"{current.instruction}"
-        )
-        safety_notice = RAW_TASTING_NOTICE
-        proposed = None
-    elif notice := doneness_notice(body.query, context):
-        # Never a certification, whatever the model said.
-        answer = _CERTIFY_RE.sub("", answer).strip() or (
-            f"The recipe says (step {current.order + 1}): {current.instruction}"
-        )
-        safety_notice = notice
-        uncertainty = "high" if uncertainty == "high" else "medium"
-        proposed = None
+    proposed = _gate_action(response, body.query, len(steps), idx, current)
 
     known = {
         "recipe_step": {s.id for s in (packet.previous_step, current, packet.next_step) if s},
@@ -344,9 +345,35 @@ def _postprocess(
     }
 
 
+def _template(packet: CoachRequest, notice: str, *, refusal: bool) -> dict:
+    """The fixed answer for safety questions: the creator's cues, the notice, nothing else."""
+    step = packet.current_step
+    cues = "; ".join(step.success_cues) if step.success_cues else step.instruction
+    said = f"The recipe says (step {step.order + 1}): {cues.rstrip('.')}."
+    answer = (
+        f"{said} My suggestion: {notice}"
+        if refusal
+        else f"{said} My suggestion: {notice} {CANT_TELL}"
+    )
+    return {
+        "answer_text": answer,
+        "grounding": [GroundingOut(type="recipe_step", id=step.id)],
+        "uncertainty": "high",
+        "safety_notice": notice,
+        "proposed_action": None,
+        "requires_confirmation": False,
+    }
+
+
+def doneness_notice_for(query: str, context: list[str]) -> str:
+    return doneness_notice(query, context) or DONENESS_NOTICE
+
+
 def _gate_action(
-    response: CoachResponse, query: str, steps_count: int, idx: int
+    response: CoachResponse, query: str, steps_count: int, idx: int, current: StepSummary
 ) -> ProposedActionOut | None:
+    """Keep a proposal only if the user's own words asked for it. Its ARGUMENTS also come only
+    from the query or the step's suggested timer, never from the model (item 6)."""
     action = response.proposed_action
     if action is None or action.command not in intent.intents(query):
         return None  # only what the user asked for; recipe text can never propose
@@ -356,15 +383,15 @@ def _gate_action(
     if action.command == "back":
         return ProposedActionOut(command="back") if idx > 0 else None
     if action.command == "jump_to_step":
-        target = action.step_index
+        target = intent.jump_target(query)
         if target is None or not (0 <= target <= last) or target == idx:
             return None
         return ProposedActionOut(command="jump_to_step", step_index=target)
     if action.command == "start_timer":
-        seconds = action.timer_seconds
+        seconds = intent.duration_seconds(query) or current.suggested_timer_seconds
         if seconds is None or not (1 <= seconds <= MAX_TIMER_SECONDS):
             return None
-        label = (action.timer_label or "Timer").strip()[:120] or "Timer"
+        label = current.suggested_timer_label or "Timer"
         return ProposedActionOut(
             command="start_timer", timer=ProposedTimer(label=label, duration_seconds=seconds)
         )

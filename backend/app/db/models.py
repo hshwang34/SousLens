@@ -539,6 +539,12 @@ class SessionAdaptation(CreatedAtMixin, Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(300))
     suggestion_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    # Copied from the served suggestion on approve (null / [] for free-form swaps), so the
+    # cautions survive an app relaunch.
+    allergy_warning: Mapped[str | None] = mapped_column(Text)
+    risks: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
     approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -547,12 +553,16 @@ class SessionNote(CreatedAtMixin, Base):
     """Private reflection on a session (COOK-08)."""
 
     __tablename__ = "session_notes"
+    __table_args__ = (UniqueConstraint("session_id", "idempotency_key"),)
 
     id: Mapped[uuid.UUID] = uuid_pk()
     session_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("cooking_sessions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Optional Idempotency-Key: a retry returns this note; a different body is a 409.
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class UserPreference(Base):

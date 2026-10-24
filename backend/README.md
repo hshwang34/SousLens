@@ -66,12 +66,12 @@ Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
 | POST | `/pantry/observations` | 201 candidates only (24 h TTL, never pantry truth). JSON transcript, or multipart photo (`image` JPEG/PNG/HEIC ≤ 5,000,000 bytes, magic-byte checked → 415/413; processed in memory, never stored). Mock: `fixture=<stem>`, default `demo_counter`. 30/user/hour → 429 |
 | POST | `/recipe-versions/{version_id}/fit` | available / uncertain / missing / optional_missing per ingredient with reasons; same access rule as `GET /recipe-versions/{id}` |
 | GET/PUT | `/me/preferences` | allergies (hard blocks) + avoid (soft), normalised: `peanuts`→`peanut`, `tree nuts`, `dairy`→`milk`, ≤ 30 × 60 chars |
-| POST | `/substitutions/suggest` | vetted rules (`../fixtures/substitution_rules.json`) first, then the advisor; allergy/avoid filtering, `cannot_substitute`, `safety_notice`; ≤ 3 suggestions, each stored 24 h for `suggestion_id` |
+| POST | `/substitutions/suggest` | vetted rules (`../fixtures/substitution_rules.json`) first, then the advisor; one swap policy (`domains/substitutions/policy.py`) for suggest, session create, approve and variation replay; ≤ 3 suggestions stored 24 h (≤ 200 per user); 60 advisor calls/user/hour → 429 |
 | POST | `/sessions` | 201; pins version, adaptations, step 0, relevant pantry snapshot. ≤ 3 open per user (409 `details.open_session_ids`), 30 new/user/hour (429) |
 | GET | `/sessions?status=active`, `/sessions/{id}` | resume banner / canonical session (steps overlay, timers done-on-read, notes, outcome) |
-| POST | `/sessions/{id}/commands` | `Idempotency-Key` required; Step Oracle; replay → identical 200; key reuse with another body or stale revision → 409 `STATE_CONFLICT` (`details.session`); unconfirmed → 422 `CONFIRMATION_REQUIRED`; illegal → 409 `INVALID_TRANSITION` |
-| POST | `/sessions/{id}/ask` | grounded coach answer (§8.5 packet), `stale`, proposals only; 120/user/hour + 60/session/hour → 429 |
-| POST | `/sessions/{id}/notes` | 201 private note |
+| POST | `/sessions/{id}/commands` | `Idempotency-Key` required; Step Oracle; replay → identical 200; key reuse with another body or stale revision → 409 `STATE_CONFLICT` (`details.session`); unconfirmed → 422 `CONFIRMATION_REQUIRED`; illegal → 409 `INVALID_TRANSITION`; 600/session/hour; replay kept for the last 50 events |
+| POST | `/sessions/{id}/ask` | grounded coach answer (§8.5 packet), `stale`, proposals only (arguments from the user's words); doneness / raw-tasting questions get a fixed template without calling the model; 120/user/hour + 60/session/hour → 429 |
+| POST | `/sessions/{id}/notes` | 201 private note; optional `Idempotency-Key` (retry → same note, other text → 409) |
 | DELETE | `/sessions/{id}` | 204; events, messages, timers, notes, adaptations cascade |
 | GET/DELETE | `/recipe-versions/{version_id}/my-variation` | private saved swaps (Session adaptation shape) / 204 |
 
@@ -117,3 +117,12 @@ file (deferred `use_alter` foreign keys must be added by hand, see `0001_initial
   `test_image_bytes_are_never_written_to_disk_or_db` guards it.
 - `uv run pytest tests/unit/test_pantry_transcripts_eval.py -s` prints transcript-parser
   precision/recall over `../fixtures/pantry_transcripts.json`.
+
+## Seeded recipe versions (brief 005)
+
+Published versions are immutable, so a fixture edit becomes a new version.
+`../fixtures/seeded_recipes/history/<slug>/v<N>.json` holds the earlier contents; `make seed`
+publishes any missing version in order with deterministic ids, so a fresh database and one that
+only had v1 end up identical. The gochujang chicken marinade fix (reserve marinade before the raw
+chicken goes in) is v2; `../fixtures/expected_outputs/*.json` reflect v2.
+

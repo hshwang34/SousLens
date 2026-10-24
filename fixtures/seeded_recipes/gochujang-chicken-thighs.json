@@ -27,7 +27,7 @@
     {
       "id": "step-1",
       "order": 0,
-      "instruction": "Make the marinade: in a large bowl, whisk together the gochujang, soy sauce, honey, sesame oil, garlic, ginger and rice vinegar until smooth.",
+      "instruction": "Make the marinade: in a large bowl, whisk together the gochujang, soy sauce, honey, sesame oil, garlic, ginger and rice vinegar until smooth. Spoon 3 tablespoons of it into a small bowl and set it aside for the glaze before any raw chicken goes near it.",
       "ingredient_refs": ["ing-2", "ing-3", "ing-4", "ing-5", "ing-6", "ing-7", "ing-8"],
       "estimated_minutes": 5,
       "success_cues": ["Marinade is glossy and uniform with no streaks of honey or paste"],
@@ -83,11 +83,11 @@
     {
       "id": "step-5",
       "order": 4,
-      "instruction": "Flip each piece and cook 5 to 6 minutes more, spooning any marinade left in the bowl over the chicken so it reduces into a glaze.",
+      "instruction": "Flip each piece and cook 5 to 6 minutes more, spooning the reserved marinade over the chicken so it reduces into a glaze. Discard the marinade the raw chicken sat in.",
       "ingredient_refs": ["ing-1"],
       "estimated_minutes": 6,
       "success_cues": ["Glaze thickens and clings to the chicken", "An instant-read thermometer reads 165°F (74°C) in the thickest piece"],
-      "warnings": ["Chicken is done only when an instant-read thermometer reads 165°F (74°C) in the thickest piece. Do not judge doneness by color alone."],
+      "warnings": ["Chicken is done only when an instant-read thermometer reads 165°F (74°C) in the thickest piece. Do not judge doneness by color alone.", "Use only the marinade you set aside before the raw chicken went in. Marinade that touched raw poultry must be discarded, or boiled for at least 1 minute before it is used."],
       "creator_note": null,
       "source_clip_id": null,
       "source_start_ms": null,

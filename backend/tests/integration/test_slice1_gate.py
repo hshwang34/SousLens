@@ -115,7 +115,7 @@ async def test_raw_sql_update_delete_and_fk_cascades_are_blocked(db_session: Asy
         finally:
             await db_session.rollback()
     count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
-    assert count == len(results) == 5
+    assert len(results) == 5 and count == 6  # gochujang v1 + v2
 
 
 # --------------------------------------------------------------------------- 2. concurrency
@@ -461,7 +461,7 @@ async def test_double_seed_keeps_five_recipes_and_dedupes_users(db_session: Asyn
     await seed_fixtures(db_session, FIXTURES_DIR)
     await seed_fixtures(db_session, FIXTURES_DIR)
     await db_session.commit()
-    for table, expected in (("recipes", 5), ("recipe_versions", 5)):
+    for table, expected in (("recipes", 5), ("recipe_versions", 6)):  # gochujang v1 + v2
         n = (await db_session.execute(text(f"select count(*) from {table}"))).scalar_one()
         assert n == expected, table
     assert users_service  # imported for parity with sibling tests

@@ -49,7 +49,7 @@ async def test_preferences_normalised_and_bounded(
     await seed(db_session)
     alice = await bearer(client, "alice@example.com")
     r = await client.get("/v1/me/preferences", headers=alice)
-    assert r.json() == {"allergies": [], "avoid": [], "updated_at": None}
+    assert r.json() == {"allergies": [], "avoid": [], "updated_at": None, "unrecognized": []}
     out = await set_prefs(
         client,
         alice,
@@ -81,16 +81,17 @@ async def test_mirin_rule_suggestion_with_adjusted_steps(
     assert res["target_ingredient"] == "mirin" and res["cannot_substitute"] is False
     first = res["suggestions"][0]
     assert first["source"] == "rule"
-    assert first["candidate"] == "rice vinegar + a pinch of sugar"
+    # Content-vetted (fix round 1): mirin is sweet, not acidic, so water + sugar, not a pinch.
+    assert first["candidate"] == "rice vinegar + water + sugar"
     assert first["ratio_or_amount"] and first["impact_flavor"] and first["impact_texture"]
     assert first["confidence"] in {"high", "medium", "low"}
     assert first["risks"] and first["requires_user_confirmation"] is True
     assert first["kind"] in {"close_equivalent", "flavor_adaptation", "structural_substitution"}
     adjusted = {a["step_id"]: a["instruction"] for a in first["adjusted_steps"]}
     assert adjusted == {
-        "step-1": "Stir the rice vinegar + a pinch of sugar and soy sauce together.",
+        "step-1": "Stir the rice vinegar + water + sugar and soy sauce together.",
         "step-2": "Brush the salmon with the glaze and broil for 6 minutes. "
-        "(Swap: use rice vinegar + a pinch of sugar instead of the mirin.)",
+        "(Swap: use rice vinegar + water + sugar instead of the mirin.)",
     }
     assert len(res["suggestions"]) <= 3
     assert len({s["suggestion_id"] for s in res["suggestions"]}) == len(res["suggestions"])

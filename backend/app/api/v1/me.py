@@ -34,7 +34,9 @@ async def my_recipes(session: DbSession, user: CurrentUser) -> MyRecipeList:
 @router.get("/me/preferences", response_model=PreferencesOut)
 async def get_preferences(session: DbSession, user: CurrentUser) -> PreferencesOut:
     """Allergies (hard blocks) and foods to avoid (soft), normalised (SUB-02)."""
-    return preferences.to_out(await preferences.get_row(session, user))
+    return preferences.to_out(
+        await preferences.get_row(session, user), await load_dictionary(session)
+    )
 
 
 @router.put("/me/preferences", response_model=PreferencesOut)

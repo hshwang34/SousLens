@@ -39,6 +39,7 @@ from app.core.errors import (
     ValidationError,
 )
 from app.db.models import PantryItem, Recipe, RecipeVersion, SubstitutionSuggestionRecord, User
+from app.domains import usage
 from app.domains.matching.dictionary import IngredientDictionary, clean, load_dictionary
 from app.domains.matching.normalize import alternatives, normalize
 from app.domains.recipes import service as recipes_service
@@ -47,17 +48,13 @@ from app.domains.recipes.versions import version_meta
 from app.domains.safety.content import (
     FLAG_LABELS,
     LABEL_CHECK,
-    StructuralContext,
     allergen_flags,
-    allergy_verdict,
-    avoid_verdict,
     candidate_safety_risks,
     conflicts,
-    creator_warning_verdict,
     scan,
-    structural_verdict,
 )
-from app.domains.safety.rules import Precedence, RuleVerdict, resolve
+from app.domains.safety.rules import Precedence, RuleVerdict
+from app.domains.substitutions import policy
 from app.domains.substitutions.adapt import AdaptationSpec, compose_overlay
 from app.domains.substitutions.rules import SeedRule, load_rules
 from app.domains.substitutions.schemas import (
@@ -71,6 +68,8 @@ from app.domains.users import preferences
 log = logging.getLogger("souslens.substitutions")
 
 MAX_SUGGESTIONS = 3
+MAX_LIVE_SUGGESTIONS = 200  # per user; older served suggestions are dropped
+ADVISOR_CALLS_PER_HOUR = 60  # per user, only counted when the advisor is called
 SUGGESTION_TTL = timedelta(hours=24)
 PROVIDER_TIMEOUT_SECONDS = 20.0
 NOT_EXACT = "Not an exact match."
@@ -182,26 +181,28 @@ async def _advise(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-def _mentions_any(text: str, phrases: list[str], dictionary: IngredientDictionary) -> bool:
-    found = scan(text, dictionary)
-    keys = set(found.canonical_names) | {
-        normalize(m.phrase, dictionary).key for m in found.mentions
-    }
-    cleaned = f" {found.text} "
-    return any(p in keys or f" {clean(p)} " in cleaned for p in phrases if p)
-
-
 def _allergy_warning(
     candidate: str, has_allergies: bool, dictionary: IngredientDictionary
 ) -> str | None:
+    found = scan(candidate, dictionary)
     flags = allergen_flags(candidate, dictionary)
     parts: list[str] = []
     if flags:
         labels = ", ".join(sorted(FLAG_LABELS.get(f, f) for f in flags))
         parts.append(f"Contains common allergens: {labels}.")
     if has_allergies:  # PRD §13.1: label verification for every swap, never "safe for you"
+        if found.unknown:
+            parts.append(
+                f"We don't know what {', '.join(found.unknown)} contains (no vetted record)."
+            )
         parts.append(LABEL_CHECK)
     return " ".join(parts) or None
+
+
+def _own_food(candidate: str, own: list[str], dictionary: IngredientDictionary) -> bool:
+    """AI ideas that are just the target itself or the line's own alternative."""
+    name = clean(candidate)
+    return name in own or normalize(name, dictionary).key in own
 
 
 async def _pantry_names(session: AsyncSession, user: User) -> list[str]:
@@ -250,34 +251,17 @@ async def suggest(
             f"({', '.join(target_hits)}). {LABEL_CHECK}"
         )
 
-    blockers = [
-        v
-        for v in (
-            structural_verdict(
-                StructuralContext(
-                    target_names=frozenset(names),
-                    step_texts=tuple(s.instruction for s in steps),
-                    recipe_texts=(ctx.title,),
-                )
-            ),
-            creator_warning_verdict(
-                [ingredient.name, *names],
-                [w for s in steps for w in s.warnings] + ctx.dietary_warnings,
-            ),
-        )
-        if v is not None
-    ]
-    if blockers:
-        return out([], cannot=True, reason=resolve(blockers).reason)
-
-    rule = _rule_for(names, rules)
-    if rule is not None and rule.no_swap_reason:
-        return out([], cannot=True, reason=rule.no_swap_reason)
+    target = policy.swap_target(
+        ingredient, names, ctx.steps, rules, ctx.title, ctx.dietary_warnings + ctx.creator_notes
+    )
+    blocked = policy.target_blocker(target)
+    if blocked is not None:
+        return out([], cannot=True, reason=blocked.reason)
+    rule = target.rule
 
     drafts: list[_Draft] = [
         _Draft(source="rule", **s.model_dump()) for s in (rule.suggestions if rule else [])
     ]
-    never = [clean(n) for n in (rule.never if rule else [])]
     own_names = [clean(ingredient.name), *names]
     pantry = await _pantry_names(session, user)
     advisor_reason: str | None = None
@@ -292,6 +276,17 @@ async def suggest(
                 allergies=prof.allergy_labels, preferences=prof.avoid_labels
             ),
         )
+        # Advisor calls cost money (Slice 4): reserve the slot and commit before the call.
+        await usage.reserve(
+            session,
+            user.id,
+            usage.SUGGEST,
+            limit=ADVISOR_CALLS_PER_HOUR,
+            window=timedelta(hours=1),
+            now=now,
+            message="Too many substitution requests in the last hour; try again later",
+        )
+        await session.commit()
         try:
             advice = await _advise(provider, request)
         except AppError:
@@ -304,9 +299,7 @@ async def suggest(
                 if s.kind == "not_recommended":
                     advisor_reason = advisor_reason or s.rationale
                     continue
-                if _mentions_any(s.candidate, never, dictionary):
-                    continue
-                if _mentions_any(s.candidate, own_names, dictionary):
+                if _own_food(s.candidate, own_names, dictionary):
                     continue  # "use mirin instead of mirin" or the line's own alternative
                 drafts.append(
                     _Draft(
@@ -325,19 +318,16 @@ async def suggest(
     kept: list[_Draft] = []
     dropped: list[RuleVerdict] = []
     for d in drafts:
-        text = f"{d.candidate} {d.ratio_or_amount}"
-        verdicts = [
-            v
-            for v in (
-                allergy_verdict(text, prof.allergies, dictionary, source=d.source),
-                avoid_verdict(text, prof.avoid, dictionary, source=d.source),
-            )
-            if v is not None
-        ]
-        verdict = resolve(
-            [RuleVerdict(Precedence.CULINARY_CREATIVITY, True, "ok", d.source), *verdicts]
+        verdict = policy.candidate_blocker(
+            target,
+            d.candidate,
+            d.ratio_or_amount,
+            prof,
+            dictionary,
+            include_avoid=True,
+            source=d.source,
         )
-        if verdict.allow:
+        if verdict is None:
             kept.append(d)
         else:
             dropped.append(verdict)
@@ -359,6 +349,7 @@ async def suggest(
         )
     )
     served: list[SuggestionOut] = []
+    # created_at is set explicitly so the per-user cap below keeps the newest rows.
     for d in kept:
         overlay = compose_overlay(
             ctx.steps,
@@ -394,10 +385,25 @@ async def suggest(
                 ingredient_ref=ingredient.id,
                 payload_json=suggestion.model_dump(mode="json") | {"original": ingredient.name},
                 expires_at=now + SUGGESTION_TTL,
+                created_at=now,
             )
         )
         served.append(suggestion)
     await session.flush()
+    newest = (
+        select(SubstitutionSuggestionRecord.id)
+        .where(SubstitutionSuggestionRecord.owner_user_id == user.id)
+        .order_by(
+            SubstitutionSuggestionRecord.created_at.desc(), SubstitutionSuggestionRecord.id.desc()
+        )
+        .limit(MAX_LIVE_SUGGESTIONS)
+    )
+    await session.execute(
+        delete(SubstitutionSuggestionRecord).where(
+            SubstitutionSuggestionRecord.owner_user_id == user.id,
+            SubstitutionSuggestionRecord.id.not_in(newest.scalar_subquery()),
+        )
+    )
 
     allergy_dropped = any(v.precedence == Precedence.USER_ALLERGY for v in dropped)
     avoid_dropped = any(v.precedence == Precedence.PREFERENCE for v in dropped)

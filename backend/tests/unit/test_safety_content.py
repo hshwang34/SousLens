@@ -68,13 +68,15 @@ def test_preference_normalisation(d: IngredientDictionary, raw: str, stored: str
         ("fish", "kimchi", True),  # dictionary flag: kimchi often has fish sauce
         ("gluten", "linguine", True),
         ("gluten", "soy sauce", True),
-        ("gluten", "gluten-free spaghetti", False),
-        ("gluten", "tamari (gluten-free soy sauce)", False),
+        ("gluten", "gluten-free spaghetti", True),  # claims never clear a flag
+        ("gluten", "tamari (gluten-free soy sauce)", True),  # tamari: may contain wheat
         ("gluten", "rice vinegar + a pinch of sugar", False),
         ("soy", "tamari", True),
         ("soy", "red miso + gochugaru", True),
         ("soy", "soy milk", True),
         ("soy", "coconut aminos + a pinch of salt", False),
+        ("tree nuts", "nut-free almond milk", True),
+        ("milk", "lactose-free milk", True),
         ("milk", "butter", True),
         ("milk", "pecorino romano", True),
         ("milk", "oat milk", False),
@@ -97,6 +99,9 @@ def test_allergen_flags_are_informational(d: IngredientDictionary) -> None:
     assert allergen_flags("chives", d) == frozenset()
 
 
+CHICKEN = ["Flip each piece and cook 5 to 6 minutes more.", "boneless skinless chicken thighs"]
+
+
 @pytest.mark.parametrize(
     ("query", "expect"),
     [
@@ -114,8 +119,10 @@ def test_doneness_questions_get_thermometer_notice(query: str, expect: str) -> N
 
 
 def test_progress_talk_is_not_a_doneness_question() -> None:
-    assert doneness_notice("I'm done with this step") is None
-    assert doneness_notice("what does finely minced mean?") is None
+    assert doneness_notice("I'm done with this step", CHICKEN) is None
+    assert doneness_notice("what does finely minced mean?", CHICKEN) is None
+    assert doneness_notice("set a timer for 5 minutes", CHICKEN) is None
+    assert doneness_notice("how much soy sauce?", CHICKEN) is None
 
 
 def test_raw_tasting_is_refused() -> None:
@@ -170,3 +177,229 @@ def test_precedence_order(d: IngredientDictionary) -> None:
     assert resolve([creative, avoid]).allow is False  # a preference beats creativity
     assert resolve([avoid, pantry]) is pantry  # PRD order: pantry presence > preference
     assert resolve([safety, allergy]).precedence == Precedence.USER_ALLERGY
+
+
+# --------------------------------------------------------------------- fix round 1 probe tables
+
+ALLERGY_PROBES = {
+    "tree nuts": [
+        "pesto",
+        "mixed nuts",
+        "nut milk",
+        "nut butter",
+        "amaretto",
+        "nougat",
+        "gianduja",
+        "nuts",
+        "pine nuts",
+    ],
+    "peanut": ["satay", "kung pao chicken", "mixed nuts", "nut butter", "nuts", "chili crisp"],
+    "fish": [
+        "worcestershire",
+        "Lea & Perrins",
+        "caesar dressing",
+        "nam pla",
+        "fish sauce",
+        "surimi",
+        "haddock",
+        "catfish",
+        "mahi mahi",
+        "snapper",
+        "caviar",
+        "roe",
+        "eel",
+    ],
+    "shellfish": [
+        "calamari",
+        "cuttlefish",
+        "abalone",
+        "XO sauce",
+        "belacan",
+        "cockles",
+        "whelks",
+        "snails",
+        "kimchi",
+        "oyster sauce",
+    ],
+    "milk": [
+        "pesto",
+        "grana padano",
+        "gouda",
+        "brie",
+        "gruyère",
+        "mascarpone",
+        "halloumi",
+        "crème fraîche",
+        "half and half",
+        "custard",
+        "burrata",
+        "creamer",
+        "labneh",
+    ],
+    "egg": [
+        "hollandaise",
+        "brioche",
+        "albumin",
+        "custard",
+        "quiche",
+        "eggnog",
+        "challah",
+        "marshmallow",
+        "tartar sauce",
+    ],
+    "soy": [
+        "hoisin",
+        "teriyaki",
+        "ponzu",
+        "TVP",
+        "yuba",
+        "worcestershire",
+        "miso",
+        "chili crisp",
+        "oyster sauce",
+    ],
+    "gluten": [
+        "udon",
+        "orzo",
+        "farro",
+        "crackers",
+        "beer",
+        "pita",
+        "tortilla",
+        "naan",
+        "wonton wrappers",
+        "ramen",
+        "tamari",
+        "miso",
+        "gluten-free pasta",
+    ],
+    "sesame": ["hummus", "za'atar", "furikake", "halva", "chili crisp", "roasted seaweed"],
+}
+
+
+@pytest.mark.parametrize(
+    ("allergy", "text"), [(a, t) for a, texts in ALLERGY_PROBES.items() for t in texts]
+)
+def test_reviewer_allergy_probes(d: IngredientDictionary, allergy: str, text: str) -> None:
+    assert conflicts(text, sensitivities([allergy]), d), (allergy, text)
+
+
+def test_bare_nuts_is_both_tree_nut_and_peanut(d: IngredientDictionary) -> None:
+    assert sorted(conflicts("nuts", sensitivities(["tree nuts", "peanut"]), d)) == [
+        "peanut",
+        "tree nuts",
+    ]
+    assert normalize_preference("nuts", d) == "nuts"
+    assert conflicts("peanut oil", sensitivities(["nuts"]), d) == ["nuts"]
+
+
+def test_unknown_allergen_status_is_never_clear(d: IngredientDictionary) -> None:
+    from app.domains.safety.content import scan
+
+    for food in (
+        "dry sherry",
+        "cayenne",
+        "pecorino",
+        "ham",
+        "pancetta",
+        "pumpkin seeds",
+        "sauerkraut",
+        "smoked tofu",
+        "coconut aminos",
+        "sriracha",
+        "nutritional yeast",
+        "gluten-free pasta",
+    ):
+        assert scan(food, d).unknown, food
+
+
+@pytest.mark.parametrize(
+    ("raw", "stored"),
+    [
+        ("peanut and tree nut allergy", ["peanut", "tree nuts"]),
+        ("allergic to shellfish", ["shellfish"]),
+        ("Lactose intolerant", ["milk"]),
+        ("gluten free", ["gluten"]),
+        ("gluten-free", ["gluten"]),
+        ("finfish", ["fish"]),
+        ("crustacean shellfish", ["shellfish"]),
+        ("no dairy", ["milk"]),
+        ("eggs, soy", ["egg", "soy"]),
+        ("half and half", ["half and half"]),
+    ],
+)
+def test_preference_parsing(d: IngredientDictionary, raw: str, stored: list[str]) -> None:
+    from app.domains.safety.content import normalize_preferences_detailed
+
+    keys, unknown = normalize_preferences_detailed([raw], d)
+    assert keys == stored and unknown == []
+
+
+def test_unrecognized_preferences_are_kept_and_matched_per_word(d: IngredientDictionary) -> None:
+    from app.domains.safety.content import normalize_preferences_detailed
+
+    keys, unknown = normalize_preferences_detailed(["dragon fruit"], d)
+    assert keys == unknown == ["dragon fruit"]
+    assert conflicts("dragon fruit salsa", sensitivities(keys), d) == ["dragon fruit"]
+    assert conflicts("sliced dragon", sensitivities(keys), d) == ["dragon fruit"]
+
+
+DONENESS_PROBES = [
+    "Is the chicken ready?",
+    "Can I eat it yet?",
+    "Is it finished?",
+    "Can I serve it?",
+    "Can I take the pork off the heat?",
+    "Is the egg set?",
+    "is it good to go",
+    "did I cook it long enough",
+    "is the center cold",
+    "are we good to eat",
+    "Is the pork hot enough inside",
+    "medium rare yet?",
+    "has it reached 165?",
+    "is it OK to eat",
+    "does it look finished?",
+]
+
+
+@pytest.mark.parametrize("query", DONENESS_PROBES)
+def test_doneness_probes_with_high_risk_context(query: str) -> None:
+    notice = doneness_notice(query, CHICKEN)
+    assert notice and "thermometer" in notice and "USDA" in notice
+    assert "it is safe" not in notice.lower()
+
+
+def test_wide_vocabulary_needs_a_high_risk_food() -> None:
+    salad = ["Toss well so every piece is coated.", "persian cucumber", "rice vinegar"]
+    assert doneness_notice("Can I serve it?", salad) is None
+    assert doneness_notice("Is the chicken done?", salad) is not None  # strict word
+
+
+def test_raw_tasting_uses_step_context() -> None:
+    step = ["Add the chicken pieces to the bowl and toss until every piece is coated."]
+    assert is_raw_tasting_request("can I taste the sauce?", step)
+    assert not is_raw_tasting_request("can I taste the sauce?", ["Stir the dressing."])
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        {"bread soda"},
+        {"self raising flour"},
+        {"self-rising flour"},
+        {"instant yeast"},
+        {"pink salt"},
+        {"curing salt #1"},
+        {"pasteurized eggs"},
+    ],
+)
+def test_structural_substring_matching(names: set[str]) -> None:
+    assert structural_verdict(StructuralContext(frozenset(names), ("Mix.",))) is not None
+
+
+def test_candidate_food_safety() -> None:
+    from app.domains.safety.content import candidate_food_safety_verdict
+
+    assert candidate_food_safety_verdict("raw egg yolk") is not None
+    assert candidate_food_safety_verdict("cooked chicken breast") is None

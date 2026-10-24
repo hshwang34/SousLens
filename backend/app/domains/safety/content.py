@@ -7,8 +7,8 @@ culinary_creativity``.
 
 * **Allergy overlap** — a text (a substitution candidate, a recipe ingredient) is scanned for
   dictionary ingredients (longest phrase first, aliases and plurals included) and their allergen
-  flags; words the dictionary does not know fall back to per-class member words ("cashew" →
-  tree nuts). ``"gluten-free X"`` removes X's wheat flag but is reported as a label-check claim.
+  flags (and a table of compound foods the dictionary lacks); unknown words fall back to
+  per-class member words ("cashew" → tree nuts). "Free-from" claims never clear a flag.
 * **Food safety** — nothing certifies doneness or safety from a description or an image.
   Doneness questions get a thermometer notice tailored to poultry / ground meat / pork / eggs /
   fish; tasting raw marinade, batter or meat is refused.
@@ -21,6 +21,7 @@ Never "safe for you" wording anywhere: these rules only ever say what we could *
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
@@ -257,170 +258,379 @@ CLASS_SYNONYMS: dict[str, str] = {
     "mustard": "mustard",
 }
 
-# "<word>-free" claims → the allergen flags the claim removes from the following ingredient.
-_FREE_OF: dict[str, frozenset[str]] = {
-    "gluten": frozenset({"wheat"}),
-    "wheat": frozenset({"wheat"}),
-    "dairy": frozenset({"milk"}),
-    "milk": frozenset({"milk"}),
-    "lactose": frozenset({"milk"}),
-    "egg": frozenset({"egg"}),
-    "nut": frozenset({"tree_nut", "peanut"}),
-    "peanut": frozenset({"peanut"}),
-    "soy": frozenset({"soy"}),
-    "sesame": frozenset({"sesame"}),
-    "fish": frozenset({"fish"}),
-    "shellfish": frozenset({"shellfish"}),
-}
+# "<word>-free" claims are recorded (they trigger a label-check note) but NEVER clear a flag:
+# "gluten-free spaghetti" still conflicts with a wheat allergy, "nut-free almond milk" with tree
+# nuts. Claims are unverifiable and cross-contact is common (fix round 1, item 3).
 _FREE_RE = re.compile(r"^([a-z]+)-free$")
 
 MAX_PHRASE_WORDS = 5
 
 
-def normalize_preference(text: str, dictionary: IngredientDictionary) -> str:
-    """One allergy / avoid entry → its stored form: a class label ("tree nuts"), a dictionary
-    canonical name ("peanut butter"), or the conservative cleaned key for unknown foods."""
-    phrase = clean(text)
-    if not phrase:
-        return ""
+# --------------------------------------------------------------------------- preferences
+
+_SPLIT_RE = re.compile(r"\s*(?:,|;|/|\band\b|&|\+)\s*")
+_STRIP_RE = re.compile(
+    r"^(?:severe(?:ly)?\s+|mild\s+)?(?:allerg(?:y|ies|ic)\s+(?:to\s+)?|intoleran(?:t|ce)\s+to\s+|"
+    r"no\s+|avoid\s+|without\s+|sensitive\s+to\s+)+|"
+    r"(?:\s*-?\s*(?:free|allerg(?:y|ies|ic)|intoleran(?:t|ce)|sensitivity|sensitive))+$"
+)
+PREFERENCE_SYNONYMS = {
+    "finfish": "fish",
+    "fin fish": "fish",
+    "crustacean shellfish": "shellfish",
+    "molluscan shellfish": "shellfish",
+    "lactose": "milk",
+    "cows milk": "milk",
+    "cow milk": "milk",
+    "dairy products": "milk",
+    "tree-nut": "tree nuts",
+    "tree-nuts": "tree nuts",
+}
+
+
+def _plain(text: str) -> str:
+    """NFKD + strip combining marks, then the dictionary ``clean`` (casefold, quotes, spaces)."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return clean(stripped)
+
+
+def _known_food(phrase: str, dictionary: IngredientDictionary) -> str | None:
+    if phrase in PREFERENCE_SYNONYMS:
+        return PREFERENCE_SYNONYMS[phrase]
     if phrase in CLASS_SYNONYMS:
         return CLASS_SYNONYMS[phrase]
-    singular = " ".join([*phrase.split(" ")[:-1], singularize_word(phrase.split(" ")[-1])])
+    words = phrase.split(" ")
+    singular = " ".join([*words[:-1], singularize_word(words[-1])])
     if singular in CLASS_SYNONYMS:
         return CLASS_SYNONYMS[singular]
-    return normalize(phrase, dictionary).key or phrase
+    if _compound(phrase) is not None:
+        return phrase if phrase in KNOWN_COMPOUNDS else singular
+    norm = normalize(phrase, dictionary)
+    return norm.entry.canonical_name if norm.entry is not None else None
+
+
+def parse_preference(text: str, dictionary: IngredientDictionary) -> list[tuple[str, bool]]:
+    """One typed entry → ``[(stored_key, recognized)]``. "peanut and tree nut allergy" →
+    peanut, tree nuts; "lactose intolerant" → milk; "gluten free" → gluten."""
+    phrase = _plain(text)
+    if not phrase:
+        return []
+    whole = _STRIP_RE.sub("", phrase).strip()
+    if whole and (hit := _known_food(whole, dictionary)) is not None:
+        return [(hit, True)]
+    out: list[tuple[str, bool]] = []
+    for part in _SPLIT_RE.split(phrase):
+        part = _STRIP_RE.sub("", part.strip()).strip(" -")
+        if not part:
+            continue
+        hit = _known_food(part, dictionary)
+        out.append((hit, True) if hit else (normalize(part, dictionary).key or part, False))
+    return out
+
+
+def normalize_preference(text: str, dictionary: IngredientDictionary) -> str:
+    """First stored key for one entry (kept for callers that want a single value)."""
+    parsed = parse_preference(text, dictionary)
+    return parsed[0][0] if parsed else ""
+
+
+def normalize_preferences_detailed(
+    values: Iterable[str], dictionary: IngredientDictionary
+) -> tuple[list[str], list[str]]:
+    """Stored keys (deduplicated, in order) and the subset nothing recognised."""
+    keys: list[str] = []
+    unknown: list[str] = []
+    for value in values:
+        for key, recognized in parse_preference(value, dictionary):
+            if key not in keys:
+                keys.append(key)
+            if not recognized and key not in unknown:
+                unknown.append(key)
+    return keys, unknown
 
 
 def normalize_preferences(values: Iterable[str], dictionary: IngredientDictionary) -> list[str]:
-    out: list[str] = []
-    for value in values:
-        key = normalize_preference(value, dictionary)
-        if key and key not in out:
-            out.append(key)
-    return out
+    return normalize_preferences_detailed(values, dictionary)[0]
+
+
+def unrecognized(labels: Iterable[str], dictionary: IngredientDictionary) -> list[str]:
+    return [label for label in labels if _known_food(label, dictionary) is None]
 
 
 # --------------------------------------------------------------------------- text scanning
 
 
-# Common foods the dictionary does not (yet) list but substitution candidates use. Checked before
-# the dictionary so "soy milk" is not read as "soy" (soy sauce alias) + "milk".
-KNOWN_COMPOUNDS: dict[str, frozenset[str]] = {
-    "soy milk": frozenset({"soy"}),
-    "soya milk": frozenset({"soy"}),
-    "rice milk": frozenset(),
-    "cashew milk": frozenset({"tree_nut"}),
-    "hemp milk": frozenset(),
-    "pea milk": frozenset(),
-    "coconut cream": frozenset(),
-    "cocoa butter": frozenset(),
-    "apple butter": frozenset(),
-    "cream of tartar": frozenset(),
-    "nutritional yeast": frozenset(),
-    "coconut aminos": frozenset(),
-    "miso": frozenset({"soy"}),
-    "red miso": frozenset({"soy"}),
-    "white miso": frozenset({"soy"}),
-    "sriracha": frozenset(),
-    "pecorino romano": frozenset({"milk"}),
-    "pecorino": frozenset({"milk"}),
-    "pancetta": frozenset(),
-    "ham": frozenset(),
-    "sauerkraut": frozenset(),
-    "dry sherry": frozenset(),
-    "dry white wine": frozenset(),
-    "pumpkin seeds": frozenset(),
-    "pepitas": frozenset(),
-    "smoked tofu": frozenset({"soy"}),
-    "silken tofu": frozenset({"soy"}),
-    "cayenne": frozenset(),
-    "lime zest": frozenset(),
-    "lemon zest": frozenset(),
+@dataclass(frozen=True, slots=True)
+class Compound:
+    """A food the dictionary does not list. ``known=False``: allergen status unknown (a label
+    check is always shown to a user with allergies; never treated as clear)."""
+
+    flags: frozenset[str]
+    known: bool = True
+
+
+def _c(*flags: str, known: bool = True) -> Compound:
+    return Compound(frozenset(flags), known)
+
+
+TN, PN, FI, SH, MI, EG, SO, WH, SE = (
+    "tree_nut",
+    "peanut",
+    "fish",
+    "shellfish",
+    "milk",
+    "egg",
+    "soy",
+    "wheat",
+    "sesame",
+)
+
+KNOWN_COMPOUNDS: dict[str, Compound] = {
+    # nuts: bare "nut(s)" means BOTH tree nut and peanut
+    "nut": _c(TN, PN),
+    "nuts": _c(TN, PN),
+    "mixed nuts": _c(TN, PN),
+    "nut milk": _c(TN),
+    "nut butter": _c(TN, PN),
+    "pine nut": _c(TN),
+    "brazil nut": _c(TN),
+    "pesto": _c(TN, MI),
+    "amaretto": _c(TN),
+    "nougat": _c(TN, EG),
+    "gianduja": _c(TN, MI),
+    "praline": _c(TN, MI),
+    "marzipan": _c(TN),
+    "satay": _c(PN),
+    "satay sauce": _c(PN, SO),
+    "kung pao": _c(PN, SO, WH),
+    # fish
+    "worcestershire": _c(FI, SO),
+    "worcestershire sauce": _c(FI, SO),
+    "lea perrins": _c(FI, SO),
+    "lea and perrins": _c(FI, SO),
+    "caesar dressing": _c(FI, EG, MI),
+    "nam pla": _c(FI),
+    "surimi": _c(FI, EG, WH),
+    "imitation crab": _c(FI, EG, WH),
+    "haddock": _c(FI),
+    "catfish": _c(FI),
+    "mahi mahi": _c(FI),
+    "mahi-mahi": _c(FI),
+    "snapper": _c(FI),
+    "caviar": _c(FI),
+    "roe": _c(FI),
+    "eel": _c(FI),
+    "anchovy": _c(FI),
+    "anchovies": _c(FI),
+    "dashi": _c(FI),
+    "bonito flakes": _c(FI),
+    # shellfish (incl. molluscs)
+    "calamari": _c(SH),
+    "cuttlefish": _c(SH),
+    "abalone": _c(SH),
+    "xo sauce": _c(SH, FI),
+    "belacan": _c(SH),
+    "shrimp paste": _c(SH),
+    "cockle": _c(SH),
+    "whelk": _c(SH),
+    "snail": _c(SH),
+    "escargot": _c(SH),
+    # milk
+    "grana padano": _c(MI),
+    "gouda": _c(MI),
+    "brie": _c(MI),
+    "gruyere": _c(MI),
+    "mascarpone": _c(MI),
+    "halloumi": _c(MI),
+    "creme fraiche": _c(MI),
+    "half and half": _c(MI),
+    "half-and-half": _c(MI),
+    "custard": _c(MI, EG),
+    "burrata": _c(MI),
+    "creamer": _c(MI),
+    "coffee creamer": _c(MI),
+    "labneh": _c(MI),
+    "pecorino": _c(MI, known=False),
+    "pecorino romano": _c(MI, known=False),
+    # egg
+    "hollandaise": _c(EG, MI),
+    "brioche": _c(EG, MI, WH),
+    "albumin": _c(EG),
+    "quiche": _c(EG, MI, WH),
+    "eggnog": _c(EG, MI),
+    "challah": _c(EG, WH),
+    "marshmallow": _c(EG),
+    "tartar sauce": _c(EG),
+    "aioli": _c(EG),
+    # soy
+    "hoisin": _c(SO, WH),
+    "hoisin sauce": _c(SO, WH),
+    "teriyaki": _c(SO, WH),
+    "teriyaki sauce": _c(SO, WH),
+    "ponzu": _c(SO, WH, FI),
+    "tvp": _c(SO),
+    "textured vegetable protein": _c(SO),
+    "yuba": _c(SO),
+    "soy milk": _c(SO),
+    "soya milk": _c(SO),
+    "smoked tofu": _c(SO, known=False),
+    "silken tofu": _c(SO),
+    # wheat / gluten
+    "udon": _c(WH),
+    "orzo": _c(WH),
+    "farro": _c(WH),
+    "cracker": _c(WH),
+    "crackers": _c(WH),
+    "beer": _c(WH),
+    "pita": _c(WH),
+    "tortilla": _c(WH),
+    "tortillas": _c(WH),
+    "pitas": _c(WH),
+    "naan": _c(WH, MI),
+    "wonton wrapper": _c(WH, EG),
+    "wonton wrappers": _c(WH, EG),
+    "ramen": _c(WH),
+    "gluten-free pasta": _c(WH, known=False),
+    "gluten-free spaghetti": _c(WH, known=False),
+    # sesame
+    "hummus": _c(SE),
+    "za'atar": _c(SE),
+    "zaatar": _c(SE),
+    "furikake": _c(SE, FI),
+    "halva": _c(SE),
+    "halvah": _c(SE),
+    "tahini": _c(SE),
+    # known allergen-free here (flags none, status known)
+    "rice milk": _c(),
+    "hemp milk": _c(),
+    "pea milk": _c(),
+    "coconut cream": _c(),
+    "cocoa butter": _c(),
+    "apple butter": _c(),
+    "cream of tartar": _c(),
+    "lime zest": _c(),
+    "lemon zest": _c(),
+    "orange zest": _c(),
+    "lime juice": _c(),
+    "lemon juice": _c(),
+    "sunflower oil": _c(),
+    "avocado oil": _c(),
+    "agave syrup": _c(),
+    # no dictionary entry and not vetted: UNKNOWN allergen status (item 16C)
+    "dry sherry": _c(known=False),
+    "sherry": _c(known=False),
+    "dry white wine": _c(known=False),
+    "white wine": _c(known=False),
+    "wine": _c(known=False),
+    "cayenne": _c(known=False),
+    "ham": _c(known=False),
+    "pancetta": _c(known=False),
+    "pumpkin seeds": _c(known=False),
+    "pepitas": _c(known=False),
+    "sauerkraut": _c(known=False),
+    "coconut aminos": _c(known=False),
+    "sriracha": _c(known=False),
+    "nutritional yeast": _c(known=False),
 }
+
+
+def _compound(phrase: str) -> Compound | None:
+    hit = KNOWN_COMPOUNDS.get(phrase)
+    if hit is None:
+        words = phrase.split(" ")
+        hit = KNOWN_COMPOUNDS.get(" ".join([*words[:-1], singularize_word(words[-1])]))
+    return hit
 
 
 @dataclass(frozen=True, slots=True)
 class Mention:
-    """A known ingredient found in a text. ``flags`` already has "-free" claims removed."""
-
     entry: DictEntry
     phrase: str
     flags: frozenset[str]
-    free_claim: str | None = None
+    known: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class Scan:
     mentions: tuple[Mention, ...]
-    # Words no known ingredient claimed, each with the allergen flags a preceding "X-free"
-    # claim removes from it ("gluten-free pasta" → ("pasta", {"wheat"})).
-    uncovered: tuple[tuple[str, frozenset[str]], ...]
-    text: str  # the cleaned full text
+    uncovered: tuple[str, ...]  # words no known food claimed
+    claims: tuple[str, ...]  # "gluten-free" etc.: recorded, never clearing a flag
+    text: str  # the plain full text
 
     @property
     def free_claims(self) -> tuple[str, ...]:
-        claims = [m.free_claim for m in self.mentions if m.free_claim]
-        claims += [w for w, _ in self.uncovered if _FREE_RE.match(w)]
-        return tuple(claims)
+        return self.claims
 
     @property
     def canonical_names(self) -> frozenset[str]:
         return frozenset(m.entry.canonical_name for m in self.mentions)
 
-    def residue(self, flags: frozenset[str]) -> str:
-        """Uncovered words, minus any a "-free" claim exempts from every one of ``flags``."""
-        words = [
-            w
-            for w, freed in self.uncovered
-            if not _FREE_RE.match(w) and not (flags and flags <= freed)
-        ]
-        return " ".join(words)
+    @property
+    def unknown(self) -> tuple[str, ...]:
+        """Foods whose allergen status we do not know."""
+        return tuple(m.phrase for m in self.mentions if not m.known)
+
+    def residue(self) -> str:
+        return " ".join(self.uncovered)
 
 
-_TOKEN_SPLIT = re.compile(r"[^a-z0-9'\-ñé]+")
+_TOKEN_SPLIT = re.compile(r"[^a-z0-9'\-]+")
 
 
 def _tokens(text: str) -> list[str]:
-    return [t.strip("'-") for t in _TOKEN_SPLIT.split(clean(text)) if t.strip("'-")]
+    plain = _plain(text).replace("&", " and ")
+    return [t.strip("'-") for t in _TOKEN_SPLIT.split(plain) if t.strip("'-")]
 
 
-def _lookup(phrase: str, dictionary: IngredientDictionary) -> DictEntry | None:
-    flags = KNOWN_COMPOUNDS.get(phrase)
-    if flags is not None:
-        return DictEntry(canonical_name=phrase, allergens=tuple(sorted(flags)))
-    return dictionary.lookup(phrase)
-
-
-def _free_flags(token: str) -> frozenset[str]:
-    m = _FREE_RE.match(token)
-    return _FREE_OF.get(m.group(1), frozenset()) if m else frozenset()
+def _lookup(phrase: str, dictionary: IngredientDictionary) -> tuple[DictEntry, bool] | None:
+    compound = _compound(phrase)
+    if compound is not None:
+        return DictEntry(canonical_name=phrase, allergens=tuple(sorted(compound.flags))), (
+            compound.known
+        )
+    entry = dictionary.lookup(phrase)
+    return (entry, True) if entry is not None else None
 
 
 def scan(text: str, dictionary: IngredientDictionary) -> Scan:
-    """Greedy longest-phrase scan over known compounds and the dictionary (aliases, plurals)."""
+    """Greedy longest-phrase scan over known compounds and the dictionary (aliases, plurals).
+
+    A "<x>-free" token is a claim: it is recorded and skipped, and never part of a match, so
+    "gluten-free soy sauce" is read as soy sauce (soy, wheat)."""
     tokens = _tokens(text)
     mentions: list[Mention] = []
-    uncovered: list[tuple[str, frozenset[str]]] = []
+    uncovered: list[str] = []
+    claims: list[str] = []
     i = 0
     while i < len(tokens):
-        freed = _free_flags(tokens[i - 1]) if i > 0 else frozenset()
-        hit: tuple[int, DictEntry] | None = None
-        for n in range(min(MAX_PHRASE_WORDS, len(tokens) - i), 0, -1):
-            entry = _lookup(" ".join(tokens[i : i + n]), dictionary)
-            if entry is not None:
-                hit = (n, entry)
-                break
-        if hit is None:
-            uncovered.append((tokens[i], freed))
+        if _FREE_RE.match(tokens[i]) and not any(
+            _compound(" ".join(tokens[i : i + n])) for n in range(2, MAX_PHRASE_WORDS + 1)
+        ):
+            claims.append(tokens[i])
             i += 1
             continue
-        n, entry = hit
-        claim = tokens[i - 1] if freed else None
+        hit: tuple[int, DictEntry, bool] | None = None
+        for n in range(min(MAX_PHRASE_WORDS, len(tokens) - i), 0, -1):
+            window = tokens[i : i + n]
+            phrase = " ".join(window)
+            if any(_FREE_RE.match(t) for t in window) and _compound(phrase) is None:
+                continue  # a claim never joins a dictionary match ("gluten-free soy sauce")
+            found = _lookup(phrase, dictionary)
+            if found is not None:
+                hit = (n, *found)
+                break
+        if hit is None:
+            uncovered.append(tokens[i])
+            i += 1
+            continue
+        n, entry, known = hit
+        claims += [t for t in tokens[i : i + n] if _FREE_RE.match(t)]
         mentions.append(
-            Mention(entry, " ".join(tokens[i : i + n]), frozenset(entry.allergens) - freed, claim)
+            Mention(entry, " ".join(tokens[i : i + n]), frozenset(entry.allergens), known)
         )
         i += n
-    return Scan(tuple(mentions), tuple(uncovered), " ".join(tokens))
+    return Scan(tuple(mentions), tuple(uncovered), tuple(claims), " ".join(tokens))
 
 
 def _has_phrase(haystack: str, phrase: str) -> bool:
@@ -428,6 +638,11 @@ def _has_phrase(haystack: str, phrase: str) -> bool:
         return False
     pattern = rf"(?<![a-z0-9]){re.escape(phrase)}(?:s|es)?(?![a-z0-9])"
     return re.search(pattern, haystack) is not None
+
+
+_FALLBACK_STOP = frozenset(
+    {"and", "or", "the", "a", "an", "of", "with", "in", "to", "for", "free", "food", "fruit"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,7 +660,13 @@ def sensitivity(label: str) -> Sensitivity:
     cls = ALLERGEN_CLASSES.get(label)
     if cls is not None:
         return Sensitivity(label, cls.flags, frozenset(), cls.words, cls.exclude)
-    return Sensitivity(label, names=frozenset({label}), words=(label,))
+    # Unrecognised or plain foods also match per word as a fallback ("dragon fruit" → dragon).
+    words = tuple(
+        dict.fromkeys(
+            [label, *(w for w in label.split(" ") if len(w) > 2 and w not in _FALLBACK_STOP)]
+        )
+    )
+    return Sensitivity(label, names=frozenset({label}), words=words)
 
 
 def sensitivities(labels: Iterable[str]) -> list[Sensitivity]:
@@ -455,27 +676,22 @@ def sensitivities(labels: Iterable[str]) -> list[Sensitivity]:
 def conflicts(
     text: str, terms: Sequence[Sensitivity], dictionary: IngredientDictionary
 ) -> list[str]:
-    """Labels of ``terms`` that ``text`` overlaps (dictionary flags, names, member words)."""
+    """Labels of ``terms`` that ``text`` overlaps (flags, names, member words)."""
     if not terms or not text.strip():
         return []
     found = scan(text, dictionary)
-    hits: list[str] = []
-    for term in terms:
-        if _term_hits(found, term):
-            hits.append(term.label)
-    return hits
+    return [term.label for term in terms if _term_hits(found, term)]
 
 
 def _term_hits(found: Scan, term: Sensitivity) -> bool:
     for mention in found.mentions:
         if mention.flags & term.flags or mention.entry.canonical_name in term.names:
             return True
-    residue = found.residue(term.flags)
+    residue = found.residue()
     for phrase in term.exclude:
         residue = re.sub(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", " ", residue)
     if any(_has_phrase(residue, word) for word in term.words):
         return True
-    # A name-type entry ("kiwi") may also appear inside a dictionary phrase's words.
     return any(_has_phrase(found.text, name) for name in term.names)
 
 
@@ -485,7 +701,7 @@ def allergen_flags(text: str, dictionary: IngredientDictionary) -> frozenset[str
     flags: set[str] = set()
     for mention in found.mentions:
         flags |= mention.flags
-    words_only = Scan((), found.uncovered, "")
+    words_only = Scan((), found.uncovered, (), "")
     for cls in ALLERGEN_CLASSES.values():
         if cls.label in {"nuts", "seafood", "gluten"}:
             continue
@@ -540,10 +756,12 @@ def avoid_verdict(
 
 # --------------------------------------------------------------------------- food safety
 
+GUIDANCE_SOURCE = "USDA safe minimum internal temperatures"
 DONENESS_NOTICE = (
     "I can't confirm doneness or food safety from a description or a photo. Check with an "
-    "instant-read thermometer against trusted food-safety guidance."
+    f"instant-read thermometer against verified food-safety guidance ({GUIDANCE_SOURCE})."
 )
+CANT_TELL = "I can't tell from a description or photo whether the food has cooked through."
 RAW_TASTING_NOTICE = (
     "Don't taste anything that has touched raw meat, poultry, fish or raw egg (marinade, batter, "
     "mixture). Taste only after it has been fully cooked, or set some aside before it touches "
@@ -554,22 +772,38 @@ LABEL_CHECK = (
     "for your allergy."
 )
 
-_DONENESS_RE = re.compile(
-    r"\b(done|cooked|undercooked|overcooked|doneness|safe|unsafe|raw|pink|bloody|ready to eat|"
-    r"food poisoning|salmonella|bacteria|e\.? ?coli|listeria|spoiled|gone off|still good|"
-    r"set yet|runny|internal temp\w*|temperature)\b"
+# Always a doneness / safe-to-eat question, whatever the recipe.
+_STRICT_RE = re.compile(
+    r"\b(done|doneness|cooked|undercooked|overcooked|safe|unsafe|raw|pink|bloody|runny|"
+    r"medium[- ]rare|rare|food poisoning|salmonella|bacteria|e\.? ?coli|listeria|spoiled|"
+    r"gone off|internal temp\w*|temperature|thermometer|reached \d+|\d+\s*°?\s*[fc]\b)"
 )
-_TASTE_RE = re.compile(r"\b(taste|tasting|lick|try|sample|eat|nibble)\b")
+# A doneness question only when the step or recipe involves a high-risk food.
+_WIDE_RE = re.compile(
+    r"\b(ready|eat|eating|edible|serve|serving|set|finished|finish|enough|good to go|"
+    r"ok(?:ay)? to|hot inside|cold inside|(?:center|centre|middle|inside) (?:is |still )?"
+    r"(?:cold|cool|hot|warm)|(?:cold|cool) in the (?:center|centre|middle)|off the heat|"
+    r"take (?:it|them|the \w+) (?:out|off)|pull (?:it|them) (?:out|off)|long enough|"
+    r"hot enough|warm enough|cooked enough)\b"
+)
+_PROGRESS_TALK_RE = re.compile(r"\b(i'?m|i am|we'?re|we are) done\b|\bdone with\b")
+_DEFINITION_RE = re.compile(
+    r"^\s*(what does .* mean|what is (a |an |the )?(?!it\b)\w+( \w+)?\??$|what'?s (a|an) |"
+    r"define |meaning of |how much |how many |how do (i|you) (say|spell|pronounce)|"
+    r"where (is|are|do) )"
+)
+_TASTE_RE = re.compile(r"\b(taste|tasting|lick|try|sample|nibble|sip)\b")
 _RAW_CONTEXT_RE = re.compile(
     r"\b(raw|marinade|marinated|marinating|batter|dough|uncooked|mixture)\b"
 )
 
 POULTRY = frozenset({"chicken", "turkey", "duck", "poultry", "hen", "goose", "quail"})
 GROUND = frozenset({"ground", "minced", "mince", "burger", "meatball", "meatballs", "sausage"})
-PORK = frozenset({"pork", "ham"})
+PORK = frozenset({"pork", "ham", "bacon", "spam"})
 BEEF = frozenset({"beef", "steak", "lamb", "veal", "mutton"})
 EGGS = frozenset({"egg", "eggs", "yolk", "yolks"})
 SEAFOOD = frozenset(_FISH_WORDS + _SHELLFISH_WORDS) | {"prawns", "shrimps", "mussels", "clams"}
+RICE = frozenset({"rice"})
 
 GUIDANCE = {
     "poultry": "poultry 165°F (74°C) in the thickest part",
@@ -577,13 +811,18 @@ GUIDANCE = {
     "pork": "whole cuts of pork, beef or lamb 145°F (63°C) plus a 3-minute rest",
     "egg": "eggs until white and yolk are firm, or 160°F (71°C) for egg dishes",
     "seafood": "fish 145°F (63°C) or until it flakes; shellfish until the flesh is opaque",
+    "rice": "cooked rice kept hot above 140°F (60°C), or chilled within 1 hour and reheated "
+    "until steaming hot",
 }
+
+
+_NOT_RICE_RE = re.compile(r"\brice (vinegar|wine|noodles?|paper|milk|flour|cakes?|crackers?)\b")
 
 
 def protein_kinds(texts: Iterable[str]) -> list[str]:
     words: set[str] = set()
     for t in texts:
-        words |= set(_tokens(t))
+        words |= set(_tokens(_NOT_RICE_RE.sub(" ", _plain(t))))
     kinds: list[str] = []
     if words & POULTRY:
         kinds.append("poultry")
@@ -595,40 +834,58 @@ def protein_kinds(texts: Iterable[str]) -> list[str]:
         kinds.append("egg")
     if words & SEAFOOD:
         kinds.append("seafood")
+    if words & RICE:
+        kinds.append("rice")
     return kinds
 
 
 def thermometer_guidance(texts: Iterable[str]) -> str | None:
-    kinds = protein_kinds(texts)
+    kinds = [k for k in protein_kinds(texts) if k != "rice"] or protein_kinds(texts)
     if not kinds:
         return None
     return "Use an instant-read thermometer: " + "; ".join(GUIDANCE[k] for k in kinds) + "."
 
 
-_PROGRESS_TALK_RE = re.compile(r"\b(i'?m|i am|we'?re|we are) done\b|\bdone with\b")
+def _pure_intent(q: str) -> bool:
+    """Navigation, timer or definition questions are never doneness questions."""
+    from app.domains.sessions import intent  # local import: intent is pure, avoids a cycle
+
+    return bool(intent.intents(q)) or _DEFINITION_RE.search(q) is not None
 
 
-def is_doneness_question(query: str) -> bool:
-    """ "Is the chicken done?" yes; "I'm done with this step" no (that is progress talk)."""
-    return _DONENESS_RE.search(_PROGRESS_TALK_RE.sub(" ", clean(query))) is not None
+def is_doneness_question(query: str, context: Iterable[str] = ()) -> bool:
+    """ "Is the chicken done?" always. "Is it ready?" / "Can I serve it?" when the step or recipe
+    involves a high-risk food. "I'm done with this step", "set a timer", "what does X mean" no."""
+    q = _PROGRESS_TALK_RE.sub(" ", _plain(query))
+    strict = _STRICT_RE.search(q) is not None
+    if strict and not _DEFINITION_RE.search(q):
+        return True
+    if _pure_intent(q):
+        return False
+    return _WIDE_RE.search(q) is not None and bool(protein_kinds([q, *context]))
 
 
 def doneness_notice(query: str, context: Iterable[str] = ()) -> str | None:
     """The fixed notice for any doneness / safety question; never a certification."""
-    if not is_doneness_question(query):
+    ctx = list(context)
+    if not is_doneness_question(query, ctx):
         return None
-    guidance = thermometer_guidance([query, *context])
+    guidance = thermometer_guidance([query, *ctx])
     return f"{DONENESS_NOTICE} {guidance}" if guidance else DONENESS_NOTICE
 
 
 def is_raw_tasting_request(query: str, context: Iterable[str] = ()) -> bool:
-    """ "Can I taste the marinade?" while raw meat / poultry / fish / egg is involved."""
-    q = clean(query)
+    """ "Can I taste the marinade / sauce?" while the step involves raw meat, poultry, fish or egg
+    (``context`` = the current step's own text), or the query itself says raw / batter."""
+    q = _plain(query)
     if not _TASTE_RE.search(q):
         return False
-    if not (_RAW_CONTEXT_RE.search(q) or protein_kinds([q])):
-        return False
-    return bool(protein_kinds([q, *context])) or "raw" in q
+    if _RAW_CONTEXT_RE.search(q) and ("raw" in q or protein_kinds([q, *context])):
+        return True
+    step_kinds = [k for k in protein_kinds(context) if k != "rice"]
+    return bool(step_kinds) or bool(
+        [k for k in protein_kinds([q]) if k != "rice"] and _RAW_CONTEXT_RE.search(q)
+    )
 
 
 def food_safety_verdict(query: str, context: Iterable[str] = ()) -> RuleVerdict | None:
@@ -639,7 +896,6 @@ def food_safety_verdict(query: str, context: Iterable[str] = ()) -> RuleVerdict 
         )
     notice = doneness_notice(query, ctx)
     if notice:
-        # Allowed to answer, but the notice is mandatory and nothing is certified.
         return RuleVerdict(Precedence.FOOD_SAFETY_RULE, True, notice, source="doneness")
     return None
 
@@ -647,51 +903,30 @@ def food_safety_verdict(query: str, context: Iterable[str] = ()) -> RuleVerdict 
 def candidate_safety_risks(candidate: str) -> list[str]:
     """Risks attached to a substitute that is itself a high-risk protein."""
     guidance = thermometer_guidance([candidate])
-    return [f"Cook it through. {guidance}"] if guidance else []
+    if guidance is None or protein_kinds([candidate]) == ["rice"]:
+        return []
+    return [f"Cook it through. {guidance}"]
 
 
 # --------------------------------------------------------------------------- structural swaps
 
-LEAVENING = frozenset(
-    {
-        "baking soda",
-        "baking powder",
-        "yeast",
-        "instant yeast",
-        "active dry yeast",
-        "fresh yeast",
-        "cream of tartar",
-        "self-raising flour",
-        "self-rising flour",
-        "sourdough starter",
-    }
+_LEAVENING_RE = re.compile(
+    r"(baking soda|baking powder|bread soda|bicarbonate|bicarb|yeast|self[- ]?ris(ing|en)|"
+    r"self[- ]?rais(ing|ed)|sourdough starter|cream of tartar|leaven)"
 )
-PRESERVATION_TARGETS = frozenset(
-    {
-        "salt",
-        "sugar",
-        "rice vinegar",
-        "apple cider vinegar",
-        "white vinegar",
-        "vinegar",
-        "lemon juice",
-        "lime juice",
-        "lemon",
-        "lime",
-        "curing salt",
-        "pink curing salt",
-        "citric acid",
-        "pectin",
-    }
+_ALWAYS_PRESERVATION_RE = re.compile(
+    r"(curing|cure #?\d|pink salt|prague powder|sodium nitrite|saltpet|insta ?cure|citric acid|"
+    r"pectin|canning salt|pickling salt|pickling lime)"
 )
+_PRESERVATION_TARGET_RE = re.compile(r"(salt|sugar|vinegar|lemon|lime|acid|brine)")
 _PRESERVATION_RE = re.compile(
     r"\b(canning|canned at home|home[- ]can\w*|water[- ]bath|pressure[- ]can\w*|cure|curing|"
     r"cured|shelf[- ]stable|preserv\w*|ferment\w*|pickling|lacto|airtight jars?|sterili[sz]ed?)\b"
 )
-EGG_TARGETS = frozenset({"egg", "egg yolk", "egg white"})
+_EGG_TARGET_RE = re.compile(r"\b(egg|eggs|yolks?|whites?|albumen)\b|pasteuri[sz]ed egg")
 _RAW_EMULSION_RE = re.compile(
     r"\b(mayonnaise|mayo|aioli|hollandaise|emulsi\w*|caesar|eggnog|mousse|tiramisu|"
-    r"raw egg|uncooked egg)\b"
+    r"raw egg|uncooked egg|meringue|zabaglione|sabayon)\b"
 )
 
 
@@ -703,8 +938,8 @@ class StructuralContext:
 
 
 def structural_verdict(ctx: StructuralContext) -> RuleVerdict | None:
-    names = ctx.target_names
-    if names & LEAVENING or any(n.endswith("yeast") for n in names):
+    names = " | ".join(_plain(n) for n in ctx.target_names)
+    if _LEAVENING_RE.search(names):
         return RuleVerdict(
             Precedence.FOOD_SAFETY_RULE,
             False,
@@ -712,22 +947,24 @@ def structural_verdict(ctx: StructuralContext) -> RuleVerdict | None:
             "Keep the original or choose another recipe.",
             source="structural_leavening",
         )
-    texts = " ".join(clean(t) for t in (*ctx.step_texts, *ctx.recipe_texts))
-    if names & PRESERVATION_TARGETS and _PRESERVATION_RE.search(texts):
+    texts = " ".join(_plain(t) for t in (*ctx.step_texts, *ctx.recipe_texts))
+    if _ALWAYS_PRESERVATION_RE.search(names) or (
+        _PRESERVATION_TARGET_RE.search(names) and _PRESERVATION_RE.search(texts)
+    ):
         return RuleVerdict(
             Precedence.FOOD_SAFETY_RULE,
             False,
-            "This recipe preserves food (canning, curing or fermenting). Salt, acid and sugar "
-            "levels keep it safe, so substituting them is not recommended.",
+            "This ingredient preserves the food (canning, curing or fermenting). Salt, acid, "
+            "sugar and curing levels keep it safe, so substituting them is not recommended.",
             source="structural_preservation",
         )
-    step_text = " ".join(clean(t) for t in ctx.step_texts)
-    if names & EGG_TARGETS and _RAW_EMULSION_RE.search(step_text):
+    step_text = " ".join(_plain(t) for t in ctx.step_texts)
+    if _EGG_TARGET_RE.search(names) and ("pasteuri" in names or _RAW_EMULSION_RE.search(step_text)):
         return RuleVerdict(
             Precedence.FOOD_SAFETY_RULE,
             False,
-            "The egg here forms an uncooked emulsion; a swap changes both the structure and the "
-            "food-safety picture, so it is not recommended.",
+            "The egg here is eaten uncooked or forms an emulsion; a swap changes both the "
+            "structure and the food-safety picture, so it is not recommended.",
             source="structural_raw_egg",
         )
     return None
@@ -743,9 +980,9 @@ def creator_warning_verdict(
 ) -> RuleVerdict | None:
     """A creator warning that forbids swapping this ingredient (or all ingredients) wins over
     pantry, preference and AI creativity."""
-    names = [n for n in target_names if n]
+    names = [_plain(n) for n in target_names if n]
     for warning in warnings:
-        w = clean(warning)
+        w = _plain(warning)
         if not _NO_SUB_RE.search(w):
             continue
         if not names or any(_has_phrase(w, n) for n in names) or "anything" in w:
@@ -755,4 +992,21 @@ def creator_warning_verdict(
                 f"The creator's warning says not to substitute this: “{warning.strip()}”",
                 source="creator_warning",
             )
+    return None
+
+
+_RAW_WORD_RE = re.compile(r"\b(raw|uncooked|undercooked|rare|unpasteuri[sz]ed)\b")
+
+
+def candidate_food_safety_verdict(candidate: str) -> RuleVerdict | None:
+    """A replacement that is itself a raw high-risk food ("raw egg yolk") is never offered."""
+    text = _plain(candidate)
+    kinds = [k for k in protein_kinds([text]) if k != "rice"]
+    if kinds and _RAW_WORD_RE.search(text):
+        return RuleVerdict(
+            Precedence.FOOD_SAFETY_RULE,
+            False,
+            "A raw or undercooked high-risk food is not offered as a substitute",
+            source="raw_candidate",
+        )
     return None

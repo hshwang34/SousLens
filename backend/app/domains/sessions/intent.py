@@ -11,11 +11,17 @@ from __future__ import annotations
 
 import re
 
+# Navigation only. "should I continue stirring", "next time …", "what's next in the sauce" and
+# "what's the last step" are not navigation (fix round 1, item 14).
 NEXT_RE = re.compile(
-    r"\b(next step|go next|move on|go on|continue|i'?m done|done with (this|that)|"
-    r"what'?s next)\b|^next\b"
+    r"\b(next step|go to the next|go next|move on|on to the next|"
+    r"(i'?m )?done with (this|that|the) step|next please|let'?s go on|continue to the next)\b|"
+    r"^\s*(ok(ay)?,?\s*)?next\s*[.!?]*$|^\s*(ok(ay)?,?\s*)?(next|done),?\s+please\b"
 )
-BACK_RE = re.compile(r"\b(go back|previous step|last step|step back)\b|^back\b")
+BACK_RE = re.compile(
+    r"\b(go back|previous step|step back|back a step|back one step|the step before)\b|"
+    r"^\s*back\s*[.!?]*$"
+)
 JUMP_RE = re.compile(r"\b(?:go|jump|skip|take me|move)\s+to\s+step\s+(\d{1,3})\b")
 TIMER_RE = re.compile(r"\b(timer|remind me|alarm)\b")
 DURATION_RE = re.compile(

@@ -117,7 +117,9 @@ async def test_approve_and_revert_mid_session(
     )
     assert s2["revision"] == s["revision"] + 1 and s2["step_index"] == s["step_index"]
     adapted = {st["step_id"]: st for st in s2["steps"] if st["adapted"]}
-    assert set(adapted) == {"step-2", "step-4", "step-5"}
+    # Tagged steps 2/4/5 are rewritten; untagged mentions (steps 1 and 6) are only annotated.
+    assert set(adapted) == {"step-1", "step-2", "step-4", "step-5", "step-6"}
+    assert "(Swap: use chicken breast" in adapted["step-6"]["instruction"]
     assert "chicken breast" in adapted["step-2"]["instruction"]
     assert s2["adaptations"][0]["label"] == "Common swap"
     s3 = ok(

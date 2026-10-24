@@ -8,8 +8,9 @@ Create Date: 2026-10-23
 * ``substitution_rules``: vetted seed swaps (``fixtures/substitution_rules.json``, upserted by
   ``make seed``); ``substitution_suggestions``: suggestions as served, 24 h TTL, referenced by
   ``suggestion_id`` on approve.
-* ``session_adaptations`` (one active per ingredient, partial unique index) and
-  ``session_notes``; ``cooking_sessions.outcome_json``.
+* ``session_adaptations`` (one active per ingredient, partial unique index; carries the
+  served suggestion's ``allergy_warning`` / ``risks``) and ``session_notes`` (optional
+  idempotency key, unique per session); ``cooking_sessions.outcome_json``.
 * ``recipe_variations``: one private change set per user + recipe (COOK-08).
 * ``session_events.request_hash`` / ``response_json``: idempotent command replay.
 * ``usage_events``: durable per-user ledger for the ask / session-creation rate limits (not
@@ -90,6 +91,8 @@ def upgrade() -> None:
     sa.Column('source', sa.String(length=16), nullable=False),
     sa.Column('reason', sa.String(length=300), nullable=True),
     sa.Column('suggestion_id', sa.UUID(), nullable=True),
+    sa.Column('allergy_warning', sa.Text(), nullable=True),
+    sa.Column('risks', postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'[]'::jsonb"), nullable=False),
     sa.Column('approved_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('reverted_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
@@ -103,9 +106,12 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('session_id', sa.UUID(), nullable=False),
     sa.Column('text', sa.Text(), nullable=False),
+    sa.Column('idempotency_key', sa.String(length=128), nullable=True),
+    sa.Column('request_hash', sa.String(length=64), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['session_id'], ['cooking_sessions.id'], name=op.f('fk_session_notes_session_id_cooking_sessions'), ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_session_notes'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_session_notes')),
+    sa.UniqueConstraint('session_id', 'idempotency_key', name=op.f('uq_session_notes_session_id_idempotency_key'))
     )
     op.create_index(op.f('ix_session_notes_session_id'), 'session_notes', ['session_id'], unique=False)
     op.create_table('usage_events',

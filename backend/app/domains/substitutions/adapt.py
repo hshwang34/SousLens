@@ -24,6 +24,44 @@ from app.domains.matching.normalize import DESCRIPTORS, alternatives, normalize
 from app.domains.recipes.schemas import IngredientOut, StepOut
 
 _PAREN_RE = re.compile(r"\(([^)]*)\)")
+# A bare generic head word never stands for a specific ingredient: "the oil" in a step with
+# neutral oil is not rewritten (only "neutral oil" is); it gets an annotation instead.
+GENERIC_HEADS = frozenset(
+    {
+        "oil",
+        "sauce",
+        "juice",
+        "paste",
+        "powder",
+        "seeds",
+        "seed",
+        "leaves",
+        "leaf",
+        "wine",
+        "vinegar",
+        "flakes",
+        "milk",
+        "cream",
+        "stock",
+        "broth",
+        "syrup",
+        "water",
+        "mix",
+        "spice",
+        "spices",
+        "cheese",
+        "flour",
+        "meat",
+        "zest",
+        "extract",
+    }
+)
+_AMOUNT_BEFORE_RE = re.compile(
+    r"(\d+(?:[./]\d+)?|\ba|\ban|\bone|\btwo|\bthree|\bhalf|\bquarter)\s+"
+    r"(?:(?:tbsp|tsp|tablespoons?|teaspoons?|cups?|g|grams?|ml|oz|ounces?|lbs?|pounds?|cloves?|"
+    r"pinch(?:es)?|splash(?:es)?|dash(?:es)?|handfuls?|sprigs?)\s+)?(?:of\s+)?(?:the\s+)?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,8 +87,11 @@ def mention_phrases(name: str, dictionary: IngredientDictionary) -> list[str]:
             for seq in (words, stripped):
                 if not seq:
                     continue
-                for k in range(1, len(seq) + 1):  # suffixes: "sesame oil", "oil"
-                    phrases.add(" ".join(seq[-k:]))
+                for k in range(1, len(seq) + 1):  # suffixes: "sesame oil" (never bare "oil")
+                    suffix = " ".join(seq[-k:])
+                    if k < len(seq) and k == 1 and suffix in GENERIC_HEADS:
+                        continue
+                    phrases.add(suffix)
                 for i in range(len(seq)):
                     for j in range(i + 1, len(seq) + 1):
                         gram = " ".join(seq[i:j])
@@ -77,12 +118,12 @@ def _same_food(gram: DictEntry | None, whole: DictEntry | None) -> bool:
 
 
 def _spans(text: str, phrases: Sequence[str]) -> list[tuple[int, int]]:
-    """Non-overlapping case-insensitive word-bounded matches, longest phrase first."""
-    lowered = text.lower()
+    """Non-overlapping case-insensitive word-bounded matches, longest phrase first. Matching is
+    on the original text (``re.IGNORECASE``), so offsets always line up with it."""
     taken: list[tuple[int, int]] = []
     for phrase in phrases:
-        pattern = rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])"
-        for m in re.finditer(pattern, lowered):
+        pattern = rf"(?<![A-Za-z0-9]){re.escape(phrase)}(?![A-Za-z0-9])"
+        for m in re.finditer(pattern, text, re.IGNORECASE):
             span = (m.start(), m.end())
             if any(span[0] < e and s < span[1] for s, e in taken):
                 continue
@@ -106,40 +147,68 @@ def annotation(spec: AdaptationSpec) -> str:
     return f"(Swap: use {spec.replacement} instead of the {spec.original}.)"
 
 
+def _with_amount(text: str, start: int, spec: AdaptationSpec) -> str:
+    """ "2 tbsp of the mirin" → the swap's own ratio follows the replacement."""
+    if spec.ratio_or_amount and _AMOUNT_BEFORE_RE.search(text[max(0, start - 40) : start]):
+        return f"{spec.replacement} ({spec.ratio_or_amount})"
+    return spec.replacement
+
+
 def adapt_step(
     step: StepOut,
     specs: Sequence[AdaptationSpec],
     ingredients: dict[str, IngredientOut],
     dictionary: IngredientDictionary,
 ) -> tuple[str, list[str]]:
-    """The step's session text with every applicable swap, and the adaptation ids applied."""
-    applicable = [s for s in specs if s.ingredient_ref in step.ingredient_refs]
-    if not applicable:
-        return step.instruction, []
+    """The step's session text with every applicable swap, and the adaptation ids applied.
+
+    Steps whose ``ingredient_refs`` include the swapped ingredient get mention-replacement (or
+    an annotation when the step never names it). Steps that name it without referencing it get
+    an annotation only: the creator's untagged text is never rewritten."""
     text = step.instruction
-    swapped_refs = {s.ingredient_ref for s in applicable}
+    tagged = [s for s in specs if s.ingredient_ref in step.ingredient_refs]
+    untagged = [s for s in specs if s.ingredient_ref not in step.ingredient_refs]
+    swapped_refs = {s.ingredient_ref for s in specs}
+    rival_refs = [r for r in step.ingredient_refs if r not in swapped_refs]
     other_spans: list[tuple[int, int]] = []
-    for ref in step.ingredient_refs:
-        if ref not in swapped_refs and ref in ingredients:
+    for ref in rival_refs:
+        if ref in ingredients:
             other_spans += _spans(text, mention_phrases(ingredients[ref].name, dictionary))
 
-    edits: list[tuple[int, int, str]] = []
-    unmatched: list[AdaptationSpec] = []
-    for spec in applicable:
+    def phrases_for(spec: AdaptationSpec) -> list[str]:
         name = ingredients[spec.ingredient_ref].name if spec.ingredient_ref in ingredients else ""
-        phrases = mention_phrases(name or spec.original, dictionary)
+        return mention_phrases(name or spec.original, dictionary)
+
+    edits: list[tuple[int, int, str]] = []
+    notes: list[AdaptationSpec] = []
+    applied: list[str] = []
+    for spec in tagged:
         rivals = other_spans + [(s, e) for s, e, _ in edits]
         found = [
             span
-            for span in _spans(text, phrases)
+            for span in _spans(text, phrases_for(spec))
             if not _overlaps(span, rivals)
             and not any(s < span[1] and span[0] < e for s, e, _ in edits)
         ]
-        if not found:
-            unmatched.append(spec)
-            continue
-        edits += [(s, e, spec.replacement) for s, e in found]
+        if found:
+            edits += [(s, e, _with_amount(text, s, spec)) for s, e in found]
+        else:
+            notes.append(spec)
+        applied.append(spec.id)
 
+    if untagged:
+        # Rivals here are every other ingredient of the recipe ("kimchi" inside "kimchi juice").
+        all_rivals = list(other_spans)
+        for ref, ing in ingredients.items():
+            if ref not in swapped_refs and ref not in step.ingredient_refs:
+                all_rivals += _spans(text, mention_phrases(ing.name, dictionary))
+        for spec in untagged:
+            if any(not _overlaps(sp, all_rivals) for sp in _spans(text, phrases_for(spec))):
+                notes.append(spec)
+                applied.append(spec.id)
+
+    if not applied:
+        return step.instruction, []
     out: list[str] = []
     cursor = 0
     for s, e, replacement in sorted(edits):
@@ -148,9 +217,9 @@ def adapt_step(
         cursor = e
     out.append(text[cursor:])
     adapted = "".join(out)
-    if unmatched:
-        adapted = " ".join([adapted.rstrip(), *(annotation(s) for s in unmatched)])
-    return adapted, [s.id for s in applicable]
+    if notes:
+        adapted = " ".join([adapted.rstrip(), *(annotation(s) for s in notes)])
+    return adapted, applied
 
 
 def compose_overlay(

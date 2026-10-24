@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import RateLimited
@@ -20,6 +20,7 @@ from app.domains.pantry.service import lock_user
 
 ASK = "ask"
 SESSION_CREATED = "session_created"
+SUGGEST = "suggest"
 
 
 async def count_recent(
@@ -50,6 +51,14 @@ async def reserve(
     message: str,
 ) -> None:
     await lock_user(session, user_id, f"usage:{kind}")
+    # Opportunistic purge: nothing older than twice the window is ever counted again.
+    await session.execute(
+        delete(UsageEvent).where(
+            UsageEvent.user_id == user_id,
+            UsageEvent.kind == kind,
+            UsageEvent.created_at < now - 2 * window,
+        )
+    )
     if await count_recent(session, user_id, kind, now - window) >= limit:
         raise RateLimited(message)
     session.add(UsageEvent(user_id=user_id, kind=kind, created_at=now))

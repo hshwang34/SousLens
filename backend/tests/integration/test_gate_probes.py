@@ -178,5 +178,6 @@ async def test_published_version_content_untouched_after_reseed(db_session: Asyn
             text("select count(*), max(ingredient_json::text) from recipe_versions")
         )
     ).one()
-    assert count == len(first) == 5 and ing == "[]"
+    # 5 recipes, 6 versions: gochujang has v1 (history) + v2 (brief 005 marinade fix).
+    assert len(first) == 5 and count == 6 and ing == "[]"
     assert datetime.now(UTC)

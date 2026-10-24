@@ -10,8 +10,10 @@
 
 * Upsert by ``slug``; mutable metadata (title, summary, tags, cover) is refreshed. Visibility is
   set to public only when the recipe is first created.
-* Content is published as version 1 the first time only. Published versions are immutable, so a
-  re-run never touches an existing version (edit → new version is a Slice 1 flow).
+* Published versions are immutable: a re-run never touches an existing version. When a fixture's
+  content differs from the latest version it is published as the next version;
+  ``seeded_recipes/history/<slug>/v<N>.json`` holds earlier contents so fresh and existing
+  databases end up with identical versions (brief 005: the gochujang marinade fix is v2).
 * Owned by the seeded creator ``creator@souslens.dev``.
 * IDs are deterministic (uuid5) and each fixture carries its own ``published_at`` so
   ``fixtures/expected_outputs`` (and the feed order) stays stable.
@@ -111,7 +113,63 @@ def load_fixtures(fixtures_dir: Path) -> list[SeedRecipe]:
     ]
 
 
-async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
+def _fixture_content(fixture: SeedRecipe) -> dict[str, object]:
+    ingredients = [i.model_dump(mode="json") for i in fixture.ingredients]
+    return {
+        "servings": fixture.servings,
+        "prep_minutes": fixture.prep_minutes,
+        "cook_minutes": fixture.cook_minutes,
+        "ingredient_json": ingredients,
+        "step_json": [st.model_dump(mode="json") for st in fixture.steps],
+        "warning_json": {
+            "creator_notes": list(fixture.creator_notes),
+            "dietary_warnings": list(fixture.dietary_warnings),
+        },
+        "title": fixture.title,
+        "summary": fixture.summary,
+        "tags": list(fixture.tags),
+        "cover_image_url": fixture.cover_image_url,
+    }
+
+
+def _content(version: RecipeVersion) -> dict[str, object]:
+    return {
+        "servings": version.servings,
+        "prep_minutes": version.prep_minutes,
+        "cook_minutes": version.cook_minutes,
+        "ingredient_json": version.ingredient_json,
+        "step_json": version.step_json,
+        "warning_json": version.warning_json,
+        "title": version.title,
+        "summary": version.summary,
+        "tags": list(version.tags or []),
+        "cover_image_url": version.cover_image_url,
+    }
+
+
+def _version_row(
+    recipe_id: uuid.UUID, slug: str, number: int, fixture: SeedRecipe
+) -> RecipeVersion:
+    content = _fixture_content(fixture)
+    return RecipeVersion(
+        id=seed_uuid("version", f"{slug}:{number}"),
+        recipe_id=recipe_id,
+        version_number=number,
+        search_text=search_text_for(fixture.title, content["ingredient_json"]),  # type: ignore[arg-type]
+        **content,
+    )
+
+
+def load_history(fixtures_dir: Path, slug: str) -> list[SeedRecipe]:
+    folder = fixtures_dir / "seeded_recipes" / "history" / slug
+    paths = sorted(folder.glob("v*.json"), key=lambda p: int(p.stem[1:])) if folder.is_dir() else []
+    return [SeedRecipe.model_validate(json.loads(p.read_text(encoding="utf-8"))) for p in paths]
+
+
+async def seed_recipe(
+    session: AsyncSession, fixture: SeedRecipe, history: list[SeedRecipe] | None = None
+) -> SeedResult:
+    history = history or []
     creator = await users_service.get_or_create_by_email(
         session,
         email=SEED_CREATOR_EMAIL,
@@ -140,37 +198,31 @@ async def seed_recipe(session: AsyncSession, fixture: SeedRecipe) -> SeedResult:
     recipe.cover_image_url = fixture.cover_image_url
     await session.flush()
 
-    created_version = recipe.latest_version_id is None
-    if created_version:
-        ingredients = [i.model_dump(mode="json") for i in fixture.ingredients]
-        version = RecipeVersion(
-            id=seed_uuid("version", f"{fixture.slug}:1"),
-            recipe_id=recipe.id,
-            version_number=1,
-            servings=fixture.servings,
-            prep_minutes=fixture.prep_minutes,
-            cook_minutes=fixture.cook_minutes,
-            ingredient_json=ingredients,
-            step_json=[s.model_dump(mode="json") for s in fixture.steps],
-            warning_json={
-                "creator_notes": list(fixture.creator_notes),
-                "dietary_warnings": list(fixture.dietary_warnings),
-            },
-            search_text=search_text_for(fixture.title, ingredients),
-            title=fixture.title,
-            summary=fixture.summary,
-            tags=list(fixture.tags),
-            cover_image_url=fixture.cover_image_url,
-        )
+    # Published versions are immutable: when the fixture's content differs from the latest
+    # version, publish the next version instead of rewriting it (brief 005 fix round 1).
+    # ``history/<slug>/v<N>.json`` keeps earlier contents so a fresh database and an existing
+    # one converge on the same versions with the same deterministic ids.
+    created_version = False
+    latest = (
+        await session.get(RecipeVersion, recipe.latest_version_id)
+        if recipe.latest_version_id
+        else None
+    )
+    for number, content in enumerate([*history, fixture], start=1):
+        if latest is not None and number <= latest.version_number:
+            continue
+        if latest is not None and _content(latest) == _fixture_content(content):
+            break  # the latest version already has this content
+        version = _version_row(recipe.id, fixture.slug, number, content)
         session.add(version)
         await session.flush()
         recipe.latest_version_id = version.id
         recipe.published_at = recipe.published_at or fixture.published_at
         await session.flush()
-        version_id = version.id
-    else:
-        assert recipe.latest_version_id is not None
-        version_id = recipe.latest_version_id
+        latest = version
+        created_version = True
+    assert latest is not None
+    version_id = latest.id
 
     return SeedResult(
         slug=fixture.slug,
@@ -293,7 +345,10 @@ async def seed_substitution_rules(session: AsyncSession, fixtures_dir: Path) -> 
 async def seed_fixtures(session: AsyncSession, fixtures_dir: Path) -> list[SeedResult]:
     await seed_ingredients(session, fixtures_dir)
     await seed_substitution_rules(session, fixtures_dir)
-    results = [await seed_recipe(session, fixture) for fixture in load_fixtures(fixtures_dir)]
+    results = [
+        await seed_recipe(session, fixture, load_history(fixtures_dir, fixture.slug))
+        for fixture in load_fixtures(fixtures_dir)
+    ]
     await session.commit()
     return results
 

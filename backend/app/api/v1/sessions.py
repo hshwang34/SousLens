@@ -31,6 +31,11 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", pattern=r"^[\x21-\x7e]{1,128}$")]
 
 
+OptionalIdempotencyKey = Annotated[
+    str | None, Header(alias="Idempotency-Key", pattern=r"^[\x21-\x7e]{1,128}$")
+]
+
+
 def _session_id(value: str) -> uuid.UUID:
     try:
         return uuid.UUID(value)
@@ -94,5 +99,12 @@ async def ask(
 
 
 @router.post("/{session_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
-async def add_note(session_id: str, body: NoteIn, session: DbSession, user: CurrentUser) -> NoteOut:
-    return await service.add_note(session, user, _session_id(session_id), body)
+async def add_note(
+    session_id: str,
+    body: NoteIn,
+    session: DbSession,
+    user: CurrentUser,
+    idempotency_key: OptionalIdempotencyKey = None,
+) -> NoteOut:
+    """Optional ``Idempotency-Key``: a retry returns the same note (201), no second row."""
+    return await service.add_note(session, user, _session_id(session_id), body, idempotency_key)

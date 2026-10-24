@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, inspect, select
+from sqlalchemy import func, inspect, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -27,6 +27,7 @@ from app.core.errors import (
     ConfirmationRequired,
     InvalidTransition,
     NotFound,
+    RateLimited,
     StateConflict,
     ValidationError,
 )
@@ -51,7 +52,7 @@ from app.domains.matching.normalize import conjuncts
 from app.domains.pantry.service import lock_user
 from app.domains.recipes import service as recipes_service
 from app.domains.recipes.versions import version_meta
-from app.domains.safety.content import StructuralContext, conflicts, structural_verdict
+from app.domains.safety.content import conflicts
 from app.domains.sessions import oracle
 from app.domains.sessions.schemas import (
     AdaptationIn,
@@ -68,7 +69,9 @@ from app.domains.sessions.schemas import (
     SuggestedTimer,
     TimerOut,
 )
+from app.domains.substitutions import policy
 from app.domains.substitutions.adapt import AdaptationSpec, compose_overlay, suggested_timer
+from app.domains.substitutions.rules import load_rules
 from app.domains.substitutions.service import (
     VersionContext,
     context_from,
@@ -81,6 +84,8 @@ LABELS = {"rule": "Common swap", "ai": "AI suggested adaptation"}
 ACTIVE_STATUSES = (SessionStatus.CREATED, SessionStatus.ACTIVE, SessionStatus.PAUSED)
 MAX_RUNNING_TIMERS = 10
 MAX_NOTES = 50
+COMMANDS_PER_HOUR = 600  # per session
+REPLAY_WINDOW = 50  # events whose response is kept for idempotent replay
 MAX_OPEN_SESSIONS = 3  # created/active/paused per user
 SESSIONS_PER_HOUR = 30  # per user, counted in usage_events (survives deletion)
 LIST_LIMIT = 50
@@ -154,6 +159,8 @@ async def build_view(
     version, recipe = await _pinned(session, row)
     ctx = context_from(version, recipe)
     adaptations = await active_adaptations(session, row.id)
+    prof = await preferences.profile_for(session, row.owner_user_id)
+    dictionary = await load_dictionary(session) if adaptations else IngredientDictionary()
     timers = await session_timers(session, row.id)
     notes = (
         (
@@ -194,7 +201,10 @@ async def build_view(
         recipe=recipes_service.to_detail(
             recipe, version, saved=None, share_url_base=settings_share_base
         ),
-        adaptations=[_adaptation_out(a) for a in adaptations],
+        adaptations=[
+            _adaptation_out(a, _conflicting(a.replacement, a.ratio_or_amount, prof, dictionary))
+            for a in adaptations
+        ],
         steps=steps,
         timers=[
             TimerOut(
@@ -215,7 +225,7 @@ async def build_view(
     )
 
 
-def _adaptation_out(a: SessionAdaptation) -> AdaptationOut:
+def _adaptation_out(a: SessionAdaptation, conflicting: bool = False) -> AdaptationOut:
     return AdaptationOut(
         id=a.id,
         ingredient_ref=a.ingredient_ref,
@@ -226,7 +236,16 @@ def _adaptation_out(a: SessionAdaptation) -> AdaptationOut:
         label=LABELS[a.source],  # type: ignore[arg-type]
         reason=a.reason,
         approved_at=a.approved_at,
+        allergy_warning=a.allergy_warning,
+        risks=list(a.risks or []),
+        conflicts_with_allergies=conflicting,
     )
+
+
+def _conflicting(
+    replacement: str, ratio: str | None, prof: preferences.Profile, dictionary: IngredientDictionary
+) -> bool:
+    return bool(conflicts(f"{replacement} {ratio or ''}", prof.allergies, dictionary))
 
 
 def _dump(view: SessionOut) -> dict[str, Any]:
@@ -274,6 +293,8 @@ async def resolve_adaptation(
             "source": payload["source"],
             "reason": body.reason or f"{ingredient.name} unavailable",
             "suggestion_id": record.id,
+            "allergy_warning": payload.get("allergy_warning"),
+            "risks": list(payload.get("risks") or []),
         }
     else:
         spec = {
@@ -283,24 +304,44 @@ async def resolve_adaptation(
             "reason": body.reason or f"{ingredient.name} unavailable",
             "suggestion_id": None,
         }
-    hits = conflicts(
-        f"{spec['replacement']} {spec['ratio_or_amount'] or ''}", prof.allergies, dictionary
+    # The same policy as /substitutions/suggest (fix round 1, item 5), re-run now: allergies
+    # may have changed since the suggestion was served, and explicit swaps were never vetted.
+    rules = await load_rules(session)
+    target = policy.swap_target(
+        ingredient,
+        target_names(ingredient.name, dictionary),
+        ctx.steps,
+        rules,
+        ctx.title,
+        ctx.dietary_warnings + ctx.creator_notes,
     )
-    if hits:
-        raise ValidationError(
-            f"This swap contains something on your allergy list ({', '.join(hits)})",
-            extra={"fields": [f"{field}.replacement"], "details": {"allergies": hits}},
-        )
-    steps = [s for s in ctx.steps if ingredient.id in s.ingredient_refs]
-    blocked = structural_verdict(
-        StructuralContext(
-            target_names=frozenset(target_names(ingredient.name, dictionary)),
-            step_texts=tuple(s.instruction for s in steps),
-            recipe_texts=(ctx.title,),
-        )
-    )
+    blocked = policy.target_blocker(target)
     if blocked is not None:
         raise ValidationError(blocked.reason, extra={"fields": [f"{field}.ingredient_ref"]})
+    verdict = policy.candidate_blocker(
+        target,
+        spec["replacement"],
+        spec["ratio_or_amount"],
+        prof,
+        dictionary,
+        include_avoid=False,  # an explicit choice of an "avoid" food is the user's call
+        source=spec["source"],
+    )
+    if verdict is not None:
+        details = {"allergies": verdict.details["allergies"]} if verdict.details else {}
+        message = (
+            f"This swap contains something on your allergy list ({', '.join(details['allergies'])})"
+            if details
+            else verdict.reason
+        )
+        raise ValidationError(
+            message, extra={"fields": [f"{field}.replacement"], "details": details}
+        )
+    if body.suggestion_id is None:
+        # Free-form swaps are "Common swap" only when they ARE a vetted seed suggestion.
+        spec["source"] = policy.rule_source(spec["replacement"], target)
+        spec["risks"] = []
+        spec["allergy_warning"] = None
     return {"ingredient_ref": ingredient.id, "original": ingredient.name, **spec}
 
 
@@ -469,16 +510,40 @@ async def delete(session: AsyncSession, user: User, session_id: uuid.UUID) -> No
 
 
 async def add_note(
-    session: AsyncSession, user: User, session_id: uuid.UUID, body: NoteIn
+    session: AsyncSession,
+    user: User,
+    session_id: uuid.UUID,
+    body: NoteIn,
+    idempotency_key: str | None = None,
 ) -> NoteOut:
     row = await _owned(session, user, session_id, lock=True)
+    digest = hashlib.sha256(body.text.encode()).hexdigest()
+    if idempotency_key is not None:
+        prior = (
+            await session.execute(
+                select(SessionNote).where(
+                    SessionNote.session_id == row.id,
+                    SessionNote.idempotency_key == idempotency_key,
+                )
+            )
+        ).scalar_one_or_none()
+        if prior is not None:
+            if prior.request_hash != digest:
+                raise StateConflict("This Idempotency-Key was already used for a different note")
+            return NoteOut(id=prior.id, text=prior.text, created_at=prior.created_at)
     count = await session.scalar(
         select(func.count()).select_from(SessionNote).where(SessionNote.session_id == row.id)
     )
     if (count or 0) >= MAX_NOTES:
         raise ValidationError(f"at most {MAX_NOTES} notes per session", extra={"fields": ["text"]})
     now = _now()
-    note = SessionNote(session_id=row.id, text=body.text, created_at=now)
+    note = SessionNote(
+        session_id=row.id,
+        text=body.text,
+        created_at=now,
+        idempotency_key=idempotency_key,
+        request_hash=digest if idempotency_key is not None else None,
+    )
     session.add(note)
     row.updated_at = now
     await session.flush()
@@ -532,12 +597,23 @@ async def run_command(
             # stored body goes back through the response model to come out byte-identical.
             return _dump(SessionOut.model_validate(prior.response_json))
         raise StateConflict(
-            "This Idempotency-Key was already used for a different command",
+            "This Idempotency-Key was already used for a different command"
+            if prior.request_hash != digest
+            else "This command is too old to replay; here is the latest session",
             extra={"details": {"session": await latest()}},
         )
 
     if body.user_confirmed is not True:
         raise ConfirmationRequired(f"'{body.command}' requires user confirmation")
+    recent = await session.scalar(
+        select(func.count())
+        .select_from(SessionEvent)
+        .where(
+            SessionEvent.session_id == row.id, SessionEvent.created_at > now - timedelta(hours=1)
+        )
+    )
+    if (recent or 0) >= COMMANDS_PER_HOUR:
+        raise RateLimited("Too many commands for this session in the last hour")
 
     version, recipe = await _pinned(session, row)
     ctx = context_from(version, recipe)
@@ -564,7 +640,11 @@ async def run_command(
     if not result.changed:
         return await latest()  # boundary no-op: revision unchanged, no event
 
-    await _side_effect(session, user, row, ctx, body, now)
+    try:
+        await _side_effect(session, user, row, ctx, body, now)
+    except InvalidTransition as exc:
+        exc.extra.setdefault("details", {"session": await latest()})
+        raise
     row.status = SessionStatus(result.state.status.value)
     row.step_index = result.state.step_index
     row.revision = result.state.revision
@@ -584,6 +664,17 @@ async def run_command(
         )
     )
     await session.flush()
+    # Keep replay bodies for the last REPLAY_WINDOW events only; an older key gets a 409 with
+    # the latest session instead of a stale replay.
+    await session.execute(
+        update(SessionEvent)
+        .where(
+            SessionEvent.session_id == row.id,
+            SessionEvent.sequence <= row.revision - REPLAY_WINDOW,
+            SessionEvent.response_json.is_not(None),
+        )
+        .values(response_json=None)
+    )
     return response
 
 
@@ -676,7 +767,13 @@ async def save_variation(
     session: AsyncSession, user: User, row: CookingSession, ctx: VersionContext, now: datetime
 ) -> bool:
     """Replace the caller's private variation for this recipe with the session's swaps."""
-    adaptations = await active_adaptations(session, row.id)
+    prof = await preferences.profile(session, user)
+    dictionary = await load_dictionary(session)
+    adaptations = [
+        a
+        for a in await active_adaptations(session, row.id)
+        if not _conflicting(a.replacement, a.ratio_or_amount, prof, dictionary)
+    ]  # a swap that now matches an allergy is never saved for reuse
     if not adaptations:
         return False
     payload = [
@@ -690,6 +787,8 @@ async def save_variation(
             "ratio_or_amount": a.ratio_or_amount,
             "source": a.source,
             "reason": a.reason,
+            "allergy_warning": a.allergy_warning,
+            "risks": list(a.risks or []),
         }
         for a in adaptations
     ]
@@ -742,7 +841,20 @@ async def get_variation(
     ]
     if not usable:
         raise NotFound("No saved changes for this recipe")
-    return variation, usable
+    prof = await preferences.profile(session, user)
+    dictionary = await load_dictionary(session)
+    flagged = [
+        {
+            "allergy_warning": None,
+            "risks": [],
+            **a,
+            "conflicts_with_allergies": _conflicting(
+                a["replacement"], a.get("ratio_or_amount"), prof, dictionary
+            ),
+        }
+        for a in usable
+    ]
+    return variation, flagged
 
 
 async def delete_variation(session: AsyncSession, user: User, version_id: uuid.UUID) -> None:

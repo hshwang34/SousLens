@@ -87,7 +87,7 @@ class OutcomeIn(_Strict):
     save_changes: bool = False
 
 
-MetadataValue = str | int | float | bool | None
+MetadataValue = Annotated[str, StringConstraints(max_length=200)] | int | float | bool | None
 
 
 class CommandIn(_Strict):
@@ -130,6 +130,11 @@ class AdaptationOut(BaseModel):
     label: Literal["Common swap", "AI suggested adaptation"]
     reason: str | None
     approved_at: datetime
+    allergy_warning: str | None = None
+    risks: list[str] = Field(default_factory=list)
+    # Re-checked on every read: true when the swap now matches the user's allergy list
+    # (allergies changed mid-session). Such swaps are never saved as a private variation.
+    conflicts_with_allergies: bool = False
 
 
 class SuggestedTimer(BaseModel):
