@@ -6,7 +6,7 @@ import XCTest
 enum CookingFixtures {
     static let sessionId = "7e1f0c2a-4b3d-4e5f-8a9b-0c1d2e3f5001"
     static let otherSessionId = "7e1f0c2a-4b3d-4e5f-8a9b-0c1d2e3f5002"
-    static let versionId = "383cfbdd-6896-5db0-89e0-a539f6bbdd0e"
+    static let versionId = "02b20f6c-d644-58b4-b2be-086967191684"
     static let recipeId = "a185d1a4-2726-57b9-9b17-069262cbf492"
     static let adaptationId = "aa000000-0000-4000-8000-000000000001"
     static let suggestionRuleId = "5b000000-0000-4000-8000-000000000001"

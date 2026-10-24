@@ -199,7 +199,7 @@ final class AuthoringDTOTests: XCTestCase {
         XCTAssertNil(page.items[0].saved)
         let detail = try Fixtures.decode(RecipeDetail.self, from: "recipe_detail")
         XCTAssertNil(detail.saved)
-        XCTAssertNil(detail.shareUrl)
+        XCTAssertEqual(detail.shareUrl, "https://souslens.app/r/a185d1a4-2726-57b9-9b17-069262cbf492", "the verbatim backend fixture now carries share_url")
         XCTAssertEqual(detail.shareURL.absoluteString, "https://souslens.app/r/a185d1a4-2726-57b9-9b17-069262cbf492")
         // Cached cards (no `saved`) round-trip unchanged.
         let data = try JSONCoding.makeEncoder().encode(page)
