@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Controlled ingredient dictionary (brief 004). Seeded into `ingredients` by `make seed`. qualifiers = identity qualifiers the entry implies; ambiguous_with = entries a generic name may mean (fit reports uncertain). Allergen flags are conservative: 'may contain' counts as contains (chili crisp: peanut; tamari: wheat; seasoned seaweed: sesame; miso: barley/wheat).",
+  "note": "Controlled ingredient dictionary (brief 004). Seeded into `ingredients` by `make seed`. qualifiers = identity qualifiers the entry implies; ambiguous_with = entries a generic name may mean (fit reports uncertain). Allergen flags are conservative: 'may contain' counts as contains (chili crisp: peanut; tamari: wheat; seasoned seaweed: sesame; miso: barley/wheat; oats: gluten cross-contact). Coconut is not flagged as a tree nut (FDA 2025).",
   "ingredients": [
     {"canonical_name": "scallion", "aliases": ["green onion", "spring onion", "salad onion"], "category": "produce", "allergens": [], "qualifiers": ["fresh", "raw"]},
     {"canonical_name": "onion", "aliases": ["yellow onion", "white onion", "brown onion", "sweet onion"], "category": "produce", "allergens": [], "qualifiers": ["fresh", "raw"]},
@@ -79,6 +79,11 @@
     {"canonical_name": "milk", "aliases": ["whole milk", "skim milk", "2% milk", "cow's milk"], "category": "dairy", "allergens": ["milk"], "qualifiers": []},
     {"canonical_name": "oat milk", "aliases": [], "category": "dairy", "allergens": [], "qualifiers": []},
     {"canonical_name": "almond milk", "aliases": [], "category": "dairy", "allergens": ["tree_nut"], "qualifiers": []},
+    {"canonical_name": "cashew", "aliases": ["cashews", "cashew nut", "cashew nuts", "raw cashews"], "category": "nut", "allergens": ["tree_nut"], "qualifiers": []},
+    {"canonical_name": "pistachio", "aliases": ["pistachios", "pistachio nut", "pistachio nuts"], "category": "nut", "allergens": ["tree_nut"], "qualifiers": []},
+    {"canonical_name": "coconut", "aliases": ["desiccated coconut", "shredded coconut", "coconut flakes"], "category": "nut", "allergens": [], "qualifiers": []},
+    {"canonical_name": "oats", "aliases": ["oat", "rolled oats", "porridge oats", "old-fashioned oats", "oatmeal"], "category": "grain", "allergens": ["wheat"], "qualifiers": []},
+    {"canonical_name": "sulfites", "aliases": ["sulphites", "sulfite", "sulphite", "sulfur dioxide", "sulphur dioxide"], "category": "additive", "allergens": ["sulfite"], "qualifiers": []},
     {"canonical_name": "heavy cream", "aliases": ["whipping cream", "double cream", "heavy whipping cream"], "category": "dairy", "allergens": ["milk"], "qualifiers": []},
     {"canonical_name": "parmesan", "aliases": ["parmigiano-reggiano", "parmigiano reggiano", "parmesan cheese", "parmigiano"], "category": "dairy", "allergens": ["milk"], "qualifiers": []},
     {"canonical_name": "cheddar", "aliases": ["cheddar cheese"], "category": "dairy", "allergens": ["milk"], "qualifiers": []},

@@ -135,8 +135,11 @@ def test_generic_suffix_is_not_rewritten_and_amounts_carry_the_ratio(
     assert overlay["s1"]["instruction"] == (
         "Heat the oil until it shimmers. (Swap: use light olive oil instead of the neutral oil.)"
     )
+    # Fix round 3 (M2): the ratio does not read as a plain amount of the replacement, so the
+    # name is replaced and ONE annotation carries the ratio (no second amount in the text).
     assert overlay["s2"]["instruction"] == (
-        "Add 2 tbsp of the dry sherry + sugar (1 tbsp sherry + 1 tsp sugar) and stir."
+        "Add 2 tbsp of the dry sherry + sugar and stir. (Swap: use dry sherry + sugar instead of "
+        "the mirin: 1 tbsp sherry + 1 tsp sugar.)"
     )
 
 

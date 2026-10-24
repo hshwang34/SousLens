@@ -44,7 +44,8 @@ class SwapTarget:
     steps: list[StepOut]  # steps that use it
     rule: SeedRule | None
     title: str
-    dietary_warnings: list[str]
+    dietary_warnings: list[str]  # dietary warnings + creator notes
+    recipe_texts: tuple[str, ...] = ()  # title, every step, warnings, notes (structural rules)
 
 
 def swap_target(
@@ -57,7 +58,13 @@ def swap_target(
 ) -> SwapTarget:
     rule = next((rules[n] for n in names if n in rules), None)
     used = [s for s in steps if ingredient.id in s.ingredient_refs]
-    return SwapTarget(ingredient, names, used, rule, title, list(dietary_warnings))
+    recipe_texts = (
+        title,
+        *(s.instruction for s in steps),
+        *(w for s in steps for w in s.warnings),
+        *dietary_warnings,
+    )
+    return SwapTarget(ingredient, names, used, rule, title, list(dietary_warnings), recipe_texts)
 
 
 def target_blocker(target: SwapTarget) -> RuleVerdict | None:
@@ -68,7 +75,7 @@ def target_blocker(target: SwapTarget) -> RuleVerdict | None:
                 StructuralContext(
                     target_names=frozenset([target.ingredient.name, *target.names]),
                     step_texts=tuple(s.instruction for s in target.steps),
-                    recipe_texts=(target.title,),
+                    recipe_texts=target.recipe_texts,
                 )
             ),
             creator_warning_verdict(

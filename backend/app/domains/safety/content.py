@@ -213,6 +213,11 @@ ALLERGEN_CLASSES: dict[str, AllergenClass] = {
         ),
         AllergenClass("sesame", frozenset({"sesame"}), ("sesame", "tahini", "benne")),
         AllergenClass("mustard", frozenset({"mustard"}), ("mustard",)),
+        AllergenClass(
+            "sulfites",
+            frozenset({"sulfite"}),
+            ("sulfite", "sulphite", "sulfur dioxide", "sulphur dioxide", "metabisulfite"),
+        ),
     )
 }
 
@@ -256,6 +261,10 @@ CLASS_SYNONYMS: dict[str, str] = {
     "sesame seed": "sesame",
     "sesame seeds": "sesame",
     "mustard": "mustard",
+    "sulfite": "sulfites",
+    "sulfites": "sulfites",
+    "sulphite": "sulfites",
+    "sulphites": "sulfites",
 }
 
 # "<word>-free" claims are recorded (they trigger a label-check note) but NEVER clear a flag:
@@ -282,12 +291,17 @@ MAX_PHRASE_WORDS = 5
 
 # --------------------------------------------------------------------------- preferences
 
-_SPLIT_RE = re.compile(r"\s*(?:,|;|/|\band\b|&|\+)\s*")
+_SPLIT_RE = re.compile(r"\s*(?:,|;|/|\band\b|\bor\b|&|\+)\s*")
+# Preamble and noise around an allergy entry (fix round 3): "I'm severely allergic to",
+# "anaphylactic to", "intolerant to", "no", "avoid" … and trailing "allergy", "-free", ….
 _STRIP_RE = re.compile(
-    r"^(?:severe(?:ly)?\s+|mild\s+)?(?:allerg(?:y|ies|ic)\s+(?:to\s+)?|intoleran(?:t|ce)\s+to\s+|"
-    r"no\s+|avoid\s+|without\s+|sensitive\s+to\s+)+|"
-    r"(?:\s*-?\s*(?:free|allerg(?:y|ies|ic)|intoleran(?:t|ce)|sensitivity|sensitive))+$"
+    r"^(?:(?:i'?m|i am|im|my|have an?|have|a)\s+)*(?:(?:severe(?:ly)?|mild(?:ly)?|very|highly|"
+    r"extremely|life[- ]threatening|anaphylactic|allergic|intolerant|sensitive|allerg(?:y|ies)|"
+    r"intoleran(?:ce|t)|sensitivity|no|avoid|without|to)\s+)+|"
+    r"(?:\s*-?\s*(?:free|allerg(?:y|ies|ic)|intoleran(?:t|ce)|sensitivity|sensitive|"
+    r"anaphylaxis|reaction))+$"
 )
+_PARENS_RE = re.compile(r"\(([^)]*)\)")
 PREFERENCE_SYNONYMS = {
     "finfish": "fish",
     "fin fish": "fish",
@@ -305,7 +319,11 @@ PREFERENCE_SYNONYMS = {
 def _plain(text: str) -> str:
     """NFKD + strip combining marks, then the dictionary ``clean`` (casefold, quotes, spaces)."""
     decomposed = unicodedata.normalize("NFKD", text)
-    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    stripped = "".join(
+        ch
+        for ch in decomposed
+        if not unicodedata.combining(ch) and unicodedata.category(ch) != "Cf"  # zero-width
+    )
     return clean(stripped)
 
 
@@ -324,22 +342,35 @@ def _known_food(phrase: str, dictionary: IngredientDictionary) -> str | None:
     return norm.entry.canonical_name if norm.entry is not None else None
 
 
+def _strip_noise(part: str) -> str:
+    previous = None
+    while previous != part:
+        previous = part
+        part = _STRIP_RE.sub("", part.strip()).strip(" -.")
+    return part
+
+
 def parse_preference(text: str, dictionary: IngredientDictionary) -> list[tuple[str, bool]]:
-    """One typed entry → ``[(stored_key, recognized)]``. "peanut and tree nut allergy" →
-    peanut, tree nuts; "lactose intolerant" → milk; "gluten free" → gluten."""
+    """One typed entry → ``[(stored_key, recognized)]``. "I'm allergic to peanuts" → peanut;
+    "peanut or tree nut" → peanut, tree nuts; "shellfish allergy (shrimp)" → shellfish, shrimp;
+    "lactose intolerant" → milk; "gluten free" → gluten."""
     phrase = _plain(text)
     if not phrase:
         return []
-    whole = _STRIP_RE.sub("", phrase).strip()
-    if whole and (hit := _known_food(whole, dictionary)) is not None:
-        return [(hit, True)]
+    inner = [m.strip() for m in _PARENS_RE.findall(phrase) if m.strip()]
+    phrase = re.sub(r"\s+", " ", _PARENS_RE.sub(" ", phrase)).strip()
     out: list[tuple[str, bool]] = []
-    for part in _SPLIT_RE.split(phrase):
-        part = _STRIP_RE.sub("", part.strip()).strip(" -")
-        if not part:
+    for chunk in [phrase, *inner]:
+        whole = _strip_noise(chunk)
+        if whole and (hit := _known_food(whole, dictionary)) is not None:
+            out.append((hit, True))
             continue
-        hit = _known_food(part, dictionary)
-        out.append((hit, True) if hit else (normalize(part, dictionary).key or part, False))
+        for part in _SPLIT_RE.split(chunk):
+            part = _strip_noise(part)
+            if not part:
+                continue
+            hit = _known_food(part, dictionary)
+            out.append((hit, True) if hit else (normalize(part, dictionary).key or part, False))
     return out
 
 
@@ -523,7 +554,10 @@ KNOWN_COMPOUNDS: dict[str, Compound] = {
     "soy lecithin": _c(SO),
     "nuoc cham": _c(FI),
     "nuoc mam": _c(FI),
-    "chocolate": _c(MI, known=False),  # milk chocolate; dark often "may contain milk"
+    "chocolate": _c(MI, known=False),
+    "egg noodles": _c(EG, WH),
+    "almond flour": _c(TN),
+    "cashew cream": _c(TN),  # milk chocolate; dark often "may contain milk"
     # known allergen-free here (flags none, status known)
     "rice milk": _c(),
     "hemp milk": _c(),
@@ -541,11 +575,11 @@ KNOWN_COMPOUNDS: dict[str, Compound] = {
     "avocado oil": _c(),
     "agave syrup": _c(),
     # no dictionary entry and not vetted: UNKNOWN allergen status (item 16C)
-    "dry sherry": _c(known=False),
-    "sherry": _c(known=False),
-    "dry white wine": _c(known=False),
-    "white wine": _c(known=False),
-    "wine": _c(known=False),
+    "dry sherry": _c("sulfite", known=False),
+    "sherry": _c("sulfite", known=False),
+    "dry white wine": _c("sulfite", known=False),
+    "white wine": _c("sulfite", known=False),
+    "wine": _c("sulfite", known=False),
     "cayenne": _c(known=False),
     "ham": _c(known=False),
     "pancetta": _c(known=False),
@@ -616,6 +650,12 @@ def _lookup(phrase: str, dictionary: IngredientDictionary) -> tuple[DictEntry, b
     return (entry, True) if entry is not None else None
 
 
+def known_food(phrase: str, dictionary: IngredientDictionary) -> DictEntry | None:
+    """A dictionary entry or a known compound food for ``phrase`` (adaptation guard)."""
+    found = _lookup(_plain(phrase), dictionary)
+    return found[0] if found is not None else None
+
+
 def scan(text: str, dictionary: IngredientDictionary) -> Scan:
     """Greedy longest-phrase scan over known compounds and the dictionary (aliases, plurals).
 
@@ -671,7 +711,32 @@ def _has_phrase(haystack: str, phrase: str) -> bool:
 
 
 _FALLBACK_STOP = frozenset(
-    {"and", "or", "the", "a", "an", "of", "with", "in", "to", "for", "free", "food", "fruit"}
+    {
+        "and",
+        "or",
+        "the",
+        "a",
+        "an",
+        "of",
+        "with",
+        "in",
+        "to",
+        "for",
+        "free",
+        "food",
+        "foods",
+        "allergy",
+        "allergies",
+        "allergic",
+        "intolerance",
+        "intolerant",
+        "any",
+        "all",
+        "some",
+        "raw",
+        "fresh",
+        "dried",
+    }
 )
 
 
@@ -686,21 +751,30 @@ class Sensitivity:
     exclude: tuple[str, ...] = ()
 
 
-def sensitivity(label: str) -> Sensitivity:
+def sensitivity(label: str, dictionary: IngredientDictionary | None = None) -> Sensitivity:
     cls = ALLERGEN_CLASSES.get(label)
     if cls is not None:
         return Sensitivity(label, cls.flags, frozenset(), cls.words, cls.exclude)
-    # Unrecognised or plain foods also match per word as a fallback ("dragon fruit" → dragon).
+    # A food the dictionary knows keeps its own allergen flags ("shrimp" → shellfish).
+    flags: frozenset[str] = frozenset()
+    if dictionary is not None:
+        found = _lookup(label, dictionary)
+        if found is not None:
+            flags = frozenset(found[0].allergens)
+    # Fail closed (fix round 3): every meaningful word also matches on its own, against the
+    # whole text and the names of foods found in it ("dragon fruit" → "dragon", "fruit").
     words = tuple(
         dict.fromkeys(
-            [label, *(w for w in label.split(" ") if len(w) > 2 and w not in _FALLBACK_STOP)]
+            [label, *(w for w in label.split(" ") if len(w) >= 3 and w not in _FALLBACK_STOP)]
         )
     )
-    return Sensitivity(label, names=frozenset({label}), words=words)
+    return Sensitivity(label, flags=flags, names=frozenset({label}), words=words)
 
 
-def sensitivities(labels: Iterable[str]) -> list[Sensitivity]:
-    return [sensitivity(label) for label in labels if label]
+def sensitivities(
+    labels: Iterable[str], dictionary: IngredientDictionary | None = None
+) -> list[Sensitivity]:
+    return [sensitivity(label, dictionary) for label in labels if label]
 
 
 def conflicts(
@@ -722,7 +796,14 @@ def _term_hits(found: Scan, term: Sensitivity) -> bool:
         residue = re.sub(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", " ", residue)
     if any(_has_phrase(residue, word) for word in term.words):
         return True
-    return any(_has_phrase(found.text, name) for name in term.names)
+    if not term.flags or term.names:
+        # Plain-food entries fail closed: their words against the full text and against the
+        # canonical names of the foods found in it.
+        haystacks = [found.text, *(m.entry.canonical_name for m in found.mentions)]
+        words = term.words if not ALLERGEN_CLASSES.get(term.label) else ()
+        if any(_has_phrase(h, w) for h in haystacks for w in (*words, *term.names)):
+            return True
+    return False
 
 
 def allergen_flags(text: str, dictionary: IngredientDictionary) -> frozenset[str]:
@@ -751,6 +832,7 @@ FLAG_LABELS = {
     "wheat": "wheat",
     "sesame": "sesame",
     "mustard": "mustard",
+    "sulfite": "sulfites",
 }
 
 
@@ -1042,17 +1124,32 @@ _LEAVENING_RE = re.compile(
 )
 _ALWAYS_PRESERVATION_RE = re.compile(
     r"(curing|cure #?\d|pink salt|prague powder|sodium nitrite|saltpet|insta ?cure|citric acid|"
-    r"pectin|canning salt|pickling salt|pickling lime)"
+    r"canning salt|pickling salt|pickling lime)"
 )
-_PRESERVATION_TARGET_RE = re.compile(r"(salt|sugar|vinegar|lemon|lime|acid|brine)")
+# In a preservation recipe, anything that drives acidity, salt, sugar, brine or fermentation.
+_PRESERVATION_TARGET_RE = re.compile(
+    r"\b(salt|salts|sugar|sugars|vinegar|lemons?|limes?|lemon juice|lime juice|acid|brine|"
+    r"fish sauce|soy sauce|tamari|miso|whey|honey|molasses|kimchi juice)\b"
+)
 _PRESERVATION_RE = re.compile(
     r"\b(canning|canned at home|home[- ]can\w*|water[- ]bath|pressure[- ]can\w*|cure|curing|"
-    r"cured|shelf[- ]stable|preserv\w*|ferment\w*|pickling|lacto|airtight jars?|sterili[sz]ed?)\b"
+    r"cured|salt[- ]cured|shelf[- ]stable|preserv\w*|ferment\w*|pickl\w*|lacto\w*|"
+    r"airtight jars?|sterili[sz]ed?|kimchi|sauerkraut|jam|jams|jelly|marmalade|chutney|jerky|"
+    r"confit|brine|brined|brining|gravlax|lox)\b"
+)
+# Setting agents are always structural; cornstarch only when the recipe uses it to set.
+_SETTING_AGENT_RE = re.compile(r"\b(gelatine?|leaf gelatin|agar(?:[- ]agar)?|isinglass|pectin)\b")
+_SETTABLE_TARGET_RE = re.compile(r"\b(cornstarch|corn starch|cornflour|arrowroot|tapioca starch)\b")
+_SET_RE = re.compile(
+    r"\b(set|sets|setting|until firm|until thick|custard|pudding|pie filling|panna cotta|"
+    r"jelly|curd)\b"
 )
 _EGG_TARGET_RE = re.compile(r"\b(egg|eggs|yolks?|whites?|albumen)\b|pasteuri[sz]ed egg")
 _RAW_EMULSION_RE = re.compile(
     r"\b(mayonnaise|mayo|aioli|hollandaise|emulsi\w*|caesar|eggnog|mousse|tiramisu|"
-    r"raw egg|uncooked egg|meringue|zabaglione|sabayon)\b"
+    r"raw egg|uncooked egg|meringues?|zabaglione|sabayon|custard|carbonara|curd|buttercream|"
+    r"royal icing|soft[- ]boiled|runny|sunny[- ]side|tartare|cookie dough|"
+    r"souffle|chiffon|macarons?|whipped to (?:stiff |soft |firm )?peaks|stiff peaks|soft peaks)\b"
 )
 
 
@@ -1073,24 +1170,34 @@ def structural_verdict(ctx: StructuralContext) -> RuleVerdict | None:
             "Keep the original or choose another recipe.",
             source="structural_leavening",
         )
+    # Steps, title, notes and warnings: a preservation recipe says so anywhere.
     texts = " ".join(_plain(t) for t in (*ctx.step_texts, *ctx.recipe_texts))
+    if _SETTING_AGENT_RE.search(names) or (
+        _SETTABLE_TARGET_RE.search(names) and _SET_RE.search(texts)
+    ):
+        return RuleVerdict(
+            Precedence.FOOD_SAFETY_RULE,
+            False,
+            "This ingredient sets the dish (gelatin, agar, pectin or starch); a swap changes "
+            "whether it sets at all, so it is not recommended.",
+            source="structural_setting",
+        )
     if _ALWAYS_PRESERVATION_RE.search(names) or (
         _PRESERVATION_TARGET_RE.search(names) and _PRESERVATION_RE.search(texts)
     ):
         return RuleVerdict(
             Precedence.FOOD_SAFETY_RULE,
             False,
-            "This ingredient preserves the food (canning, curing or fermenting). Salt, acid, "
-            "sugar and curing levels keep it safe, so substituting them is not recommended.",
+            "This ingredient preserves the food (pickling, canning, curing or fermenting). Salt, "
+            "acid, sugar and curing levels keep it safe, so substituting them is not recommended.",
             source="structural_preservation",
         )
-    step_text = " ".join(_plain(t) for t in ctx.step_texts)
-    if _EGG_TARGET_RE.search(names) and ("pasteuri" in names or _RAW_EMULSION_RE.search(step_text)):
+    if _EGG_TARGET_RE.search(names) and ("pasteuri" in names or _RAW_EMULSION_RE.search(texts)):
         return RuleVerdict(
             Precedence.FOOD_SAFETY_RULE,
             False,
-            "The egg here is eaten uncooked or forms an emulsion; a swap changes both the "
-            "structure and the food-safety picture, so it is not recommended.",
+            "The egg here is eaten uncooked, forms an emulsion or holds the structure; a swap "
+            "changes both the structure and the food-safety picture, so it is not recommended.",
             source="structural_raw_egg",
         )
     return None

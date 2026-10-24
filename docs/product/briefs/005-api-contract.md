@@ -258,3 +258,25 @@ session pinning that version (the Slice 1 TODO).
 - **Migrations:** 0004 is unchanged from the pushed version; the adaptation warning and note
   idempotency columns are in 0005.
 
+### Fix round 3
+
+- **Preferences parsing** also strips "I'm / severe / mild / anaphylactic (to) / allergic to /
+  intolerant (to) / allergy / sensitivity", splits on "or", and adds parenthetical contents as
+  entries ("shellfish allergy (shrimp)" → shellfish, shrimp). After splitting, each list holds at
+  most **60** foods; more → 422 `VALIDATION_ERROR` naming the field. First-time saves are an
+  upsert, so concurrent PUTs never conflict.
+- **Unrecognised entries fail closed:** each meaningful word matches on its own anywhere in a
+  candidate. New dictionary entries: cashew, pistachio (tree nut), coconut, oats (wheat:
+  cross-contact), sulfites (new `sulfites` class; wine and sherry carry it).
+- **Structural (not recommended) swaps** also cover setting agents (gelatin, agar, pectin;
+  cornstarch used to set), preservation recipes identified anywhere in the recipe (title, steps,
+  notes: pickled, kimchi, sauerkraut, jam, jerky, confit, brine, cured, fermented…) where any
+  acid / salt / sugar / brine / fish sauce / soy sauce ingredient is structural, and egg in raw or
+  structural uses (custard, carbonara, curd, buttercream, royal icing, soft-boiled, runny,
+  sunny-side, tartare, cookie dough, Caesar, aioli, soufflé, chiffon, macaron, meringue, whipped
+  to peaks), including when only the title says so.
+- **Adapted step text:** a mention that is part of another food ("chicken stock", "egg noodles",
+  "garlic powder") is never rewritten; a stated amount ("2 tbsp of the mirin") becomes the swap's
+  `ratio_or_amount` once when that reads as a plain amount, otherwise one annotation carries the
+  ratio; caution sentences ("Do not…", "Warning:…") are annotated, never rewritten.
+

@@ -22,6 +22,7 @@ from app.domains.matching.dictionary import (
 )
 from app.domains.matching.normalize import DESCRIPTORS, alternatives, normalize
 from app.domains.recipes.schemas import IngredientOut, StepOut
+from app.domains.safety.content import known_food
 
 _PAREN_RE = re.compile(r"\(([^)]*)\)")
 # A bare generic head word never stands for a specific ingredient: "the oil" in a step with
@@ -143,15 +144,62 @@ def _cased(replacement: str, matched: str) -> str:
     return replacement
 
 
-def annotation(spec: AdaptationSpec) -> str:
+_CAUTION_RE = re.compile(
+    r"^\W*(?:warning|caution|important|careful|note|never|do not|don'?t|dont)\b", re.IGNORECASE
+)
+_SENTENCE_SPAN_RE = re.compile(r"[^.!?]+[.!?]*")
+
+
+def _protected(text: str) -> list[tuple[int, int]]:
+    """Caution sentences ("Do not …", "Warning: …") are never rewritten, only annotated."""
+    return [
+        (m.start(), m.end())
+        for m in _SENTENCE_SPAN_RE.finditer(text)
+        if _CAUTION_RE.match(m.group(0))
+    ]
+
+
+def _inside(span: tuple[int, int], ranges: Sequence[tuple[int, int]]) -> bool:
+    return any(s <= span[0] and span[1] <= e for s, e in ranges)
+
+
+def _extends_into_other_food(
+    text: str, span: tuple[int, int], target: str, dictionary: IngredientDictionary
+) -> bool:
+    """ "egg" in "egg noodles", "garlic" in "garlic powder", "chicken" in "chicken stock"."""
+    after = re.match(r"\s+([A-Za-z'-]+)", text[span[1] :])
+    before = re.search(r"([A-Za-z'-]+)\s+$", text[: span[0]])
+    phrase = text[span[0] : span[1]].lower()
+    for longer in (
+        f"{phrase} {after.group(1).lower()}" if after else None,
+        f"{before.group(1).lower()} {phrase}" if before else None,
+    ):
+        if longer is None:
+            continue
+        entry = known_food(longer, dictionary)
+        if entry is not None and entry.canonical_name != target:
+            return True
+    return False
+
+
+def _clean_ratio(spec: AdaptationSpec) -> bool:
+    """A ratio that reads as a plain amount of the replacement ("1 tbsp butter")."""
+    ratio = (spec.ratio_or_amount or "").strip()
+    if not ratio or len(ratio) > 80 or not re.match(r"^(?:\d|½|¼|¾|a |an |about )", ratio):
+        return False
+    if re.search(r"\bper\b|of the amount|:|%|\bratio\b", ratio, re.IGNORECASE):
+        return False
+    first = spec.replacement.split(" ")[0].lower().strip(",")
+    return first in ratio.lower()
+
+
+def annotation(spec: AdaptationSpec, *, with_ratio: bool = False) -> str:
+    if with_ratio and spec.ratio_or_amount:
+        return (
+            f"(Swap: use {spec.replacement} instead of the {spec.original}: "
+            f"{spec.ratio_or_amount}.)"
+        )
     return f"(Swap: use {spec.replacement} instead of the {spec.original}.)"
-
-
-def _with_amount(text: str, start: int, spec: AdaptationSpec) -> str:
-    """ "2 tbsp of the mirin" → the swap's own ratio follows the replacement."""
-    if spec.ratio_or_amount and _AMOUNT_BEFORE_RE.search(text[max(0, start - 40) : start]):
-        return f"{spec.replacement} ({spec.ratio_or_amount})"
-    return spec.replacement
 
 
 def adapt_step(
@@ -162,63 +210,95 @@ def adapt_step(
 ) -> tuple[str, list[str]]:
     """The step's session text with every applicable swap, and the adaptation ids applied.
 
-    Steps whose ``ingredient_refs`` include the swapped ingredient get mention-replacement (or
-    an annotation when the step never names it). Steps that name it without referencing it get
-    an annotation only: the creator's untagged text is never rewritten."""
+    * Steps whose ``ingredient_refs`` include the swapped ingredient get mention-replacement (or
+      an annotation when the step never names it). Every other recipe ingredient is a rival, and
+      a match that is part of a longer food ("egg noodles", "chicken stock", "garlic powder") is
+      left alone.
+    * Where the step states an amount ("2 tbsp of the mirin"), the whole amount + name becomes
+      the swap's ``ratio_or_amount`` once; if the ratio is not a plain amount, the name is
+      replaced and one annotation carries the ratio.
+    * Caution sentences ("Do not …", "Warning: …") are never rewritten; they get an annotation.
+    * Steps that name the ingredient without referencing it get an annotation only."""
     text = step.instruction
     tagged = [s for s in specs if s.ingredient_ref in step.ingredient_refs]
     untagged = [s for s in specs if s.ingredient_ref not in step.ingredient_refs]
     swapped_refs = {s.ingredient_ref for s in specs}
-    rival_refs = [r for r in step.ingredient_refs if r not in swapped_refs]
-    other_spans: list[tuple[int, int]] = []
-    for ref in rival_refs:
-        if ref in ingredients:
-            other_spans += _spans(text, mention_phrases(ingredients[ref].name, dictionary))
+    rivals: list[tuple[int, int]] = []
+    for ref, ing in ingredients.items():
+        if ref not in swapped_refs:
+            rivals += _spans(text, mention_phrases(ing.name, dictionary))
+    protected = _protected(text)
 
     def phrases_for(spec: AdaptationSpec) -> list[str]:
         name = ingredients[spec.ingredient_ref].name if spec.ingredient_ref in ingredients else ""
         return mention_phrases(name or spec.original, dictionary)
 
-    edits: list[tuple[int, int, str]] = []
-    notes: list[AdaptationSpec] = []
-    applied: list[str] = []
-    for spec in tagged:
-        rivals = other_spans + [(s, e) for s, e, _ in edits]
-        found = [
+    def target_of(spec: AdaptationSpec) -> str:
+        name = ingredients[spec.ingredient_ref].name if spec.ingredient_ref in ingredients else ""
+        entry = normalize(name or spec.original, dictionary).entry
+        return entry.canonical_name if entry is not None else clean(name or spec.original)
+
+    def usable(spec: AdaptationSpec, edits: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
+        taken = rivals + [(s, e) for s, e, _ in edits]
+        return [
             span
             for span in _spans(text, phrases_for(spec))
-            if not _overlaps(span, rivals)
+            if not _overlaps(span, taken)
             and not any(s < span[1] and span[0] < e for s, e, _ in edits)
+            and not _extends_into_other_food(text, span, target_of(spec), dictionary)
         ]
-        if found:
-            edits += [(s, e, _with_amount(text, s, spec)) for s, e in found]
-        else:
-            notes.append(spec)
-        applied.append(spec.id)
 
-    if untagged:
-        # Rivals here are every other ingredient of the recipe ("kimchi" inside "kimchi juice").
-        all_rivals = list(other_spans)
-        for ref, ing in ingredients.items():
-            if ref not in swapped_refs and ref not in step.ingredient_refs:
-                all_rivals += _spans(text, mention_phrases(ing.name, dictionary))
-        for spec in untagged:
-            if any(not _overlaps(sp, all_rivals) for sp in _spans(text, phrases_for(spec))):
-                notes.append(spec)
-                applied.append(spec.id)
+    edits: list[tuple[int, int, str]] = []
+    notes: list[tuple[AdaptationSpec, bool]] = []
+    applied: list[str] = []
+    for spec in tagged:
+        applied.append(spec.id)
+        found = usable(spec, edits)
+        editable = [sp for sp in found if not _inside(sp, protected)]
+        if not editable:
+            notes.append((spec, False))
+            continue
+        amount_used = False
+        for s_, e_ in editable:
+            window_start = max(0, s_ - 40)
+            amount = _AMOUNT_BEFORE_RE.search(text[window_start:s_])
+            if amount and not amount_used:
+                amount_used = True
+                if _clean_ratio(spec):
+                    edits.append((window_start + amount.start(), e_, spec.ratio_or_amount or ""))
+                    continue
+                if spec.ratio_or_amount:
+                    notes.append((spec, True))  # one annotation with the ratio, never per mention
+            edits.append((s_, e_, spec.replacement))
+        if len(editable) < len(found):
+            notes.append((spec, False))  # also named inside a caution sentence
+
+    for spec in untagged:
+        if usable(spec, edits):
+            notes.append((spec, False))
+            applied.append(spec.id)
 
     if not applied:
         return step.instruction, []
     out: list[str] = []
     cursor = 0
-    for s, e, replacement in sorted(edits):
-        out.append(text[cursor:s])
-        out.append(_cased(replacement, text[s:e]))
-        cursor = e
+    for s_, e_, replacement in sorted(edits):
+        out.append(text[cursor:s_])
+        out.append(_cased(replacement, text[s_:e_]))
+        cursor = e_
     out.append(text[cursor:])
     adapted = "".join(out)
-    if notes:
-        adapted = " ".join([adapted.rstrip(), *(annotation(s) for s in notes)])
+    seen: set[str] = set()
+    tail: list[str] = []
+    for spec, with_ratio in notes:
+        note = annotation(spec, with_ratio=with_ratio)
+        if spec.id in seen and not with_ratio:
+            continue
+        if note not in tail:
+            tail.append(note)
+        seen.add(spec.id)
+    if tail:
+        adapted = " ".join([adapted.rstrip(), *tail])
     return adapted, applied
 
 
