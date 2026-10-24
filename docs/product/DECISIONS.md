@@ -105,3 +105,17 @@ that isn't plain navigation. "Free-from" labels (lactose-free, gluten-free, nut-
 allergy match; the app asks you to check the label instead. Allergy entries the app can't
 recognise are shown back to you as not-checked. *Why:* PRD §13.1 hard requirements; reviewer
 found model-prose filtering bypassable and allergy matching too narrow.
+
+#16 · 2026-10-23 · **Slice 3 shipped with these eng-lead calls (PM may revisit).**
+- **Cautious over helpful on preservation.** Any recipe mentioning pickling, kimchi, curing,
+  brining or fermenting treats its salt, acid, sugar and ferment ingredients as not swappable. So
+  salt and soy swaps in Kimchi Fried Rice say "not recommended" for now. To refine: tell "makes
+  kimchi" apart from "uses kimchi".
+- **Safe temperatures come from our own USDA table,** never the model, and open with "I can't
+  confirm…" like every other safety answer.
+- **An unconfirmed Done is locked.** If finishing a cook didn't reach the server, its
+  outcome/note can't be edited until it's resent or discarded, so a late tap never overwrites a
+  newer answer.
+- **A third backend fix round** (past the usual two) was run because the review found allergy
+  phrasings like "I'm allergic to peanuts" weren't matched. Safety blockers don't ship.
+*Lives in:* `docs/product/briefs/005-api-contract.md` (fix-round clarifications).

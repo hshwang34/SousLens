@@ -1,6 +1,6 @@
 # 005 — Slice 3: substitutions and cooking engine
 
-**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-23
+**Status:** shipped · **Owner:** PM · **PR:** #7 (backend), #8 (iOS) · **Updated:** 2026-10-23
 
 ## Problem
 Nobody can cook with the app yet. PRD §16 Slice 3, SUB-01..05, COOK-01..04 (typed), COOK-06..08,
