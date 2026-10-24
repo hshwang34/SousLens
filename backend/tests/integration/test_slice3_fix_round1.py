@@ -192,7 +192,9 @@ async def test_free_form_source_is_ai_unless_vetted_and_warnings_persist(
     assert by_ref["ing-7"]["source"] == "rule"
     assert by_ref["ing-4"]["allergy_warning"] == maple["allergy_warning"] is not None
     assert by_ref["ing-4"]["risks"] == maple["risks"]
-    assert by_ref["ing-9"]["allergy_warning"] is None and by_ref["ing-9"]["risks"] == []
+    # Fix round 2 (item 4): free-form swaps get computed cautions (sesame allergy → label check).
+    assert "Check every package label" in by_ref["ing-9"]["allergy_warning"]
+    assert by_ref["ing-9"]["risks"] == []
     again = ok(await client.get(f"/v1/sessions/{s['id']}", headers=alice))  # relaunch
     assert {a["ingredient_ref"]: a for a in again["adaptations"]}["ing-4"]["risks"] == maple[
         "risks"

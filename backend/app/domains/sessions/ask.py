@@ -58,9 +58,12 @@ from app.domains.safety.content import (
     RAW_TASTING_NOTICE,
     doneness_notice,
     is_doneness_question,
+    is_high_risk,
     is_raw_tasting_request,
+    is_temperature_question,
     mentions_safety_terms,
     strip_certifications,
+    temperature_table,
 )
 from app.domains.sessions import intent, service
 from app.domains.sessions.schemas import (
@@ -269,10 +272,14 @@ async def ask(
     raw_context = [
         *(st.instruction for st in ctx.steps[: idx + 1]),
         *current.warnings,
+        *names.values(),
     ]
     risk_context = [current.instruction, *current.warnings, *names.values()]
     if is_raw_tasting_request(body.query, raw_context):
         out = _template(packet, RAW_TASTING_NOTICE, refusal=True)
+    elif is_temperature_question(body.query):
+        table = temperature_table(body.query, risk_context)
+        out = _template(packet, f"{DONENESS_NOTICE} {table}", refusal=True)
     elif is_doneness_question(body.query, risk_context):
         out = _template(packet, doneness_notice_for(body.query, risk_context), refusal=False)
     else:
@@ -341,12 +348,14 @@ def _postprocess(
     if not grounding:
         grounding.append(GroundingOut(type="recipe_step", id=current.id))
 
-    # Second line of defence: a question the detectors missed must still never come back with
-    # a model sentence certifying doneness or safety (security review of bab9b53).
-    if mentions_safety_terms(body.query) or mentions_safety_terms(answer):
-        context = [current.instruction, *current.warnings, *names.values()]
+    # Second line of defence on EVERY model answer: a question the detectors missed must never
+    # come back with a sentence certifying doneness or safety, or a bare "Yes!" at a high-risk
+    # step (security reviews of bab9b53 and 279b861).
+    context = [current.instruction, *current.warnings, *names.values()]
+    touched = mentions_safety_terms(body.query) or mentions_safety_terms(answer)
+    answer, dropped = strip_certifications(answer, high_risk=is_high_risk(context))
+    if touched or dropped:
         notice = doneness_notice_for(body.query, context)
-        answer, _dropped = strip_certifications(answer)
         if not answer:
             return _template(packet, notice, refusal=False)
         safety_notice = notice

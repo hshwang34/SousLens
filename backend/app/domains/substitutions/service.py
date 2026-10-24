@@ -181,7 +181,7 @@ async def _advise(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-def _allergy_warning(
+def allergy_warning_for(
     candidate: str, has_allergies: bool, dictionary: IngredientDictionary
 ) -> str | None:
     found = scan(candidate, dictionary)
@@ -375,7 +375,7 @@ async def suggest(
             ],
             confidence=d.confidence,  # type: ignore[arg-type]
             risks=risks,
-            allergy_warning=_allergy_warning(d.candidate, bool(prof.allergies), dictionary),
+            allergy_warning=allergy_warning_for(d.candidate, bool(prof.allergies), dictionary),
         )
         session.add(
             SubstitutionSuggestionRecord(

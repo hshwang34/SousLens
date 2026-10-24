@@ -17,6 +17,7 @@ highest-ranking one.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.domains.matching.dictionary import IngredientDictionary, clean
@@ -28,6 +29,7 @@ from app.domains.safety.content import (
     avoid_verdict,
     candidate_food_safety_verdict,
     creator_warning_verdict,
+    scan,
     structural_verdict,
 )
 from app.domains.safety.rules import Precedence, RuleVerdict, resolve
@@ -84,14 +86,27 @@ def target_blocker(target: SwapTarget) -> RuleVerdict | None:
     return resolve(verdicts) if verdicts else None
 
 
-def is_never(candidate: str, target: SwapTarget, dictionary: IngredientDictionary) -> bool:
-    """Exact candidate-name match against the rule's ``never`` list (not substrings: the vetted
-    gochujang mix *contains* gochugaru and is fine; gochugaru on its own is not)."""
+def is_never(
+    candidate: str, target: SwapTarget, dictionary: IngredientDictionary, *, source: str = "ai"
+) -> bool:
+    """Is ``candidate`` on the rule's ``never`` list?
+
+    * Vetted rule candidates (``source == "rule"``) match by exact name only: the vetted gochujang
+      mix *contains* gochugaru and is fine.
+    * Anything else (advisor ideas, free-form swaps) matches by phrase, so "gochugaru flakes",
+      "extra gochugaru" or "gochugaru powder" are blocked too (fix round 2, item 6)."""
     if target.rule is None or not target.rule.never:
         return False
     never = {clean(n) for n in target.rule.never}
     name = clean(candidate)
-    return name in never or normalize(name, dictionary).key in never
+    if name in never or normalize(name, dictionary).key in never:
+        return True
+    if source == "rule":
+        return False
+    found = scan(name, dictionary)
+    if found.canonical_names & never:
+        return True
+    return any(re.search(rf"(?<![a-z0-9]){re.escape(n)}(?![a-z0-9])", found.text) for n in never)
 
 
 def candidate_blocker(
@@ -114,7 +129,7 @@ def candidate_blocker(
             f"{candidate} is not a substitute for {target.ingredient.name}",
             source="seed_never",
         )
-        if is_never(candidate, target, dictionary)
+        if is_never(candidate, target, dictionary, source=source)
         else None,
         avoid_verdict(text, prof.avoid, dictionary, source=source) if include_avoid else None,
     ]

@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -99,6 +100,7 @@ class SeedResult:
     version_id: uuid.UUID
     created_recipe: bool
     created_version: bool
+    conflict: bool = False  # fixture differs from the latest version with no history to cover it
 
 
 def seed_uuid(kind: str, key: str) -> uuid.UUID:
@@ -223,6 +225,15 @@ async def seed_recipe(
         created_version = True
     assert latest is not None
     version_id = latest.id
+    # The fixture says something the latest published version does not, and no history file
+    # turns that into a new version: refuse loudly rather than skip or rewrite (fix round 2).
+    conflict = _content(latest) != _fixture_content(fixture)
+    if conflict:
+        log.warning(
+            "seed fixture differs from the latest published version; add the published content "
+            "as seeded_recipes/history/<slug>/v<N>.json to publish the fixture as a new version",
+            extra={"slug": fixture.slug, "latest_version": latest.version_number},
+        )
 
     return SeedResult(
         slug=fixture.slug,
@@ -230,6 +241,7 @@ async def seed_recipe(
         version_id=version_id,
         created_recipe=created_recipe,
         created_version=created_version,
+        conflict=conflict,
     )
 
 
@@ -350,7 +362,22 @@ async def seed_fixtures(session: AsyncSession, fixtures_dir: Path) -> list[SeedR
         for fixture in load_fixtures(fixtures_dir)
     ]
     await session.commit()
+    conflicts = [r.slug for r in results if r.conflict]
+    if conflicts:
+        # Everything else is seeded and committed; published versions were never touched.
+        raise SeedConflict(conflicts)
     return results
+
+
+class SeedConflict(RuntimeError):
+    """A fixture differs from its latest published version and no history file covers it."""
+
+    def __init__(self, slugs: list[str]) -> None:
+        super().__init__(
+            "fixture content differs from the latest published version (no history file): "
+            + ", ".join(slugs)
+        )
+        self.slugs = slugs
 
 
 async def run(settings: Settings | None = None) -> list[SeedResult]:
@@ -377,7 +404,12 @@ async def run(settings: Settings | None = None) -> list[SeedResult]:
 
 def main() -> None:
     configure_logging(get_settings().log_level)
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except SeedConflict as exc:
+        log.error("seed refused", extra={"slugs": exc.slugs})
+        print(f"seed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

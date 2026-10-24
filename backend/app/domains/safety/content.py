@@ -262,6 +262,20 @@ CLASS_SYNONYMS: dict[str, str] = {
 # "gluten-free spaghetti" still conflicts with a wheat allergy, "nut-free almond milk" with tree
 # nuts. Claims are unverifiable and cross-contact is common (fix round 1, item 3).
 _FREE_RE = re.compile(r"^([a-z]+)-free$")
+_CLAIM_FLAGS: dict[str, frozenset[str]] = {
+    "gluten": frozenset({"wheat"}),
+    "wheat": frozenset({"wheat"}),
+    "dairy": frozenset({"milk"}),
+    "milk": frozenset({"milk"}),
+    "lactose": frozenset({"milk"}),
+    "egg": frozenset({"egg"}),
+    "nut": frozenset({"tree_nut", "peanut"}),
+    "peanut": frozenset({"peanut"}),
+    "soy": frozenset({"soy"}),
+    "sesame": frozenset({"sesame"}),
+    "fish": frozenset({"fish"}),
+    "shellfish": frozenset({"shellfish"}),
+}
 
 MAX_PHRASE_WORDS = 5
 
@@ -501,6 +515,15 @@ KNOWN_COMPOUNDS: dict[str, Compound] = {
     "halva": _c(SE),
     "halvah": _c(SE),
     "tahini": _c(SE),
+    "arachis oil": _c(PN),
+    "gomasio": _c(SE),
+    "frangelico": _c(TN),
+    "pad thai sauce": _c(PN, FI, SH),
+    "lecithin": _c(SO, known=False),
+    "soy lecithin": _c(SO),
+    "nuoc cham": _c(FI),
+    "nuoc mam": _c(FI),
+    "chocolate": _c(MI, known=False),  # milk chocolate; dark often "may contain milk"
     # known allergen-free here (flags none, status known)
     "rice milk": _c(),
     "hemp milk": _c(),
@@ -608,6 +631,13 @@ def scan(text: str, dictionary: IngredientDictionary) -> Scan:
             _compound(" ".join(tokens[i : i + n])) for n in range(2, MAX_PHRASE_WORDS + 1)
         ):
             claims.append(tokens[i])
+            # An unverifiable "<allergen>-free" claim keeps the allergen IN play: "milk-free
+            # chocolate" still flags milk, like "dairy-free butter" (fix round 2, item 7).
+            claimed = _CLAIM_FLAGS.get(_FREE_RE.match(tokens[i]).group(1))  # type: ignore[union-attr]
+            if claimed:
+                mentions.append(
+                    Mention(DictEntry(canonical_name=tokens[i]), tokens[i], claimed, known=False)
+                )
             i += 1
             continue
         hit: tuple[int, DictEntry, bool] | None = None
@@ -784,28 +814,96 @@ _WIDE_RE = re.compile(
     r"ok(?:ay)? to|hot inside|cold inside|(?:center|centre|middle|inside) (?:is |still )?"
     r"(?:cold|cool|hot|warm)|(?:cold|cool) in the (?:center|centre|middle)|off the heat|"
     r"take (?:it|them|the \w+) (?:out|off)|pull (?:it|them) (?:out|off)|long enough|"
-    r"hot enough|warm enough|cooked enough)\b"
+    r"hot enough|warm enough|cooked enough|cook (?:it |them )?(?:any )?(?:longer|more)|"
+    r"still good|(?:is|are|looks?) (?:it|they|this|that|the \w+)? ?(?:still )?"
+    r"(?:ok|okay|alright|all right|good|fine)|how (?:much |many )?(?:more |longer)\b.*\buntil)\b"
 )
+# "set a timer" is a timer request, not "is the egg set?".
+_TIMER_SET_RE = re.compile(r"\bset (?:a |the |an )?(?:\d+[- ]\w+ )?(?:timer|alarm|reminder)\b")
 _PROGRESS_TALK_RE = re.compile(r"\b(i'?m|i am|we'?re|we are) done\b|\bdone with\b")
-# Short definition / quantity questions only, matched against the WHOLE query; they exempt the
-# wide vocabulary ("what does serve mean") but never a strict doneness word (handled first).
-_DEFINITION_RE = re.compile(
-    r"^\s*(?:what does ['\"]?[\w' -]{1,40}['\"]? mean|what is (?:a |an |the )?(?!it\b)"
-    r"[\w' -]{1,40}|what'?s (?:a|an) [\w' -]{1,40}|define [\w' -]{1,40}|"
-    r"meaning of [\w' -]{1,40}|how (?:much|many) [\w' -]{1,60}|"
-    r"where (?:is|are|do) [\w' -]{1,60})\s*[?.!]?\s*$"
+# Exempt only "what does <wide word> mean" / "what is <wide word>" / "define <wide word>": the
+# defined term must BE the wide vocabulary word (security review, fix round 2). Anything longer
+# ("what is the internal temp of chicken when it's ready") is not a definition.
+_WIDE_WORDS = (
+    r"(?:ready|eat|eating|edible|serve|serving|set|finished|finish|enough|good to go|"
+    r"off the heat|long enough|hot enough|cooked enough)"
 )
-_TASTE_RE = re.compile(r"\b(taste|tasting|lick|try|sample|nibble|sip)\b")
+_DEFINITION_RE = re.compile(
+    r"^\s*(?:what does ['\"]?"
+    + _WIDE_WORDS
+    + r"['\"]? mean|what is (?:a |an |the )?['\"]?"
+    + _WIDE_WORDS
+    + r"['\"]?|define ['\"]?"
+    + _WIDE_WORDS
+    + r"['\"]?|meaning of ['\"]?"
+    + _WIDE_WORDS
+    + r"['\"]?)\s*[?.!]?\s*$"
+)
+# Strong verbs refuse whenever the step / recipe involves a raw high-risk food; weak verbs
+# ("eat", "bite", "dip", "try") only when the query also names a raw mixture.
+_TASTE_RE = re.compile(r"\b(taste|tasting|lick|licking|sample|sampling|nibble|sip)\b")
+_WEAK_TASTE_RE = re.compile(r"\b(eat|bite|dip|dipping|try|have a (?:bite|taste|lick|spoon))\b")
+_RAW_MIXTURE_RE = re.compile(r"\b(raw|uncooked|marinade|marinating|batter|dough)\b")
 _RAW_CONTEXT_RE = re.compile(
     r"\b(raw|marinade|marinated|marinating|batter|dough|uncooked|mixture)\b"
 )
 
-POULTRY = frozenset({"chicken", "turkey", "duck", "poultry", "hen", "goose", "quail"})
+POULTRY = frozenset(
+    {
+        "chicken",
+        "turkey",
+        "duck",
+        "poultry",
+        "hen",
+        "goose",
+        "quail",
+        "thigh",
+        "thighs",
+        "breast",
+        "breasts",
+        "drumstick",
+        "drumsticks",
+        "wing",
+        "wings",
+    }
+)
 GROUND = frozenset({"ground", "minced", "mince", "burger", "meatball", "meatballs", "sausage"})
 PORK = frozenset({"pork", "ham", "bacon", "spam"})
-BEEF = frozenset({"beef", "steak", "lamb", "veal", "mutton"})
+BEEF = frozenset(
+    {
+        "beef",
+        "steak",
+        "steaks",
+        "lamb",
+        "veal",
+        "mutton",
+        "brisket",
+        "rib",
+        "ribs",
+        "fillet",
+        "fillets",
+        "filet",
+        "loin",
+        "tenderloin",
+        "cutlet",
+        "cutlets",
+        "meat",
+    }
+)
 EGGS = frozenset({"egg", "eggs", "yolk", "yolks"})
-SEAFOOD = frozenset(_FISH_WORDS + _SHELLFISH_WORDS) | {"prawns", "shrimps", "mussels", "clams"}
+SEAFOOD = frozenset(_FISH_WORDS + _SHELLFISH_WORDS) | {
+    "prawns",
+    "shrimps",
+    "mussels",
+    "clams",
+    "scallops",
+    "oysters",
+    "tails",
+    "claws",
+    "steaks",
+    "fillets",
+    "calamari",
+}
 RICE = frozenset({"rice"})
 
 GUIDANCE = {
@@ -849,11 +947,13 @@ def thermometer_guidance(texts: Iterable[str]) -> str | None:
     return "Use an instant-read thermometer: " + "; ".join(GUIDANCE[k] for k in kinds) + "."
 
 
-def _pure_intent(q: str) -> bool:
-    """Navigation, timer or definition questions are never doneness questions."""
-    from app.domains.sessions import intent  # local import: intent is pure, avoids a cycle
-
-    return bool(intent.intents(q)) or _DEFINITION_RE.search(q) is not None
+def _pure_definition(q: str) -> bool:
+    """Only "what does <wide word> mean"-style queries exempt the wide vocabulary, and never
+    when the query also names a high-risk food. Navigation never exempts anything: "move on, is
+    the chicken ready" is a doneness question."""
+    if [k for k in protein_kinds([q]) if k != "rice"]:
+        return False
+    return _DEFINITION_RE.search(q) is not None
 
 
 def is_doneness_question(query: str, context: Iterable[str] = ()) -> bool:
@@ -864,9 +964,31 @@ def is_doneness_question(query: str, context: Iterable[str] = ()) -> bool:
         # The definition exemption never overrides a strict word: "what does 'done' mean, is my
         # chicken done?" is a doneness question (security review of bab9b53).
         return True
-    if _pure_intent(q):
+    if _pure_definition(q):
         return False
+    q = _TIMER_SET_RE.sub(" ", q)
     return _WIDE_RE.search(q) is not None and bool(protein_kinds([q, *context]))
+
+
+_TEMP_QUESTION_RE = re.compile(
+    r"\b(safe|minimum|internal|right|correct|target|proper|what)\b.{0,30}\btemp(erature)?s?\b|"
+    r"\btemp(erature)?s?\b.{0,30}\b(safe|done|cooked)\b|\bhow hot\b"
+)
+
+
+def is_temperature_question(query: str) -> bool:
+    return _TEMP_QUESTION_RE.search(_plain(query)) is not None
+
+
+def temperature_table(query: str, context: Iterable[str] = ()) -> str:
+    """Our own verified table (USDA safe minimum internal temperatures), never model text.
+    The foods in the query / step / recipe first; the whole table when none is known."""
+    kinds = [k for k in protein_kinds([query, *context])] or list(GUIDANCE)
+    rows = "; ".join(GUIDANCE[k] for k in kinds)
+    return (
+        f"Verified safe minimum internal temperatures ({GUIDANCE_SOURCE}): {rows}. Measure in "
+        "the thickest part with an instant-read thermometer."
+    )
 
 
 def doneness_notice(query: str, context: Iterable[str] = ()) -> str | None:
@@ -879,17 +1001,17 @@ def doneness_notice(query: str, context: Iterable[str] = ()) -> str | None:
 
 
 def is_raw_tasting_request(query: str, context: Iterable[str] = ()) -> bool:
-    """ "Can I taste the marinade / sauce?" while the step involves raw meat, poultry, fish or egg
-    (``context`` = the current step's own text), or the query itself says raw / batter."""
+    """ "Can I taste the marinade / sauce?" while the step or recipe involves raw meat, poultry,
+    fish or egg (``context`` = the step texts so far plus the recipe's ingredient names), or
+    "can I have a bite of the marinade" / "can I eat the raw batter"."""
     q = _plain(query)
-    if not _TASTE_RE.search(q):
-        return False
-    if _RAW_CONTEXT_RE.search(q) and ("raw" in q or protein_kinds([q, *context])):
-        return True
-    step_kinds = [k for k in protein_kinds(context) if k != "rice"]
-    return bool(step_kinds) or bool(
-        [k for k in protein_kinds([q]) if k != "rice"] and _RAW_CONTEXT_RE.search(q)
-    )
+    raw_kinds = [k for k in protein_kinds([q, *context]) if k != "rice"]
+    raw_mixture = _RAW_MIXTURE_RE.search(q) is not None  # marinade / batter / dough / raw
+    if _TASTE_RE.search(q):
+        return bool(raw_kinds) or raw_mixture
+    if _WEAK_TASTE_RE.search(q) and _RAW_CONTEXT_RE.search(q):
+        return bool(raw_kinds) or raw_mixture
+    return False
 
 
 def food_safety_verdict(query: str, context: Iterable[str] = ()) -> RuleVerdict | None:
@@ -1021,7 +1143,7 @@ def candidate_food_safety_verdict(candidate: str) -> RuleVerdict | None:
 # Second line of defence (security review of bab9b53): questions the detectors miss still reach
 # the model, so every model answer is filtered. Conservative on purpose: a sentence that names a
 # doneness / safety / readiness term AND carries any affirmative or verdict word is dropped,
-# whatever its phrasing. Only sentences that point to a thermometer or say we can't tell survive.
+# whatever its phrasing, even next to a deferral to a thermometer.
 _SAFETY_TERM_RE = re.compile(
     r"\b(done|doneness|cooked|cook(?:ed)? through|undercooked|overcooked|safe|safely|unsafe|"
     r"ready|edible|eat|eaten|eating|serve|raw|pink|bloody|runny|rare|set|finished|"
@@ -1037,7 +1159,6 @@ _BARE_YES_RE = re.compile(
     r"^\W*(yes|yeah|yep|yup|sure|absolutely|definitely|certainly|of course|correct|"
     r"you bet|looks good|all good|good to go)\W*$"
 )
-_DEFER_RE = re.compile(r"thermometer|can'?t (tell|confirm|see|verify)|cannot (tell|confirm|verify)")
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
@@ -1045,20 +1166,41 @@ def mentions_safety_terms(text: str) -> bool:
     return _SAFETY_TERM_RE.search(_plain(text)) is not None
 
 
-def strip_certifications(answer: str) -> tuple[str, int]:
-    """Drop every sentence that could certify doneness or safety; return (kept, dropped)."""
+_LEADING_YES_RE = re.compile(
+    r"^\s*(?:yes|yeah|yep|yup|sure|absolutely|definitely|certainly|of course|you bet)\b"
+    r"[\s,!.:;-]*(?:go ahead\b[\s,!.:;-]*)?(?:and\b\s*)?",
+    re.IGNORECASE,
+)
+
+
+def strip_certifications(answer: str, *, high_risk: bool = False) -> tuple[str, int]:
+    """Drop every sentence that could certify doneness or safety; return (kept, dropped).
+
+    * Any sentence with a doneness / safety term AND a verdict or affirmative word is dropped,
+      deferral phrase or not ("Check with a thermometer, but yes it's done" is dropped).
+    * A bare affirmative sentence ("Yes!") is dropped; with a high-risk food in the step or
+      recipe, a leading affirmative ("Yep, go ahead and flip it") is cut from its sentence.
+    """
     kept: list[str] = []
     dropped = 0
     for sentence in _SENTENCE_RE.split(answer.strip()):
         plain = _plain(sentence)
         if not plain:
             continue
-        if _DEFER_RE.search(plain):
-            kept.append(sentence)
-        elif _BARE_YES_RE.match(plain) or (
+        if _BARE_YES_RE.match(plain) or (
             _SAFETY_TERM_RE.search(plain) and _VERDICT_RE.search(plain)
         ):
             dropped += 1
-        else:
-            kept.append(sentence)
+            continue
+        if high_risk and _LEADING_YES_RE.match(sentence):
+            rest = _LEADING_YES_RE.sub("", sentence, count=1).strip()
+            dropped += 1
+            if not rest or not re.search(r"[A-Za-z]", rest):
+                continue
+            sentence = rest[:1].upper() + rest[1:]
+        kept.append(sentence)
     return " ".join(kept).strip(), dropped
+
+
+def is_high_risk(texts: Iterable[str]) -> bool:
+    return bool([k for k in protein_kinds(texts) if k != "rice"])

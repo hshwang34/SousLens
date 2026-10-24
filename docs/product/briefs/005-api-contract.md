@@ -73,7 +73,7 @@ pantry > preference > creativity):
      "replacement": "rice vinegar + a pinch of sugar", "ratio_or_amount": "...",
      "source": "rule|ai", "label": "Common swap|AI suggested adaptation",
      "reason": "mirin unavailable", "approved_at": "iso",
-     "allergy_warning": "string|null", "risks": ["..."],   // copied from the suggestion; null/[] free-form
+     "allergy_warning": "string|null", "risks": ["..."],   // from the suggestion, or computed for free-form
      "conflicts_with_allergies": false}                     // re-checked on every read
   ],
   "steps": [                                       // the session's view of each step
@@ -213,7 +213,7 @@ session pinning that version (the Slice 1 TODO).
 - **`proposed_action` arguments** come only from the user's words (step number, duration) or the
   current step's `suggested_timer`, never from the model.
 - **Session adaptations** carry `allergy_warning` and `risks` (copied from the suggestion on
-  approve; `null`/`[]` for free-form) and `conflicts_with_allergies` (re-checked on every read;
+  approve; computed the same way for free-form swaps, including the unknown-food label check) and `conflicts_with_allergies` (re-checked on every read;
   such swaps are never saved by `save_changes`). The same fields appear in `my-variation`.
 - **Free-form adaptations** (`{ingredient_ref, replacement, …}`) are labelled `source: "rule"` /
   "Common swap" only when the replacement is a vetted seed suggestion for that ingredient;
@@ -233,4 +233,28 @@ session pinning that version (the Slice 1 TODO).
   also carries `details.session`.
 - **Seeded recipe v2:** the gochujang chicken fixture now reserves marinade before the raw chicken
   goes in (food-safety fix); the seed publishes it as version 2. Sessions pinned to v1 stay on v1.
+
+### Fix round 2
+
+- **Every model answer is post-filtered:** any sentence pairing a doneness / safety / readiness
+  term with an affirmative or verdict word is dropped (a deferral to a thermometer in the same
+  sentence does not save it); at a step or recipe with a high-risk food a bare or leading "Yes!"
+  is dropped too. Anything dropped, or any safety term in the question or answer, attaches the
+  thermometer notice; an answer emptied by the filter falls back to the doneness template.
+- **Safe-temperature questions** ("what is the safe temperature") are answered from our own
+  verified table (USDA safe minimum internal temperatures), never from the model.
+- **Doneness detection:** a strict word always wins; the definition exemption covers only
+  "what does <ready/serve/set/…> mean"-style queries without a high-risk food; navigation never
+  suppresses it ("move on, is the chicken ready" → template).
+- **Raw tasting** also looks at the recipe's ingredient names and refuses "bite / dip / lick /
+  sample" of a marinade, batter or dough.
+- **"<allergen>-free" claims flag that allergen** ("milk-free chocolate" → milk, "dairy-free
+  butter" → milk). New aliases: arachis oil (peanut), gomasio (sesame), frangelico (tree nut),
+  pad thai sauce (peanut, fish, shellfish), lecithin (soy, label check), nuoc cham (fish).
+- **`never` list:** exact names for vetted rule candidates; phrase matching for everything else
+  ("gochugaru flakes", "extra gochugaru" → 422 / never offered).
+- **Seed:** a fixture that differs from its latest published version with no history file makes
+  `make seed` log a warning and exit non-zero; published versions are never rewritten.
+- **Migrations:** 0004 is unchanged from the pushed version; the adaptation warning and note
+  idempotency columns are in 0005.
 

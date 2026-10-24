@@ -52,7 +52,7 @@ from app.domains.matching.normalize import conjuncts
 from app.domains.pantry.service import lock_user
 from app.domains.recipes import service as recipes_service
 from app.domains.recipes.versions import version_meta
-from app.domains.safety.content import conflicts
+from app.domains.safety.content import candidate_safety_risks, conflicts
 from app.domains.sessions import oracle
 from app.domains.sessions.schemas import (
     AdaptationIn,
@@ -74,6 +74,7 @@ from app.domains.substitutions.adapt import AdaptationSpec, compose_overlay, sug
 from app.domains.substitutions.rules import load_rules
 from app.domains.substitutions.service import (
     VersionContext,
+    allergy_warning_for,
     context_from,
     target_names,
     version_context,
@@ -318,6 +319,15 @@ async def resolve_adaptation(
     blocked = policy.target_blocker(target)
     if blocked is not None:
         raise ValidationError(blocked.reason, extra={"fields": [f"{field}.ingredient_ref"]})
+    if body.suggestion_id is None:
+        # Free-form swaps are "Common swap" only when they ARE a vetted seed suggestion; decided
+        # before the blocker so a client-claimed "rule" never gets exact-only never matching.
+        spec["source"] = policy.rule_source(spec["replacement"], target)
+        # ...and they get the same computed cautions as a served suggestion (fix round 2, item 4).
+        spec["risks"] = candidate_safety_risks(spec["replacement"])
+        spec["allergy_warning"] = allergy_warning_for(
+            spec["replacement"], bool(prof.allergies), dictionary
+        )
     verdict = policy.candidate_blocker(
         target,
         spec["replacement"],
@@ -337,11 +347,6 @@ async def resolve_adaptation(
         raise ValidationError(
             message, extra={"fields": [f"{field}.replacement"], "details": details}
         )
-    if body.suggestion_id is None:
-        # Free-form swaps are "Common swap" only when they ARE a vetted seed suggestion.
-        spec["source"] = policy.rule_source(spec["replacement"], target)
-        spec["risks"] = []
-        spec["allergy_warning"] = None
     return {"ingredient_ref": ingredient.id, "original": ingredient.name, **spec}
 
 
