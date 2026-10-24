@@ -17,19 +17,34 @@ final class SessionEndViewModel {
 
     // The draft lives on the cooking model so an offline failure (sheet closed, retried later)
     // never loses it.
+    // While a Done is unconfirmed its body is fixed (the same key must carry the same body), so
+    // edits are refused until it is confirmed or discarded.
     var result: OutcomeResult? {
         get { cooking.endDraft.result }
-        set { cooking.endDraft.result = newValue }
+        set { if !editsLocked { cooking.endDraft.result = newValue } }
     }
     var note: String {
         get { cooking.endDraft.note }
-        set { cooking.endDraft.note = newValue.count > Self.maxNoteLength ? String(newValue.prefix(Self.maxNoteLength)) : newValue }
+        set {
+            guard !editsLocked else { return }
+            cooking.endDraft.note = newValue.count > Self.maxNoteLength ? String(newValue.prefix(Self.maxNoteLength)) : newValue
+        }
     }
     /// Off by default: saving a private variation is an explicit choice.
     var saveChanges: Bool {
         get { cooking.endDraft.saveChanges }
-        set { cooking.endDraft.saveChanges = newValue }
+        set { if !editsLocked { cooking.endDraft.saveChanges = newValue } }
     }
+
+    var editsLocked: Bool { cooking.isCompletePending }
+    static let lockedMessage = "Your Done hasn’t been confirmed yet, so it can’t be changed. Reconnect to send it, or discard it to edit."
+
+    /// The same "Send it again / Discard" choice as the cooking screen's offline banner.
+    var asksToResendStaleTap: Bool { cooking.asksToResendStaleTap }
+    var pendingTapText: String? { cooking.pendingTapText }
+
+    func resendStaleTap() async { await cooking.resendStaleTap() }
+    func discardStaleTap() async { await cooking.discardStaleTap() }
     private(set) var isFinishing = false
 
     private let cooking: CookingViewModel
@@ -57,10 +72,17 @@ final class SessionEndViewModel {
     func reconnect() async {
         await cooking.reconnect()
     }
-    var canFinish: Bool { result != nil && !isFinishing && cooking.canSendCommands }
+    var canFinish: Bool { result != nil && !isFinishing && (cooking.canSendCommands || (editsLocked && !cooking.isSending)) }
 
     /// Returns true when the server confirmed the session is completed.
     func finish() async -> Bool {
+        // A Done is already waiting: re-send that exact one (or ask, if it's stale) — never a second.
+        if editsLocked {
+            isFinishing = true
+            defer { isFinishing = false }
+            await cooking.reconnect()
+            return cooking.session?.status == .completed
+        }
         guard let result, canFinish else { return false }
         isFinishing = true
         defer { isFinishing = false }

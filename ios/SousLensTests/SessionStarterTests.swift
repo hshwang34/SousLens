@@ -103,7 +103,7 @@ final class SessionStarterTests: XCTestCase {
         let shown = starter.unfinished[0]
         await starter.abandon(shown)
         XCTAssertTrue(service.commands.isEmpty, "nothing stopped without a fresh confirmation")
-        XCTAssertEqual(starter.changedSessionId, shown.id)
+        XCTAssertTrue(starter.changedSessionIds.contains(shown.id))
         XCTAssertEqual(starter.errorMessage, SessionStarter.changedMessage)
         XCTAssertEqual(starter.unfinished[0].stepIndex, 4, "row shows the server's latest")
         await starter.abandon(starter.unfinished[0])   // confirmed again on the refreshed row
@@ -111,7 +111,8 @@ final class SessionStarterTests: XCTestCase {
         XCTAssertEqual(service.commands.first?.0.expectedRevision, 8)
     }
 
-    func testAbandonRetriesOnceOnStaleRevision() async throws {
+    /// M6: a stale revision on abandon is shown to the user and re-confirmed, never re-sent silently.
+    func testStaleRevisionOnAbandonAsksAgainInsteadOfRetrying() async throws {
         let (service, _) = try makeService(blockingUntilOpenAtMost: 0)
         let attempts = TestCounter()
         service.commandHandler = { command, _ in
@@ -124,8 +125,16 @@ final class SessionStarterTests: XCTestCase {
         let minter = KeyMinter()
         let starter = SessionStarter(service: service, makeKey: { minter.next() })
         _ = await starter.start(recipeVersionId: CookingFixtures.versionUUID, adaptations: [])
+        let row = starter.unfinished[0]
+        await starter.abandon(row)
+        XCTAssertEqual(minter.minted, ["key-1"], "no silent second abandon")
+        XCTAssertTrue(starter.changedSessionIds.contains(row.id))
+        XCTAssertEqual(starter.unfinished[0].stepIndex, 3, "row shows the newer state")
+        XCTAssertEqual(starter.errorMessage, SessionStarter.changedMessage)
+        // The user confirms again on the refreshed row → the server's step 3 / rev 9.
+        service.sessionHandler = { id in try CookingFixtures.session(id: id.uuidString.lowercased(), stepIndex: 3, revision: 9) }
         await starter.abandon(starter.unfinished[0])
-        XCTAssertEqual(minter.minted, ["key-1", "key-2"], "the corrected body gets its own key")
+        XCTAssertEqual(minter.minted, ["key-1", "key-2"])
     }
 
     func testResumeChoiceDropsThePendingStartAndIsPresentedOnDismiss() async throws {

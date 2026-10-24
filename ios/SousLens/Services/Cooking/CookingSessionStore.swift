@@ -151,6 +151,14 @@ final class CookingSessionStore {
         }
     }
 
+    /// 404 from the server: drop it from `active` and the cache (the screen says so and closes).
+    func sessionGone(_ id: UUID, epoch started: Int) {
+        guard started == epoch else { return }
+        if active?.id == id { active = nil }
+        if cachedSession()?.id == id { try? cache.clear() }
+        cautionsBySession[id] = nil
+    }
+
     /// The cooking screen registers its view model so a reset can invalidate it.
     func attach(_ client: CookingSessionClient) {
         self.client = client

@@ -178,6 +178,9 @@ struct SessionAdaptation: Codable, Sendable, Hashable, Identifiable {
     let approvedAt: Date?
     /// An allergy added mid-cook overlaps this swap (set by the server on read).
     let conflictsWithAllergies: Bool
+    /// Cautions from the suggestion, kept on the Session so they survive relaunch / other devices.
+    let allergyWarning: String?
+    let risks: [String]
 
     /// Derived from `source`, never from free text, so an AI swap can't be shown as a vetted one.
     var displayLabel: String { source.label }
@@ -194,6 +197,9 @@ struct SessionAdaptation: Codable, Sendable, Hashable, Identifiable {
         reason = try c.decodeIfPresent(String.self, forKey: .reason)
         approvedAt = try c.decodeIfPresent(Date.self, forKey: .approvedAt)
         conflictsWithAllergies = try c.decodeIfPresent(Bool.self, forKey: .conflictsWithAllergies) ?? false
+        // Lenient: a wrong type or a missing field just means "no caution".
+        allergyWarning = (try? c.decodeIfPresent(String.self, forKey: .allergyWarning)).flatMap { $0.isEmpty ? nil : $0 }
+        risks = ((try? c.decodeIfPresent([String].self, forKey: .risks)) ?? []).filter { !$0.isEmpty }
     }
 }
 

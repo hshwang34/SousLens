@@ -21,7 +21,9 @@ protocol CookingService: Sendable {
     /// rather than calling this directly, so a retry reuses the key.
     func sendCommand(sessionId: UUID, _ command: SessionCommand, idempotencyKey: String) async throws -> CookingSession
     func ask(sessionId: UUID, query: String, groundedRevision: Int) async throws -> AskResponse
-    func addNote(sessionId: UUID, text: String) async throws -> SessionNote
+    /// `Idempotency-Key` (optional on the server, always sent here): one key per note text, reused
+    /// on retries, so a lost 201 never creates a second note.
+    func addNote(sessionId: UUID, text: String, idempotencyKey: String) async throws -> SessionNote
 
     /// `GET /recipe-versions/{id}/my-variation`; a 404 (none saved) is `nil`, not an error.
     func myVariation(recipeVersionId: UUID) async throws -> PrivateVariation?
@@ -78,8 +80,10 @@ extension APIClient: PreferencesService, CookingService {
         return try await send(endpoint)
     }
 
-    func addNote(sessionId: UUID, text: String) async throws -> SessionNote {
-        try await send(.post("/v1/sessions/\(Self.pathId(sessionId))/notes", body: try encoder.encode(NoteRequest(text: text))))
+    func addNote(sessionId: UUID, text: String, idempotencyKey: String) async throws -> SessionNote {
+        var endpoint = Endpoint.post("/v1/sessions/\(Self.pathId(sessionId))/notes", body: try encoder.encode(NoteRequest(text: text)))
+        endpoint.headers[Self.idempotencyHeader] = idempotencyKey
+        return try await send(endpoint)
     }
 
     func myVariation(recipeVersionId: UUID) async throws -> PrivateVariation? {

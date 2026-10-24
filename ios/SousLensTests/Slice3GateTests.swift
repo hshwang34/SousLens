@@ -38,7 +38,9 @@ final class SlowReadService: CookingService, @unchecked Sendable {
     func ask(sessionId: UUID, query: String, groundedRevision: Int) async throws -> AskResponse {
         try await inner.ask(sessionId: sessionId, query: query, groundedRevision: groundedRevision)
     }
-    func addNote(sessionId: UUID, text: String) async throws -> SessionNote { try await inner.addNote(sessionId: sessionId, text: text) }
+    func addNote(sessionId: UUID, text: String, idempotencyKey: String) async throws -> SessionNote {
+        try await inner.addNote(sessionId: sessionId, text: text, idempotencyKey: idempotencyKey)
+    }
     func myVariation(recipeVersionId: UUID) async throws -> PrivateVariation? { try await inner.myVariation(recipeVersionId: recipeVersionId) }
     func deleteMyVariation(recipeVersionId: UUID) async throws { try await inner.deleteMyVariation(recipeVersionId: recipeVersionId) }
 }

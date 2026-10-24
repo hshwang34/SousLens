@@ -17,21 +17,22 @@ struct UnfinishedCooksSheet: View {
                             Text(Self.stepText(summary))
                                 .font(SLFont.subheadline)
                                 .foregroundStyle(SLColor.textSecondary)
-                            if starter.changedSessionId == summary.id {
+                            if starter.changedSessionIds.contains(summary.id) {
                                 Label("Changed since you looked", systemImage: "arrow.triangle.2.circlepath")
                                     .font(SLFont.caption.weight(.semibold))
                                     .foregroundStyle(SLColor.warning)
                             }
                             HStack(spacing: Spacing.sm) {
                                 Button("Resume") { starter.chooseResume(summary.id) }
+                                    .disabled(starter.isBusy)
                                     .buttonStyle(.borderedProminent)
                                     .tint(SLColor.accent)
                                     .accessibilityIdentifier("unfinished.resume")
                                 Button("Stop this cook", role: .destructive) { toAbandon = summary }
                                     .buttonStyle(.bordered)
-                                    .disabled(starter.busySessionIds.contains(summary.id) || starter.isStarting)
+                                    .disabled(starter.isBusy)
                                     .accessibilityIdentifier("unfinished.abandon")
-                                if starter.busySessionIds.contains(summary.id) || starter.isStarting { ProgressView() }
+                                if starter.abandoningId == summary.id || starter.isStarting { ProgressView() }
                             }
                             .frame(minHeight: Metrics.minTapTarget)
                         }
@@ -44,11 +45,13 @@ struct UnfinishedCooksSheet: View {
                     Section { Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger) }
                 }
             }
+            .interactiveDismissDisabled(starter.isBusy)
             .navigationTitle("Unfinished cooks")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { starter.dismissUnfinished() }
+                        .disabled(starter.isBusy)
                 }
             }
             .confirmationDialog("Stop this cook?", isPresented: Binding(get: { toAbandon != nil }, set: { if !$0 { toAbandon = nil } }), titleVisibility: .visible) {

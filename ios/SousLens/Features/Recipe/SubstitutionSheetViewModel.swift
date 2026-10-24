@@ -109,20 +109,39 @@ final class SubstitutionSheetViewModel {
     private(set) var targetIngredient: String
     private var result: SubstitutionResult?
 
+    /// "Some of your allergies can't be checked: X. Check labels yourself." (server `unrecognized`).
+    private(set) var uncheckedAllergiesNotice: String?
+
     private let service: CookingService
+    private let preferences: PreferencesService?
 
     static let fallbackNoSwapReason = "There’s no substitute we can recommend for this one."
 
-    init(recipeVersionId: UUID, ingredientRef: String, ingredientName: String, service: CookingService) {
+    init(recipeVersionId: UUID, ingredientRef: String, ingredientName: String, service: CookingService,
+         preferences: PreferencesService? = nil) {
         self.recipeVersionId = recipeVersionId
         self.ingredientRef = ingredientRef
         self.ingredientName = ingredientName
         targetIngredient = ingredientName
         self.service = service
+        self.preferences = preferences
+    }
+
+    static func uncheckedNotice(_ prefs: FoodPreferences) -> String? {
+        let unknown = Set(prefs.unrecognized.map { $0.lowercased() })
+        let entries = prefs.allergies.filter { unknown.contains($0.lowercased()) }
+        guard !entries.isEmpty else { return nil }
+        return "Some of your allergies can’t be checked: \(entries.joined(separator: ", ")). Check labels yourself."
     }
 
     func load() async {
         phase = .loading
+        if let preferences {
+            // Best effort: if this read fails the swaps still load (the server enforces allergies).
+            if let prefs = try? await preferences.preferences() {
+                uncheckedAllergiesNotice = Self.uncheckedNotice(prefs)
+            }
+        }
         do {
             let result = try await service.suggestSubstitutions(recipeVersionId: recipeVersionId, ingredientRef: ingredientRef)
             self.result = result

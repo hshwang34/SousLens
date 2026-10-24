@@ -119,10 +119,10 @@ final class Slice3FixRoundTests: XCTestCase {
     // MARK: 5 — Dynamic Type layout
 
     func testLayoutStacksAtAccessibilitySizes() {
-        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(stacksNavigation: false, toolColumns: 4))
-        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(stacksNavigation: false, toolColumns: 4))
+        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(stacksNavigation: false, toolColumns: 2, controlsScrollWithContent: false))
+        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(stacksNavigation: false, toolColumns: 2, controlsScrollWithContent: false))
         for size in [DynamicTypeSize.accessibility1, .accessibility3, .accessibility5] {
-            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(stacksNavigation: true, toolColumns: 2), "\(size)")
+            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(stacksNavigation: true, toolColumns: 2, controlsScrollWithContent: true), "\(size)")
         }
     }
 

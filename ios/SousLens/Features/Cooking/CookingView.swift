@@ -15,7 +15,8 @@ struct CookingView: View {
     @State private var confirmAbandon = false
     @State private var swapToRevert: SessionAdaptation?
     @State private var timerToCancel: TimerRow?
-    @State private var previousIdleTimerSetting = false
+    /// The idle-timer setting from before this screen, captured once.
+    @State private var previousIdleTimerSetting: Bool?
 
     var body: some View {
         Group {
@@ -28,12 +29,14 @@ struct CookingView: View {
         .background(SLColor.background.ignoresSafeArea())
         .onAppear {
             // The phone may be propped up across the kitchen: keep the screen on while cooking.
-            previousIdleTimerSetting = UIApplication.shared.isIdleTimerDisabled
+            if previousIdleTimerSetting == nil {
+                previousIdleTimerSetting = UIApplication.shared.isIdleTimerDisabled
+            }
             UIApplication.shared.isIdleTimerDisabled = true
             model?.screenDidAppear()
         }
         .onDisappear {
-            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerSetting
+            UIApplication.shared.isIdleTimerDisabled = previousIdleTimerSetting ?? false
             model?.screenDidDisappear()
             assistant?.drawerDidDisappear()
         }
@@ -51,6 +54,7 @@ struct CookingView: View {
             // Stamped with the epoch this screen opened under: after a sign-out it reports nothing.
             let epoch = environment.cooking.epoch
             created.onSessionChanged = { [environment] session in environment.cooking.sessionChanged(session, epoch: epoch) }
+            created.onSessionGone = { [environment] id in environment.cooking.sessionGone(id, epoch: epoch) }
             environment.cooking.attach(created)
             let drawer = AssistantViewModel(sessionId: presentation.sessionId, service: environment.api,
                                             audio: environment.audio, currentSession: { [weak created] in created?.session })
@@ -79,6 +83,15 @@ struct CookingView: View {
                 secondary: EmptyStateView.Action("Close") { environment.cooking.closeCookingScreen() }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .gone(let message):
+            EmptyStateView(
+                systemImage: "tray",
+                title: message,
+                message: "It may have been finished or stopped on another device.",
+                primary: EmptyStateView.Action("Close") { environment.cooking.closeCookingScreen() }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("cooking.gone")
         case .ready:
             ready(model)
         }
@@ -90,7 +103,8 @@ struct CookingView: View {
             if model.isOffline || model.isProvisional {
                 OfflineBanner(model: model)
             }
-            // The step scrolls on its own above the controls, whatever the text size.
+            // Regular sizes: the step scrolls above fixed controls. Accessibility sizes: everything,
+            // controls included, scrolls together so nothing is pushed off screen.
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     StepContent(model: model, onRevert: { swapToRevert = $0 })
@@ -109,8 +123,13 @@ struct CookingView: View {
                 }
                 .padding(.horizontal, Spacing.screen)
                 .padding(.vertical, Spacing.lg)
+                if CookingLayout.forSize(dynamicTypeSize).controlsScrollWithContent {
+                    controls(model)
+                }
             }
-            controls(model)
+            if !CookingLayout.forSize(dynamicTypeSize).controlsScrollWithContent {
+                controls(model)
+            }
         }
         .overlay(alignment: .top) {
             if let toast = model.toast {

@@ -38,6 +38,7 @@ struct SessionEndView: View {
                             }
                             .frame(minHeight: 52)
                         }
+                        .disabled(model.editsLocked)
                         .accessibilityAddTraits(model.result == result ? .isSelected : [])
                         .accessibilityIdentifier("end.outcome.\(result.rawValue)")
                     }
@@ -59,6 +60,7 @@ struct SessionEndView: View {
                         if model.canSaveChanges {
                             Toggle("Save my changes", isOn: $model.saveChanges)
                                 .frame(minHeight: Metrics.minTapTarget)
+                                .disabled(model.editsLocked)
                                 .accessibilityIdentifier("end.saveChanges")
                         }
                     } header: {
@@ -75,6 +77,7 @@ struct SessionEndView: View {
                 Section {
                     TextField("What would you do differently? (optional)", text: $model.note, axis: .vertical)
                         .lineLimit(3...8)
+                        .disabled(model.editsLocked)
                         .accessibilityIdentifier("end.note")
                 } header: {
                     Text("Private note")
@@ -82,10 +85,28 @@ struct SessionEndView: View {
                     Text("Only you can see this note.")
                 }
 
-                if let error = model.errorMessage {
+                if model.errorMessage != nil || model.showsReconnect || model.editsLocked {
                     Section {
-                        Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger)
-                        if model.showsReconnect {
+                        if let error = model.errorMessage {
+                            Text(error).font(SLFont.footnote).foregroundStyle(SLColor.danger)
+                        }
+                        if let pending = model.pendingTapText {
+                            Text(pending).font(SLFont.footnote.weight(.semibold))
+                        }
+                        if model.editsLocked {
+                            Text(SessionEndViewModel.lockedMessage)
+                                .font(SLFont.footnote)
+                                .accessibilityIdentifier("end.locked")
+                        }
+                        if model.asksToResendStaleTap {
+                            Text("That tap is more than 2 minutes old. Send it again?").font(SLFont.callout)
+                            Button("Send it again") { Task { await model.resendStaleTap() } }
+                                .frame(minHeight: Metrics.minTapTarget)
+                                .accessibilityIdentifier("end.resend")
+                            Button("Discard", role: .destructive) { Task { await model.discardStaleTap() } }
+                                .frame(minHeight: Metrics.minTapTarget)
+                                .accessibilityIdentifier("end.discard")
+                        } else if model.showsReconnect {
                             Button(model.isReconnecting ? "Reconnecting…" : "Reconnect") {
                                 Task { await model.reconnect() }
                             }

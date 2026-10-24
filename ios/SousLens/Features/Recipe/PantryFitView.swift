@@ -44,7 +44,8 @@ struct PantryFitView: View {
         .sheet(item: $swapSheet) { target in
             SubstitutionSheet(
                 model: SubstitutionSheetViewModel(recipeVersionId: recipeVersionId, ingredientRef: target.ingredientRef,
-                                                  ingredientName: target.name, service: environment.api),
+                                                  ingredientName: target.name, service: environment.api,
+                                                  preferences: environment.api),
                 onApprove: { swap in model?.approve(swap) },
                 onFindAnotherRecipe: { environment.showExplore() }
             )

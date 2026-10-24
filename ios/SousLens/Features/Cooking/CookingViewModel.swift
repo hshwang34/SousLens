@@ -17,6 +17,8 @@ final class CookingViewModel: CookingSessionClient {
         case loading
         case ready
         case failed(String)
+        /// 404 on the first read: the cook was deleted / ended elsewhere and isn't ours to show.
+        case gone(String)
     }
 
     let sessionId: UUID
@@ -39,6 +41,9 @@ final class CookingViewModel: CookingSessionClient {
     var endDraft = SessionEndDraft()
     /// The note text the server already has, so a retried Done never posts it twice.
     private(set) var savedNoteText: String?
+    /// One `Idempotency-Key` per note text, reused when the same text is retried.
+    private var noteKey: (text: String, key: String)?
+    private let makeKey: @MainActor () -> String
     /// Swap cautions (allergy warning, risks, safety notice) by `ingredient_ref`, carried from the
     /// swap sheet; the Session itself doesn't repeat them.
     let swapCautions: [String: SwapCaution]
@@ -51,6 +56,11 @@ final class CookingViewModel: CookingSessionClient {
 
     /// Every canonical Session (for the resume store and the on-device cache).
     var onSessionChanged: (@MainActor (CookingSession) -> Void)?
+    /// 404: the store drops it from `active` and the cache.
+    var onSessionGone: (@MainActor (UUID) -> Void)?
+
+    static let goneMessage = "This cook is no longer available."
+    static let timerAlreadyDoneToast = "That timer has already finished."
 
     private let initial: CookingSession?
     private let initialIsFresh: Bool
@@ -92,6 +102,7 @@ final class CookingViewModel: CookingSessionClient {
         self.audio = audio
         self.loadCached = loadCached
         self.swapCautions = swapCautions
+        self.makeKey = makeKey
         self.now = now
         sender = SessionCommandSender(sessionId: sessionId, service: service, makeKey: makeKey, now: now)
     }
@@ -132,8 +143,16 @@ final class CookingViewModel: CookingSessionClient {
         return "Adapted · \(label)"
     }
 
+    /// The Session's own cautions (survive relaunch, other devices), plus the sheet's notice
+    /// from this run as an addition.
     private var currentCautions: [SwapCaution] {
-        currentAdaptations.compactMap { swapCautions[$0.ingredientRef] }
+        currentAdaptations.map { adaptation in
+            let sheet = swapCautions[adaptation.ingredientRef]
+            var risks = adaptation.risks
+            for risk in sheet?.risks ?? [] where !risks.contains(risk) { risks.append(risk) }
+            return SwapCaution(allergyWarning: adaptation.allergyWarning ?? sheet?.allergyWarning,
+                               risks: risks, safetyNotice: sheet?.safetyNotice)
+        }.filter { !$0.isEmpty }
     }
 
     /// Swaps on this step that now overlap the user's allergies (an allergy added mid-cook).
@@ -180,14 +199,11 @@ final class CookingViewModel: CookingSessionClient {
         TimerRow.rows(for: session?.timers ?? [], now: date ?? now())
     }
 
-    /// Timers that turned done since the last look (haptic + VoiceOver announcement). The first
-    /// call only records what is already done.
+    /// Timers that turned done since the last look (haptic + VoiceOver announcement). Timers that
+    /// were already done when the first Session arrived are the baseline and never announced.
     func newlyFinishedTimers(at date: Date? = nil) -> [TimerRow] {
         let done = timerRows(at: date).filter(\.isDone)
-        guard let announced = announcedDoneTimers else {
-            announcedDoneTimers = Set(done.map(\.id))
-            return []
-        }
+        let announced = announcedDoneTimers ?? []
         let fresh = done.filter { !announced.contains($0.id) }
         announcedDoneTimers = announced.union(fresh.map(\.id))
         return fresh
@@ -198,6 +214,10 @@ final class CookingViewModel: CookingSessionClient {
         guard let pending = sender.pending else { return nil }
         return "Your last tap (\(pending.command.command.displayName)) wasn’t confirmed"
     }
+
+    /// A Done (`complete`) whose outcome is unknown. Its body is fixed, so Session end is locked
+    /// until it is confirmed (Reconnect / Send it again) or discarded.
+    var isCompletePending: Bool { sender.pending?.command.command == .complete }
 
     var pendingTapIsStale: Bool {
         guard let pending = sender.pending else { return false }
@@ -251,8 +271,22 @@ final class CookingViewModel: CookingSessionClient {
             }
         } catch {
             guard !isInvalidated else { return }
-            let message = (error as? APIError)?.userMessage ?? error.localizedDescription
-            if session == nil { phase = .failed(message) } else { errorMessage = message }
+            let apiError = error as? APIError
+            if apiError?.isNotFound == true {
+                // Deleted or not ours: never keep showing a cached copy of it.
+                session = nil
+                isProvisional = false
+                phase = .gone(Self.goneMessage)
+                onSessionGone?(sessionId)
+                return
+            }
+            let message = apiError?.userMessage ?? error.localizedDescription
+            if session == nil || isProvisional {
+                // A cached copy that the server wouldn't confirm: don't sit read-only forever.
+                phase = .failed(message)
+            } else {
+                errorMessage = message
+            }
         }
     }
 
@@ -361,6 +395,10 @@ final class CookingViewModel: CookingSessionClient {
     }
 
     func cancelTimer(id: UUID) async {
+        if timerRows().first(where: { $0.id == id })?.isDone == true {
+            toast = Self.timerAlreadyDoneToast
+            return
+        }
         var command = SessionCommand.confirmed(.cancelTimer, revision: revisionOrZero)
         command.timerId = id
         _ = await run(command)
@@ -383,8 +421,9 @@ final class CookingViewModel: CookingSessionClient {
         defer { isSending = false }
         let text = String(note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(SessionEndViewModel.maxNoteLength))
         if !text.isEmpty, text != savedNoteText {
+            if noteKey?.text != text { noteKey = (text, makeKey()) }
             do {
-                _ = try await service.addNote(sessionId: sessionId, text: text)
+                _ = try await service.addNote(sessionId: sessionId, text: text, idempotencyKey: noteKey?.key ?? makeKey())
                 guard !isInvalidated else { return false }
                 savedNoteText = text
             } catch let error as APIError {
@@ -523,6 +562,10 @@ final class CookingViewModel: CookingSessionClient {
         if let current = session, current.id == latest.id, latest.revision < current.revision { return }
         let stepChanged = session?.stepIndex != latest.stepIndex
         session = latest
+        if announcedDoneTimers == nil {
+            // Baseline when the screen opens: timers already done then are never announced.
+            announcedDoneTimers = Set(TimerRow.rows(for: latest.timers, now: now()).filter(\.isDone).map(\.id))
+        }
         if stepChanged { showOriginal = false }
         if phase != .ready { phase = .ready }
         if persist { onSessionChanged?(latest) }

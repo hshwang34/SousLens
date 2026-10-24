@@ -198,7 +198,11 @@ final class FakeCookingService: CookingService, PreferencesService, @unchecked S
     func ask(sessionId: UUID, query: String, groundedRevision: Int) async throws -> AskResponse {
         record(.ask(query, groundedRevision)); return try askHandler(query, groundedRevision)
     }
-    func addNote(sessionId: UUID, text: String) async throws -> SessionNote { record(.note(text)); return try noteHandler(text) }
+    private var _noteKeys: [String] = []
+    var noteKeys: [String] { lock.withLock { _noteKeys } }
+    func addNote(sessionId: UUID, text: String, idempotencyKey: String) async throws -> SessionNote {
+        record(.note(text)); lock.withLock { _noteKeys.append(idempotencyKey) }; return try noteHandler(text)
+    }
     func myVariation(recipeVersionId: UUID) async throws -> PrivateVariation? {
         record(.variation(recipeVersionId)); return try variationHandler(recipeVersionId)
     }

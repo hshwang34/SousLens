@@ -147,6 +147,9 @@ comes back; it never moves a step, starts a timer or applies a swap on its own.
   says to try again later (`SessionStarter`). The start is retried after each stop; another 409
   refreshes the list. A cook that changed since it was shown is refreshed and must be confirmed
   again. The cooking screen opens from the sheet's `onDismiss`, with the epoch from the Start tap.
+  One operation at a time (a start or one stop); Cancel and swipe-down are disabled while busy, and
+  each attempt carries a generation so results from a dismissed attempt are dropped. A stale
+  revision on a stop is shown and re-confirmed, never retried silently.
 - **Cooking** (`Features/Cooking`): step N of M, the session's step text in large Dynamic Type,
   **Adapted · Common swap / AI suggested adaptation** badge with **Show original**, success cues,
   warnings with a safety icon, creator note, "No clip for this step", oversized **Back / Pause /
@@ -190,10 +193,20 @@ comes back; it never moves a step, starts a timer or applies a swap on its own.
   "We don’t recognise “X”…" until removed.
 - **Screen and speech**: the screen stays awake while cooking; nothing is spoken after the cooking
   screen or the drawer closes; a coach answer is read safety notice first. A timer reaching zero
-  plays a haptic and posts a VoiceOver announcement; toasts are announced. At accessibility text
-  sizes Back/Next stack and Repeat/Slower/Ask/Look form a 2×2 grid (`CookingLayout`).
+  plays a haptic and posts a VoiceOver announcement; toasts are announced. Repeat/Slower/Ask/Look are
+  a 2×2 grid; at accessibility text sizes Back/Next stack and the controls scroll with the step
+  (`CookingLayout`).
 - **Session end draft** (outcome, note, Save my changes) lives on the cooking model, so an offline
-  Done keeps it; the note is posted once even if Done is retried; Reconnect is in the sheet.
+  Done keeps it. The note carries an `Idempotency-Key` (one per note text, reused on retry). While
+  a Done is unconfirmed the draft is locked ("Your Done hasn’t been confirmed yet…"): Reconnect
+  re-sends that exact body, a stale one asks Send it again / Discard (same choice as the banner),
+  and Discard unlocks editing so the next Done carries the current draft under a new key.
+- **Cautions from the Session**: adaptations carry `allergy_warning` / `risks` (decoded leniently),
+  so the adapted-step caution survives relaunch and other devices; the swap sheet's notice from this
+  run is added on top. The swap sheet also says which allergies the server couldn't recognise.
+- **Gone / failed first read**: 404 → "This cook is no longer available" with Close (removed from
+  the cache and the resume banner); other errors → an error with Try again, never a stuck read-only
+  copy.
 - **Account isolation**: the cached Session (`Persistence/SessionCache`) is stamped with the owner
   (user id + server) and deleted if anyone else reads it. Every AuthStore path that drops
   credentials (sign-out, 401, server change, fresh install, a restore that ends signed out, a

@@ -260,7 +260,8 @@ final class CookingAPIClientTests: XCTestCase {
         XCTAssertEqual(askBody["query"] as? String, "what?")
         XCTAssertEqual(askBody["grounded_revision"] as? Int, 4)
 
-        let note = try await client.addNote(sessionId: CookingFixtures.sessionUUID, text: "tasty")
+        let note = try await client.addNote(sessionId: CookingFixtures.sessionUUID, text: "tasty", idempotencyKey: "note-1")
+        XCTAssertEqual(StubURLProtocol.requests.last?.value(forHTTPHeaderField: "Idempotency-Key"), "note-1")
         XCTAssertEqual(note.text, "tasty")
 
         _ = try await client.preferences()

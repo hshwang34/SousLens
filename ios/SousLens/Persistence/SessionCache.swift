@@ -42,7 +42,12 @@ struct SessionCache: SessionCaching {
     }
 
     func save(_ session: CookingSession, owner: SessionOwner) throws {
-        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The whole cache directory stays out of backups, not just this file.
+        var directoryValues = URLResourceValues()
+        directoryValues.isExcludedFromBackup = true
+        try directory.setResourceValues(directoryValues)
         let data = try JSONCoding.makeEncoder().encode(CachedSession(owner: owner, session: session))
         // Private session data: protected while the device is locked.
         try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])

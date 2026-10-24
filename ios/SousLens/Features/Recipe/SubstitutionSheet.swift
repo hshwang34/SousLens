@@ -19,6 +19,12 @@ struct SubstitutionSheet: View {
                     if let notice = model.safetyNotice {
                         SafetyNoticeView(text: notice)
                     }
+                    if let unchecked = model.uncheckedAllergiesNotice {
+                        Label(unchecked, systemImage: "exclamationmark.triangle.fill")
+                            .font(SLFont.callout)
+                            .foregroundStyle(SLColor.warning)
+                            .accessibilityIdentifier("swap.uncheckedAllergies")
+                    }
                     content
                 }
                 .padding(Spacing.screen)
