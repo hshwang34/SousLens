@@ -446,7 +446,12 @@ class CookingSession(TimestampMixin, Base):
     step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     pantry_snapshot_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    # Session step overlay (brief 005): ``{"steps": {step_id: {"instruction", "adaptation_ids"}}}``,
+    # recomputed deterministically from the active ``session_adaptations`` on every approve /
+    # revert, so reads never depend on the (mutable) dictionary. The pinned version is untouched.
     adaptation_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    # ``{"result": "cooked|partly|didnt_work", "saved_changes": bool}`` once completed (COOK-08).
+    outcome_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -469,6 +474,10 @@ class SessionEvent(CreatedAtMixin, Base):
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    # Idempotent replay (oracle.py contract): sha256 of the canonical command body, and the exact
+    # Session JSON returned the first time. Same key + same hash → replay; different hash → 409.
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+    response_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class SessionMessage(CreatedAtMixin, Base):
@@ -500,6 +509,150 @@ class Timer(CreatedAtMixin, Base):
     target_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[TimerStatus] = mapped_column(
         _enum(TimerStatus, "timer_status"), nullable=False, default=TimerStatus.RUNNING
+    )
+
+
+class SessionAdaptation(CreatedAtMixin, Base):
+    """An approved swap in one session's overlay (SUB-03/04). Reverting sets ``reverted_at``;
+    the row stays for the audit trail. At most one active adaptation per ingredient."""
+
+    __tablename__ = "session_adaptations"
+    __table_args__ = (
+        Index(
+            "uq_session_adaptations_active_ref",
+            "session_id",
+            "ingredient_ref",
+            unique=True,
+            postgresql_where=text("reverted_at IS NULL"),
+        ),
+        CheckConstraint("source IN ('rule', 'ai')", name="source_valid"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cooking_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ingredient_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    original: Mapped[str] = mapped_column(String(200), nullable=False)
+    replacement: Mapped[str] = mapped_column(String(200), nullable=False)
+    ratio_or_amount: Mapped[str | None] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(300))
+    suggestion_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    # Copied from the served suggestion on approve (null / [] for free-form swaps), so the
+    # cautions survive an app relaunch.
+    allergy_warning: Mapped[str | None] = mapped_column(Text)
+    risks: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reverted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SessionNote(CreatedAtMixin, Base):
+    """Private reflection on a session (COOK-08)."""
+
+    __tablename__ = "session_notes"
+    __table_args__ = (UniqueConstraint("session_id", "idempotency_key"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cooking_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Optional Idempotency-Key: a retry returns this note; a different body is a 409.
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class UserPreference(Base):
+    """Food allergies (hard blocks) and foods to avoid (soft), normalised (SUB-02)."""
+
+    __tablename__ = "user_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    allergies: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    avoid: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class RecipeVariation(TimestampMixin, Base):
+    """A learner's private change set for a recipe (COOK-08). One per user + recipe; a new
+    save replaces it. Never public (SUB-06 is P1)."""
+
+    __tablename__ = "recipe_variations"
+    __table_args__ = (UniqueConstraint("owner_user_id", "recipe_id"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    recipe_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    recipe_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("recipe_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    source_session_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    adaptations_json: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SubstitutionRule(TimestampMixin, Base):
+    """Vetted seed swaps from ``fixtures/substitution_rules.json`` (PRD §12.3), upserted by
+    ``make seed`` keyed on the dictionary canonical name."""
+
+    __tablename__ = "substitution_rules"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    target: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    rule_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class SubstitutionSuggestionRecord(CreatedAtMixin, Base):
+    """A suggestion as served, so ``approve`` can reference it by ``suggestion_id`` without the
+    client re-sending (and possibly altering) its content. 24 h TTL."""
+
+    __tablename__ = "substitution_suggestions"
+    __table_args__ = (
+        Index("ix_substitution_suggestions_owner_created", "owner_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    recipe_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("recipe_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    ingredient_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+
+class UsageEvent(Base):
+    """Durable per-user usage ledger for rate limits (``ask``, ``session_created``).
+
+    Deliberately not linked to sessions: deleting or recreating a session must never reset a
+    budget (brief 005 security review).
+    """
+
+    __tablename__ = "usage_events"
+    __table_args__ = (Index("ix_usage_events_user_kind_created", "user_id", "kind", "created_at"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
 
@@ -540,4 +693,6 @@ OWNED_TABLES: tuple[type[Base], ...] = (
     PantryObservation,
     CookingSession,
     MediaConsent,
+    RecipeVariation,
+    SubstitutionSuggestionRecord,
 )

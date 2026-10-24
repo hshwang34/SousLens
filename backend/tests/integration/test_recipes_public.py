@@ -101,7 +101,7 @@ async def test_list_returns_five_seeded_cards_newest_first(
     assert card["recipe_id"] == str(ids[GOCHUJANG])
     assert card["title"] == "Gochujang Chicken Thighs"
     assert card["creator"]["display_name"] == "SousLens Kitchen"
-    assert card["version_number"] == 1
+    assert card["version_number"] == 2  # brief 005: marinade food-safety fix published as v2
     assert card["tags"] == ["korean", "chicken", "weeknight", "spicy"]
     assert card["saved"] is None  # anonymous
     assert set(card) == CARD_KEYS
@@ -173,7 +173,7 @@ async def test_seed_is_idempotent_and_never_rewrites_published_version(
     assert not any(r.created_recipe or r.created_version for r in second)
     assert len((await client.get("/v1/recipes")).json()["items"]) == 5
     count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
-    assert count == 5
+    assert count == 6  # gochujang v1 + v2
 
 
 async def test_query_matches_title_case_insensitively(

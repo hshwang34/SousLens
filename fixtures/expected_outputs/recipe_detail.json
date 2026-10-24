@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "recipe_id": "a185d1a4-2726-57b9-9b17-069262cbf492",
-  "recipe_version_id": "383cfbdd-6896-5db0-89e0-a539f6bbdd0e",
-  "version_number": 1,
+  "recipe_version_id": "02b20f6c-d644-58b4-b2be-086967191684",
+  "version_number": 2,
   "slug": "gochujang-chicken-thighs",
   "title": "Gochujang Chicken Thighs",
   "summary": "Sticky, smoky-sweet pan-seared chicken thighs in a gochujang marinade. A weeknight Korean home-cooking staple that forgives beginners and rewards a hot pan.",
@@ -135,7 +135,7 @@
     {
       "id": "step-1",
       "order": 0,
-      "instruction": "Make the marinade: in a large bowl, whisk together the gochujang, soy sauce, honey, sesame oil, garlic, ginger and rice vinegar until smooth.",
+      "instruction": "Make the marinade: in a large bowl, whisk together the gochujang, soy sauce, honey, sesame oil, garlic, ginger and rice vinegar until smooth. Spoon 3 tablespoons of it into a small bowl and set it aside for the glaze before any raw chicken goes near it.",
       "ingredient_refs": [
         "ing-2",
         "ing-3",
@@ -218,7 +218,7 @@
     {
       "id": "step-5",
       "order": 4,
-      "instruction": "Flip each piece and cook 5 to 6 minutes more, spooning any marinade left in the bowl over the chicken so it reduces into a glaze.",
+      "instruction": "Flip each piece and cook 5 to 6 minutes more, spooning the reserved marinade over the chicken so it reduces into a glaze. Discard the marinade the raw chicken sat in.",
       "ingredient_refs": [
         "ing-1"
       ],
@@ -228,7 +228,8 @@
         "An instant-read thermometer reads 165°F (74°C) in the thickest piece"
       ],
       "warnings": [
-        "Chicken is done only when an instant-read thermometer reads 165°F (74°C) in the thickest piece. Do not judge doneness by color alone."
+        "Chicken is done only when an instant-read thermometer reads 165°F (74°C) in the thickest piece. Do not judge doneness by color alone.",
+        "Use only the marinade you set aside before the raw chicken went in. Marinade that touched raw poultry must be discarded, or boiled for at least 1 minute before it is used."
       ],
       "creator_note": null,
       "source_clip_id": null,

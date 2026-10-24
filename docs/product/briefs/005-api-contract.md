@@ -12,7 +12,8 @@ resources return identical 404s for foreign and missing ids. Additive to Slices 
 
 ```jsonc
 // Preferences
-{"allergies": ["peanut", "shellfish"], "avoid": ["cilantro"], "updated_at": "iso|null"}
+{"allergies": ["peanut", "shellfish"], "avoid": ["cilantro"], "updated_at": "iso|null",
+ "unrecognized": ["dragon fruit"]}   // entries that map to no allergen class or dictionary food
 ```
 Entries are short free text (≤ 60 chars, ≤ 30 each), normalised server-side against the ingredient
 dictionary and its allergen flags (`"peanuts"` → `peanut`; `"tree nuts"` covers almond, walnut, …).
@@ -71,7 +72,9 @@ pantry > preference > creativity):
     {"id": "uuid", "ingredient_ref": "ing-3", "original": "mirin",
      "replacement": "rice vinegar + a pinch of sugar", "ratio_or_amount": "...",
      "source": "rule|ai", "label": "Common swap|AI suggested adaptation",
-     "reason": "mirin unavailable", "approved_at": "iso"}
+     "reason": "mirin unavailable", "approved_at": "iso",
+     "allergy_warning": "string|null", "risks": ["..."],   // from the suggestion, or computed for free-form
+     "conflicts_with_allergies": false}                     // re-checked on every read
   ],
   "steps": [                                       // the session's view of each step
     {"step_id": "step-2", "order": 1,
@@ -99,6 +102,13 @@ pantry > preference > creativity):
 | DELETE | `/sessions/{id}` | → 204 (PRIV-02; events, messages, timers, notes cascade) |
 
 `SessionSummary` = `{id, recipe_version_id, recipe_id, title, status, step_index, steps_count, updated_at}`.
+
+Limits (security review, brief 005):
+- **Open sessions:** at most 3 open (`created|active|paused`) sessions per user; a 4th `POST /sessions`
+  → **409 `STATE_CONFLICT`** with `details.open_session_ids` (newest first) so the app can offer
+  to resume or abandon one.
+- **Session creation:** at most 30 new sessions per user per hour → **429 `RATE_LIMITED`**
+  (counted in a durable ledger; deleting sessions does not refund it).
 
 ### Commands (§11.1)
 
@@ -152,11 +162,18 @@ pantry > preference > creativity):
 - Mock coach: answers from the current step's instruction, cues, warnings and creator notes; food
   safety questions ("is this chicken done?") always return a thermometer/verified-guidance notice
   and never certify doneness.
-- `query` ≤ 500 chars; 60 asks per session per hour → 429.
+- `query` ≤ 500 chars. Ask limits: **120 asks per user per hour across all sessions** (durable ledger; new or deleted sessions never reset it) and 60 per session per hour → **429 `RATE_LIMITED`**.
 
 ## Private variation (COOK-08)
 
-`GET /recipe-versions/{id}/my-variation` → `{"adaptations": [...], "saved_at": "iso"}` or 404.
+`GET /recipe-versions/{id}/my-variation` → `{"adaptations": [...], "saved_at": "iso", "recipe_version_id": "uuid"}`
+or 404. Each `adaptations` element is exactly the Session adaptation shape
+`{id, ingredient_ref, original, replacement, ratio_or_amount, source, label, reason, approved_at}`;
+only swaps whose ingredient (same id and name) still exists in the requested version are returned.
+`POST /sessions` accepts them back as `{ingredient_ref, replacement, ratio_or_amount, source, reason}`,
+re-validated against the version and the caller's current allergies. `complete` with
+`save_changes: true` but no active swaps leaves any existing variation untouched
+(`saved_changes: false`).
 `DELETE /recipe-versions/{id}/my-variation` → 204. The fit/start screen may offer "Use my changes
 from last time", which sends those adaptations in `POST /sessions`.
 
@@ -164,3 +181,102 @@ from last time", which sends those adaptations in `POST /sessions`.
 
 `GET /recipe-versions/{id}` and fit/substitution calls are also allowed when the caller owns a
 session pinning that version (the Slice 1 TODO).
+
+## Notes (backend, brief 005)
+
+- UUIDs are accepted in any case (iOS sends uppercase) in paths and bodies; responses use lowercase.
+- `approve_adaptation` for an ingredient that already has an active swap replaces it (the old one is
+  reverted in the same command). An allergy conflict or a not-recommended structural swap → 422.
+- `cancel_timer` on an unknown timer → 404; on an already cancelled timer → 409 `INVALID_TRANSITION`.
+  `revert_adaptation` on an unknown id → 404; already reverted → 409 `INVALID_TRANSITION`.
+- `GET /sessions` without `status` lists all of the caller's sessions (newest first, max 50).
+
+## Clarifications (fix round)
+
+- **Preferences:** entries are parsed (split on commas / "and"; "allergic to", "no", "-free",
+  "intolerant" stripped; "lactose intolerant" → `milk`, "gluten free" → `gluten`, "finfish" →
+  `fish`). The response gains `unrecognized`: stored entries that map to neither an allergen class
+  nor a dictionary food. They are still stored and matched word by word; the app should ask the
+  user to check them.
+- **Allergy matching is conservative:** "free-from" claims never clear an allergen ("gluten-free
+  spaghetti" still conflicts with a wheat/gluten allergy), "may contain" counts as contains
+  (tamari → wheat, chili crisp → peanut), bare "nuts" means tree nuts and peanut. Foods with no
+  vetted record (sherry, pecorino, sriracha, …) get "We don't know what X contains" in
+  `allergy_warning` for any user with allergies.
+- **Doneness / safe-to-eat and raw-tasting questions** (DECISIONS #15) are answered from a fixed
+  template and the model is not called: `answer_text` = "The recipe says (step N): <success cues>.
+  My suggestion: <notice> I can't tell from a description or photo whether the food has cooked
+  through."; `safety_notice` = the thermometer notice (USDA safe minimum internal temperatures),
+  `uncertainty: "high"`, `proposed_action: null`. With a high-risk food in the step or recipe,
+  "ready", "can I eat / serve it", "finished", "off the heat", "long enough", "medium rare" etc.
+  all count.
+- **`proposed_action` arguments** come only from the user's words (step number, duration) or the
+  current step's `suggested_timer`, never from the model.
+- **Session adaptations** carry `allergy_warning` and `risks` (copied from the suggestion on
+  approve; computed the same way for free-form swaps, including the unknown-food label check) and `conflicts_with_allergies` (re-checked on every read;
+  such swaps are never saved by `save_changes`). The same fields appear in `my-variation`.
+- **Free-form adaptations** (`{ingredient_ref, replacement, …}`) are labelled `source: "rule"` /
+  "Common swap" only when the replacement is a vetted seed suggestion for that ingredient;
+  otherwise `source` is forced to `"ai"`. They go through the same blockers as suggestions
+  (allergy, creator "do not substitute" warning or creator note, seed no-swap / never list,
+  structural rules) → 422.
+- **`POST /sessions/{id}/notes`** accepts an optional `Idempotency-Key`: a retry with the same key
+  returns the same 201 note (no second row); the same key with a different text → 409
+  `STATE_CONFLICT`. Without the header, behaviour is unchanged.
+- **Limits:** `POST /substitutions/suggest` → 429 `RATE_LIMITED` after 60 advisor calls per user
+  per hour (rule-only answers don't count); at most 200 live suggestions per user (older ones are
+  dropped, so an old `suggestion_id` may 422). Commands → 429 after 600 per session per hour;
+  `metadata` string values ≤ 200 chars.
+- **Replay window:** only the last 50 command responses per session are kept for replay; replaying
+  an older `Idempotency-Key` → 409 `STATE_CONFLICT` with `details.session` (latest).
+- **409 `INVALID_TRANSITION`** for an already reverted adaptation or an already cancelled timer
+  also carries `details.session`.
+- **Seeded recipe v2:** the gochujang chicken fixture now reserves marinade before the raw chicken
+  goes in (food-safety fix); the seed publishes it as version 2. Sessions pinned to v1 stay on v1.
+
+### Fix round 2
+
+- **Every model answer is post-filtered:** any sentence pairing a doneness / safety / readiness
+  term with an affirmative or verdict word is dropped (a deferral to a thermometer in the same
+  sentence does not save it); at a step or recipe with a high-risk food a bare or leading "Yes!"
+  is dropped too. Anything dropped, or any safety term in the question or answer, attaches the
+  thermometer notice; an answer emptied by the filter falls back to the doneness template.
+- **Safe-temperature questions** ("what is the safe temperature") are answered from our own
+  verified table (USDA safe minimum internal temperatures), never from the model.
+- **Doneness detection:** a strict word always wins; the definition exemption covers only
+  "what does <ready/serve/set/…> mean"-style queries without a high-risk food; navigation never
+  suppresses it ("move on, is the chicken ready" → template).
+- **Raw tasting** also looks at the recipe's ingredient names and refuses "bite / dip / lick /
+  sample" of a marinade, batter or dough.
+- **"<allergen>-free" claims flag that allergen** ("milk-free chocolate" → milk, "dairy-free
+  butter" → milk). New aliases: arachis oil (peanut), gomasio (sesame), frangelico (tree nut),
+  pad thai sauce (peanut, fish, shellfish), lecithin (soy, label check), nuoc cham (fish).
+- **`never` list:** exact names for vetted rule candidates; phrase matching for everything else
+  ("gochugaru flakes", "extra gochugaru" → 422 / never offered).
+- **Seed:** a fixture that differs from its latest published version with no history file makes
+  `make seed` log a warning and exit non-zero; published versions are never rewritten.
+- **Migrations:** 0004 is unchanged from the pushed version; the adaptation warning and note
+  idempotency columns are in 0005.
+
+### Fix round 3
+
+- **Preferences parsing** also strips "I'm / severe / mild / anaphylactic (to) / allergic to /
+  intolerant (to) / allergy / sensitivity", splits on "or", and adds parenthetical contents as
+  entries ("shellfish allergy (shrimp)" → shellfish, shrimp). After splitting, each list holds at
+  most **60** foods; more → 422 `VALIDATION_ERROR` naming the field. First-time saves are an
+  upsert, so concurrent PUTs never conflict.
+- **Unrecognised entries fail closed:** each meaningful word matches on its own anywhere in a
+  candidate. New dictionary entries: cashew, pistachio (tree nut), coconut, oats (wheat:
+  cross-contact), sulfites (new `sulfites` class; wine and sherry carry it).
+- **Structural (not recommended) swaps** also cover setting agents (gelatin, agar, pectin;
+  cornstarch used to set), preservation recipes identified anywhere in the recipe (title, steps,
+  notes: pickled, kimchi, sauerkraut, jam, jerky, confit, brine, cured, fermented…) where any
+  acid / salt / sugar / brine / fish sauce / soy sauce ingredient is structural, and egg in raw or
+  structural uses (custard, carbonara, curd, buttercream, royal icing, soft-boiled, runny,
+  sunny-side, tartare, cookie dough, Caesar, aioli, soufflé, chiffon, macaron, meringue, whipped
+  to peaks), including when only the title says so.
+- **Adapted step text:** a mention that is part of another food ("chicken stock", "egg noodles",
+  "garlic powder") is never rewritten; a stated amount ("2 tbsp of the mirin") becomes the swap's
+  `ratio_or_amount` once when that reads as a plain amount, otherwise one annotation carries the
+  ratio; caution sentences ("Do not…", "Warning:…") are annotated, never rewritten.
+

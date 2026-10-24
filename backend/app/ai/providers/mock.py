@@ -21,10 +21,13 @@ from app.ai.providers.base import (
     PantryCandidate,
     PantryObservation,
     PantryObservationRequest,
+    ProposedAction,
     SubstitutionRequest,
     SubstitutionResponse,
     SubstitutionSuggestion,
 )
+from app.domains.safety.content import is_doneness_question
+from app.domains.sessions import intent
 
 PHOTO_FIXTURE_SUBDIR = "pantry_observations"
 DEFAULT_PHOTO_FIXTURE = "demo_counter"
@@ -171,7 +174,35 @@ _SPLIT_RE = re.compile(r",|;|\.(?=\s|$)|\band\b(?! a half)|\bplus\b|\balso\b|\bb
 _NUMERIC_RE = re.compile(r"^(\d+(?:\.\d+)?|\d+/\d+)$")
 _CORR = "@corr"
 _DROP_WORDS = frozenset({"some", "the", "of", "an", "a", "my", "our", "fresh-ish"})
-_SAFETY_WORDS = ("done", "safe", "cooked through", "raw", "undercooked", "temperature", "pink")
+
+
+def _names_ingredient(query: str, name: str) -> bool:
+    words = [w for w in re.split(r"[^a-z]+", name.lower()) if len(w) > 2]
+    if not words:
+        return False
+    if re.search(rf"\b{re.escape(name.lower())}s?\b", query):
+        return True
+    return re.search(r"\b(how much|how many|amount of|quantity of)\b", query) is not None and (
+        re.search(rf"\b{re.escape(words[-1])}s?\b", query) is not None
+    )
+
+
+def _proposal(query: str, request: CoachRequest) -> ProposedAction | None:
+    asked = intent.intents(query)
+    if "jump_to_step" in asked:
+        return ProposedAction(command="jump_to_step", step_index=intent.jump_target(query))
+    if "start_timer" in asked:
+        step = request.current_step
+        seconds = intent.duration_seconds(query) or step.suggested_timer_seconds
+        if not seconds:
+            return None
+        label = step.suggested_timer_label or f"Step {step.order + 1}"
+        return ProposedAction(command="start_timer", timer_label=label, timer_seconds=seconds)
+    if "next" in asked:
+        return ProposedAction(command="next")
+    if "back" in asked:
+        return ProposedAction(command="back")
+    return None
 
 
 def _strip_leads(text: str) -> str:
@@ -448,32 +479,80 @@ class MockAIProvider:
 
     # CookingCoach
     async def answer(self, request: CoachRequest) -> CoachResponse:
+        """Grounded only in the packet. Recipe text is quoted as data; proposals come from the
+        user's own words, never from recipe text, and are never applied here."""
         step = request.current_step
-        parts = [f"The recipe says (step {step.order + 1}): {step.instruction}"]
-        if step.success_cues:
-            parts.append("Look for: " + "; ".join(step.success_cues) + ".")
-        grounding = [GroundingRef(type="recipe_step", id=step.id)]
-        if step.creator_note:
-            parts.append(f"Creator note: {step.creator_note}")
-            grounding.append(GroundingRef(type="creator_note", id=step.id))
+        query = request.query.lower()
+        grounding: list[GroundingRef] = []
+        said: list[str] = []
+        mine: list[str] = []
+
+        asked = [i for i in request.ingredient_items if _names_ingredient(query, i.name)]
+        swaps = {s.ingredient_id: s for s in request.approved_substitutions}
+        if asked:
+            for item in asked:
+                amount = f"{item.amount} " if item.amount else ""
+                said.append(f"The recipe says: {amount}{item.name}.")
+                grounding.append(GroundingRef(type="ingredient", id=item.id))
+                swap = swaps.get(item.id)
+                if swap is not None:
+                    ratio = f" ({swap.ratio_or_amount})" if swap.ratio_or_amount else ""
+                    mine.append(f"You approved {swap.replacement}{ratio} instead.")
+                    if swap.adaptation_id:
+                        grounding.append(GroundingRef(type="adaptation", id=swap.adaptation_id))
+        else:
+            said.append(f"The recipe says (step {step.order + 1}): {step.instruction}")
+            grounding.append(GroundingRef(type="recipe_step", id=step.id))
+            if step.success_cues:
+                said.append("Look for: " + "; ".join(step.success_cues) + ".")
+            if step.creator_note:
+                said.append(f"Creator note: {step.creator_note}")
+                grounding.append(GroundingRef(type="creator_note", id=step.id))
+            for ref in step.ingredient_refs:
+                swap = swaps.get(ref)
+                if swap is not None:
+                    mine.append(
+                        f"Your approved swap: use {swap.replacement} instead of "
+                        f"{swap.original or 'the original'}."
+                    )
+                    if swap.adaptation_id:
+                        grounding.append(GroundingRef(type="adaptation", id=swap.adaptation_id))
         if request.visual_observation_id:
             grounding.append(
                 GroundingRef(type="visual_observation", id=request.visual_observation_id)
             )
+
         safety_notice = step.warnings[0] if step.warnings else None
-        if any(word in request.query.lower() for word in _SAFETY_WORDS):
+        uncertainty = "low"
+        context = [step.instruction, *step.warnings, *(i.name for i in request.ingredient_items)]
+        doneness = is_doneness_question(request.query, context)
+        if doneness:
             safety_notice = (
                 "I can't confirm doneness or safety from a description or image. Check with an"
                 " instant-read thermometer against trusted guidance."
             )
+            uncertainty = "medium"
+            mine.append("Don't judge by colour alone; use a thermometer.")
+
+        action = None if doneness else _proposal(query, request)
+        if action is not None:
+            if action.command == "start_timer":
+                minutes = (action.timer_seconds or 0) / 60
+                mine.append(
+                    f"I can start a {action.timer_label} timer for {minutes:g} min if you confirm."
+                )
+            else:
+                mine.append("Tap to confirm when you're ready; I won't change the step myself.")
+        if not mine:
+            mine.append("Follow the step as written and check the cues before moving on.")
         return CoachResponse(
-            answer_text=" ".join(parts),
+            answer_text=" ".join([*said, "My suggestion: " + " ".join(mine)]),
             grounding=grounding,
             grounded_session_revision=request.session_revision,
-            uncertainty="low",
+            uncertainty=uncertainty,  # type: ignore[arg-type]
             safety_notice=safety_notice,
-            proposed_action=None,
-            requires_confirmation=False,
+            proposed_action=action,
+            requires_confirmation=action is not None,
         )
 
     # VisualObserver

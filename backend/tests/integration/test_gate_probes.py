@@ -171,12 +171,17 @@ async def test_published_version_content_untouched_after_reseed(db_session: Asyn
     await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
     await db_session.execute(text("update recipe_versions set ingredient_json='[]'::jsonb"))
     await db_session.commit()
-    again = await seed_fixtures(db_session, FIXTURES_DIR)
-    assert not any(r.created_version for r in again)
+    # Fix round 2: a fixture that differs from its latest version with no history file is a
+    # loud refusal (non-zero `make seed`), never a silent skip and never a rewrite.
+    from app.scripts.seed import SeedConflict
+
+    with pytest.raises(SeedConflict):
+        await seed_fixtures(db_session, FIXTURES_DIR)
     count, ing = (
         await db_session.execute(
             text("select count(*), max(ingredient_json::text) from recipe_versions")
         )
     ).one()
-    assert count == len(first) == 5 and ing == "[]"
+    # 5 recipes, 6 versions: gochujang has v1 (history) + v2 (brief 005 marinade fix).
+    assert len(first) == 5 and count == 6 and ing == "[]"
     assert datetime.now(UTC)

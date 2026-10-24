@@ -57,6 +57,13 @@ class StateConflict(AppError):
     status_code = 409
 
 
+class InvalidTransition(AppError):
+    """A cooking-session command the Step Oracle refuses in the current state (brief 005)."""
+
+    code = "INVALID_TRANSITION"
+    status_code = 409
+
+
 class RateLimited(AppError):
     code = "RATE_LIMITED"
     status_code = 429

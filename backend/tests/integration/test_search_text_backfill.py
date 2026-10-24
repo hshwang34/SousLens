@@ -42,7 +42,7 @@ async def test_backfill_sql_matches_python_for_every_seeded_fixture(
 ) -> None:
     results = {r.slug: str(r.version_id) for r in await seed_fixtures(db_session, FIXTURES_DIR)}
     by_version = await _sql_search_text(db_session)
-    assert len(by_version) == 5
+    assert len(by_version) == 6  # gochujang v1 + v2
     for fixture in load_fixtures(FIXTURES_DIR):
         stored, backfill = by_version[results[fixture.slug]]
         expected = search_text_for(

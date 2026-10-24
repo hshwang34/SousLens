@@ -6,6 +6,10 @@ the *only* code allowed to change ``status``/``step_index``/``revision``.
 
 States: ``created → active ↔ paused → completed | abandoned``.
 
+Overlay commands (``approve_adaptation``, ``revert_adaptation``, ``start_timer``,
+``cancel_timer``) are accepted in any non-terminal state: they bump ``revision`` and leave
+``status``/``step_index`` unchanged.
+
 Rules, in evaluation order:
 
 1. ``user_confirmed`` must be true for every command — model output is a proposal only
@@ -69,7 +73,23 @@ class CommandType(StrEnum):
     RESUME = "resume"
     COMPLETE = "complete"
     ABANDON = "abandon"
+    # Overlay commands (brief 005): allowed while created/active/paused, bump the revision,
+    # never touch status or step_index. The endpoint applies their side effect (the adaptation
+    # or timer row) only after the oracle accepted the command.
+    APPROVE_ADAPTATION = "approve_adaptation"
+    REVERT_ADAPTATION = "revert_adaptation"
+    START_TIMER = "start_timer"
+    CANCEL_TIMER = "cancel_timer"
 
+
+OVERLAY_COMMANDS = frozenset(
+    {
+        CommandType.APPROVE_ADAPTATION,
+        CommandType.REVERT_ADAPTATION,
+        CommandType.START_TIMER,
+        CommandType.CANCEL_TIMER,
+    }
+)
 
 TERMINAL_STATUSES = frozenset({SessionStatus.COMPLETED, SessionStatus.ABANDONED})
 
@@ -231,6 +251,19 @@ def _abandon(state: SessionState, command: Command) -> Result:
     return _bump(state, "session_abandoned", status=SessionStatus.ABANDONED)
 
 
+_OVERLAY_EVENTS = {
+    CommandType.APPROVE_ADAPTATION: "adaptation_approved",
+    CommandType.REVERT_ADAPTATION: "adaptation_reverted",
+    CommandType.START_TIMER: "timer_started",
+    CommandType.CANCEL_TIMER: "timer_cancelled",
+}
+
+
+def _overlay(state: SessionState, command: Command) -> Result:
+    # Terminal sessions were already refused in ``apply``; created/active/paused are allowed.
+    return _bump(state, _OVERLAY_EVENTS[command.command])
+
+
 _HANDLERS = {
     CommandType.START: _start,
     CommandType.NEXT: _next,
@@ -240,4 +273,5 @@ _HANDLERS = {
     CommandType.RESUME: _resume,
     CommandType.COMPLETE: _complete,
     CommandType.ABANDON: _abandon,
+    **{c: _overlay for c in OVERLAY_COMMANDS},
 }

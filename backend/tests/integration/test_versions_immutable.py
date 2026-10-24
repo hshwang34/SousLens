@@ -48,7 +48,7 @@ async def test_trigger_blocks_orm_update_and_delete(db_session: AsyncSession) ->
         await db_session.flush()
     await db_session.rollback()
     count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
-    assert count == 5
+    assert count == 6  # gochujang v1 + v2
 
 
 async def test_trigger_blocks_cascade_delete_from_recipe(db_session: AsyncSession) -> None:
@@ -91,7 +91,7 @@ async def test_truncate_is_blocked_even_with_cascade(db_session: AsyncSession) -
             await db_session.execute(text(sql))
         await db_session.rollback()
     count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()
-    assert count == 5
+    assert count == 6  # gochujang v1 + v2
 
 
 async def test_truncate_honours_the_operator_unlock(db_session: AsyncSession) -> None:

@@ -60,6 +60,7 @@ def test_ambiguity_links_point_at_real_entries() -> None:
 def test_allergen_flags_use_a_closed_vocabulary() -> None:
     allowed = {"egg", "milk", "wheat", "soy", "peanut", "tree_nut", "sesame", "fish", "shellfish"}
     allowed.add("mustard")
+    allowed.add("sulfite")  # brief 005 fix round 3: sulfites entry
     for entry in read_dictionary_file(FIXTURES_DIR).ingredients:
         assert set(entry.allergens) <= allowed, entry.canonical_name
 
