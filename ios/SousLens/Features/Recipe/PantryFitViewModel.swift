@@ -15,8 +15,12 @@ struct FitRowPresentation: Identifiable, Equatable {
     let isStale: Bool
     /// The matched pantry amount is a photo estimate → offer "Fix amount" instead.
     let hasEstimatedAmount: Bool
+    /// Brief 005: a substitution lookup is available (the screen has a cooking service).
+    let swapsEnabled: Bool
+    /// The swap the user approved for this line, if any (held on the fit screen, revertible).
+    var swap: ApprovedSwap?
 
-    init(item: FitItem, isStale: Bool, hasEstimatedAmount: Bool = false) {
+    init(item: FitItem, isStale: Bool, hasEstimatedAmount: Bool = false, swapsEnabled: Bool = false, swap: ApprovedSwap? = nil) {
         id = item.ingredientRef
         name = item.name
         status = item.status
@@ -27,20 +31,28 @@ struct FitRowPresentation: Identifiable, Equatable {
         pantryItemId = item.pantryItemId
         self.isStale = isStale
         self.hasEstimatedAmount = hasEstimatedAmount && item.pantryItemId != nil
+        self.swapsEnabled = swapsEnabled
+        self.swap = swap
     }
 
     /// Missing items can be added to the pantry from here.
     var canAddToPantry: Bool { status == .missing || status == .optionalMissing }
     var canConfirmStillHave: Bool { isStale && pantryItemId != nil && !hasEstimatedAmount }
     var canFixAmount: Bool { hasEstimatedAmount }
+    /// Required Missing and Uncertain lines can look for a swap (J3 step 4).
+    var canFindSwap: Bool { swapsEnabled && (status == .missing || status == .uncertain) }
 
     enum Action: String, CaseIterable {
+        case findSwap
+        case undoSwap
         case addToPantry
         case stillHaveIt
         case fixAmount
 
         var title: String {
             switch self {
+            case .findSwap: return "Find a swap"
+            case .undoSwap: return "Undo swap"
             case .addToPantry: return "Add to pantry"
             case .stillHaveIt: return "Still have it"
             case .fixAmount: return "Fix amount"
@@ -52,6 +64,11 @@ struct FitRowPresentation: Identifiable, Equatable {
     /// combined accessibility element never hides them.
     var actions: [Action] {
         var actions: [Action] = []
+        if swap != nil {
+            actions.append(.undoSwap)
+        } else if canFindSwap {
+            actions.append(.findSwap)
+        }
         if canAddToPantry { actions.append(.addToPantry) }
         if canFixAmount { actions.append(.fixAmount) }
         if canConfirmStillHave { actions.append(.stillHaveIt) }
@@ -70,6 +87,7 @@ struct FitRowPresentation: Identifiable, Equatable {
     var accessibilityLabel: String {
         var parts = [name, statusLabel, reason]
         if let requiredText { parts.append("Recipe needs \(requiredText)") }
+        if let swap { parts.append("Swap: \(swap.candidate), \(swap.label)") }
         if let conversionNote { parts.append(conversionNote) }
         return parts.joined(separator: ". ")
     }
@@ -124,13 +142,26 @@ final class PantryFitViewModel {
     private(set) var busyItemIds: Set<UUID> = []
 
     private let service: PantryService
+    private let cooking: CookingService?
     private let now: @MainActor () -> Date
     var onPantryChanged: (@MainActor () -> Void)?
 
-    init(recipeVersionId: UUID, recipeTitle: String, service: PantryService, now: @escaping @MainActor () -> Date = { Date() }) {
+    // Brief 005 — swaps held on this screen until Start cooking (SUB-03), keyed by ingredient_ref.
+    private(set) var approvedSwaps: [String: ApprovedSwap] = [:]
+    /// The user's saved private variation for this version ("Use my changes from last time").
+    private(set) var variation: PrivateVariation?
+    /// Start cooking, including the "unfinished cooks" (409) and rate-limit (429) paths.
+    let starter: SessionStarter?
+    var isStarting: Bool { starter?.isStarting ?? false }
+    var startError: String? { starter?.errorMessage }
+
+    init(recipeVersionId: UUID, recipeTitle: String, service: PantryService, cooking: CookingService? = nil,
+         now: @escaping @MainActor () -> Date = { Date() }) {
         self.recipeVersionId = recipeVersionId
         self.recipeTitle = recipeTitle
         self.service = service
+        self.cooking = cooking
+        starter = cooking.map { SessionStarter(service: $0) }
         self.now = now
     }
 
@@ -220,7 +251,9 @@ final class PantryFitViewModel {
             fit.items.filter(predicate).map { item in
                 FitRowPresentation(item: item,
                                    isStale: item.pantryItemId.map(staleIds.contains) ?? false,
-                                   hasEstimatedAmount: item.pantryItemId.map(estimatedIds.contains) ?? false)
+                                   hasEstimatedAmount: item.pantryItemId.map(estimatedIds.contains) ?? false,
+                                   swapsEnabled: cooking != nil && !item.optional,
+                                   swap: approvedSwaps[item.ingredientRef])
             }
         }
         let all: [FitSection] = [
@@ -259,6 +292,58 @@ final class PantryFitViewModel {
 
     func addForm(for row: FitRowPresentation) -> PantryItemForm {
         PantryItemForm(name: row.name)
+    }
+
+    // MARK: Swaps and Start cooking (brief 005)
+
+    var canSwap: Bool { cooking != nil }
+
+    /// **Use this swap** in the sheet. Replaces any earlier swap for the same line.
+    func approve(_ swap: ApprovedSwap) {
+        approvedSwaps[swap.ingredientRef] = swap
+    }
+
+    /// **Undo swap** — nothing was sent anywhere, so this is purely local.
+    func revertSwap(ingredientRef: String) {
+        approvedSwaps[ingredientRef] = nil
+    }
+
+    var approvedSwapList: [ApprovedSwap] {
+        approvedSwaps.values.sorted { $0.ingredientName.localizedCaseInsensitiveCompare($1.ingredientName) == .orderedAscending }
+    }
+
+    /// Offer "Use my changes from last time" only when a variation exists and isn't applied yet.
+    var canUseVariation: Bool {
+        guard let variation, !variation.adaptations.isEmpty else { return false }
+        return variation.adaptations.contains { approvedSwaps[$0.ingredientRef]?.input != $0.input }
+    }
+
+    func loadVariation() async {
+        guard let cooking else { return }
+        // Best effort: no variation (404 → nil) or a failed read just hides the offer.
+        variation = try? await cooking.myVariation(recipeVersionId: recipeVersionId)
+    }
+
+    /// Explicit tap: fills the swaps from the saved variation (still revertible, still unsent).
+    func useVariation() {
+        guard let variation else { return }
+        let names = Dictionary((fit?.items ?? []).map { ($0.ingredientRef, $0.name) }, uniquingKeysWith: { first, _ in first })
+        for adaptation in variation.adaptations {
+            let name = names[adaptation.ingredientRef] ?? adaptation.original ?? adaptation.ingredientRef
+            approvedSwaps[adaptation.ingredientRef] = ApprovedSwap(ingredientName: name, variation: adaptation)
+        }
+    }
+
+    /// **Start cooking**: `POST /sessions` pinning this version with the approved swaps. The
+    /// returned Session (status `created`) is started by the cooking screen on the same tap.
+    func startCooking(epoch: Int? = nil) async -> CookingSession? {
+        guard let starter else { return nil }
+        return await starter.start(recipeVersionId: recipeVersionId, adaptations: approvedSwapList.map(\.input), epoch: epoch)
+    }
+
+    /// Cautions by ingredient ref, handed to the cooking screen.
+    var swapCautions: [String: SwapCaution] {
+        approvedSwaps.mapValues(\.caution).filter { !$0.value.isEmpty }
     }
 
 }

@@ -197,6 +197,8 @@ final class APIClient: Sendable, RecipeService, AuthService {
         /// Sent with `body`. JSON unless a multipart upload says otherwise.
         var contentType = "application/json"
         var timeout: TimeInterval = 15
+        /// Extra request headers (brief 005: `Idempotency-Key` on session commands).
+        var headers: [String: String] = [:]
 
         static func get(_ path: String, query: [URLQueryItem] = []) -> Endpoint {
             Endpoint(method: "GET", path: path, query: query)
@@ -212,6 +214,10 @@ final class APIClient: Sendable, RecipeService, AuthService {
 
         static func delete(_ path: String) -> Endpoint {
             Endpoint(method: "DELETE", path: path)
+        }
+
+        static func put(_ path: String, body: Data?) -> Endpoint {
+            Endpoint(method: "PUT", path: path, body: body)
         }
 
         /// `multipart/form-data` POST (pantry photo). Uploads get a longer timeout (PRD §14: 15 s
@@ -301,6 +307,9 @@ final class APIClient: Sendable, RecipeService, AuthService {
         if let body = endpoint.body {
             request.httpBody = body
             request.setValue(endpoint.contentType, forHTTPHeaderField: "Content-Type")
+        }
+        for (name, value) in endpoint.headers {
+            request.setValue(value, forHTTPHeaderField: name)
         }
         if authenticated, let token = tokenProvider.currentToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

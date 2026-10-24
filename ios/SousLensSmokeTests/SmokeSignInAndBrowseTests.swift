@@ -10,6 +10,10 @@ import XCTest
 ///   ingredient / one step, publish (with confirmation), find it in Explore, save it, see it in Saved.
 /// - `testTypeIntoPantryAndCheckFit`: brief 004 — Pantry → Speak → Type instead → Find items →
 ///   review → Add, then the seeded recipe's Check my pantry shows the match and what's left.
+/// - `testSwapAndCookToCompletion`: brief 005 — swap a Missing line, Start cooking, Next through
+///   every step (adapted badge seen), ask the coach (step badge), Finish → Cooked it → Save my changes.
+/// - `testResumeAfterRelaunch`: brief 005 — Start cooking, Next twice, kill + relaunch, the resume
+///   banner says step 3 and reopens the cooking screen at step 3 (COOK-07).
 @MainActor
 final class SmokeSignInAndBrowseTests: XCTestCase {
     private let browseEmail = "smoke@souslens.dev"
@@ -180,6 +184,186 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         let leftover = collect(in: app, identifiers: ["fit.missing", "fit.uncertain"], matching: NSPredicate(value: true))
         XCTAssertFalse(leftover.isEmpty, "expected something Missing or Uncertain (soy sauce, garlic, …)")
         attach(app, "15-fit-scrolled")
+    }
+
+    // MARK: - Brief 005
+
+    func testSwapAndCookToCompletion() throws {
+        let app = try launchSignedIn(email: "smoke-cook-\(Int(Date().timeIntervalSince1970))@souslens.dev")
+        addToPantryByTyping(app, "3 tbsp gochujang, 2 lb chicken thighs")
+        openSeededRecipe(app)
+
+        // Check my pantry → Find a swap on a Missing line (rice vinegar is not in this pantry).
+        let check = app.buttons["recipe.checkPantry"]
+        scrollUntilHittable(check, in: app)
+        XCTAssertTrue(wait(for: check, enabled: true, timeout: 10))
+        check.tap()
+        XCTAssertTrue(app.staticTexts["fit.headline"].waitForExistence(timeout: 15), "Pantry fit did not load")
+        // Look the row up by ingredient name. Precondition: this pantry has only gochujang and
+        // chicken, so rice vinegar must be a Missing line.
+        let swapIngredient = "rice vinegar"
+        let missingRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == 'fit.missing' AND label CONTAINS[c] %@", swapIngredient)).firstMatch
+        scrollUntilHittable(missingRow, in: app)
+        guard missingRow.exists else {
+            XCTFail("PRECONDITION: “\(swapIngredient)” is not listed as Missing on Pantry fit. The pantry should hold only "
+                    + "“3 tbsp gochujang, 2 lb chicken thighs” (fresh account) and the seed recipe must still use rice vinegar.")
+            return
+        }
+        let findSwap = app.buttons.matching(NSPredicate(format: "identifier == 'fit.action.findSwap' AND label CONTAINS[c] %@", swapIngredient)).firstMatch
+        scrollUntilHittable(findSwap, in: app)
+        XCTAssertTrue(findSwap.exists, "PRECONDITION: the Missing “\(swapIngredient)” line has no Find a swap button")
+        findSwap.tap()
+        let use = app.buttons["swap.use"].firstMatch
+        XCTAssertTrue(use.waitForExistence(timeout: 20), "no swap suggestions for rice vinegar")
+        attach(app, "16-swaps")
+        scrollUntilHittable(use, in: app)
+        use.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["fit.swapSummary"].waitForExistence(timeout: 5), "approved swap not shown on the fit screen")
+        attach(app, "17-fit-with-swap")
+
+        // Start cooking with the swap.
+        let start = app.buttons["fit.startCooking"]
+        XCTAssertTrue(wait(for: start, enabled: true, timeout: 10))
+        start.tap()
+        let counter = app.staticTexts["cooking.stepCounter"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 15), "cooking screen did not open")
+        XCTAssertTrue(waitForLabel(counter, prefix: "Step 1 of", timeout: 15), "did not start at step 1: \(counter.label)")
+        attach(app, "18-cooking-step1")
+
+        // Next through every step; the adapted step shows its badge.
+        let next = app.buttons["cooking.next"]
+        var sawAdaptedBadge = false
+        var askedCoach = false
+        for _ in 0..<30 {
+            if app.descendants(matching: .any)["cooking.adaptedBadge"].exists { sawAdaptedBadge = true }
+            if !askedCoach {
+                askCoach(app)
+                askedCoach = true
+            }
+            XCTAssertTrue(wait(for: next, enabled: true, timeout: 10), "Next stayed disabled")
+            if next.label == "Finish" { break }
+            let before = counter.label
+            next.tap()
+            XCTAssertTrue(waitForLabelChange(counter, from: before, timeout: 10), "Next did not move the step (\(before))")
+        }
+        XCTAssertTrue(sawAdaptedBadge, "no step showed the Adapted badge")
+        attach(app, "19-last-step")
+
+        // Finish → Cooked it + Save my changes → Done.
+        next.tap()
+        let cooked = app.buttons["end.outcome.cooked"]
+        XCTAssertTrue(cooked.waitForExistence(timeout: 10), "session end did not open")
+        cooked.tap()
+        let save = app.switches["end.saveChanges"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "no Save my changes toggle (session has a swap)")
+        if (save.value as? String) != "1" { save.tap() }
+        attach(app, "20-session-end")
+        let done = app.buttons["end.done"]
+        XCTAssertTrue(wait(for: done, enabled: true, timeout: 5))
+        done.tap()
+        XCTAssertTrue(counter.waitForNonExistence(timeout: 15), "cooking screen stayed open after Done")
+        XCTAssertFalse(app.buttons["resume.pill"].exists, "a completed session must not offer resume")
+        attach(app, "21-done")
+    }
+
+    func testResumeAfterRelaunch() throws {
+        let app = try launchSignedIn(email: "smoke-resume-\(Int(Date().timeIntervalSince1970))@souslens.dev")
+        openSeededRecipe(app)
+        let start = app.buttons["recipe.startCooking"]
+        scrollUntilHittable(start, in: app)
+        XCTAssertTrue(wait(for: start, enabled: true, timeout: 10))
+        start.tap()
+        let counter = app.staticTexts["cooking.stepCounter"]
+        XCTAssertTrue(counter.waitForExistence(timeout: 15), "cooking screen did not open")
+        XCTAssertTrue(waitForLabel(counter, prefix: "Step 1 of", timeout: 15))
+        let next = app.buttons["cooking.next"]
+        for expected in ["Step 2 of", "Step 3 of"] {
+            XCTAssertTrue(wait(for: next, enabled: true, timeout: 10))
+            next.tap()
+            XCTAssertTrue(waitForLabel(counter, prefix: expected, timeout: 10), "expected \(expected), got \(counter.label)")
+        }
+        attach(app, "22-step3-before-kill")
+
+        // Kill and relaunch with the SAME launch arguments minus the fresh-install reset flag
+        // (`-auth.hasLaunched NO` would wipe the token and the session with it).
+        app.terminate()
+        var arguments = app.launchArguments
+        if let reset = arguments.firstIndex(of: "-auth.hasLaunched") {
+            arguments.removeSubrange(reset...min(reset + 1, arguments.count - 1))
+        }
+        XCTAssertFalse(arguments.contains("-auth.hasLaunched"), "relaunch must not take the fresh-install path")
+        XCTAssertTrue(arguments.contains("-serverBaseURL"), "relaunch keeps the server address")
+        app.launchArguments = arguments
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 15),
+                      "relaunch landed on sign-in: the session was not kept (fresh-install path?)")
+        XCTAssertFalse(app.buttons["Continue"].exists, "relaunch shows the sign-in screen")
+        let banner = app.buttons["resume.banner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 20), "no resume banner after relaunch")
+        XCTAssertTrue(banner.label.contains("Step 3"), "banner says \(banner.label)")
+        attach(app, "23-resume-banner")
+        banner.tap()
+        XCTAssertTrue(counter.waitForExistence(timeout: 15), "banner did not reopen the cooking screen")
+        XCTAssertTrue(waitForLabel(counter, prefix: "Step 3 of", timeout: 15), "reopened at \(counter.label), not step 3")
+        attach(app, "24-resumed-step3")
+    }
+
+    /// Cooking screen → Ask → "what does this step mean?" → an answer with a step badge → Done.
+    private func askCoach(_ app: XCUIApplication) {
+        app.buttons["cooking.ask"].tap()
+        let field = app.descendants(matching: .any)["assistant.query"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "assistant drawer did not open")
+        type("what does this step mean?", into: field, in: app)
+        app.buttons["assistant.send"].tap()
+        let stepBadge = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'assistant.badge' AND label BEGINSWITH 'Source: Step'")).firstMatch
+        XCTAssertTrue(stepBadge.waitForExistence(timeout: 20), "answer had no step badge")
+        attach(app, "assistant-answer")
+        app.buttons["assistant.dismiss"].tap()
+        XCTAssertTrue(app.buttons["cooking.next"].waitForExistence(timeout: 5))
+    }
+
+    /// Pantry → Speak → Type instead → Find items → Confirm.
+    private func addToPantryByTyping(_ app: XCUIApplication, _ text: String) {
+        app.tabBars.buttons["Pantry"].tap()
+        let speak = app.buttons["pantry.speak"]
+        XCTAssertTrue(speak.waitForExistence(timeout: 10), "Pantry has no Speak button")
+        speak.tap()
+        let typeInstead = app.buttons["speak.typeInstead"]
+        if typeInstead.waitForExistence(timeout: 3) { typeInstead.tap() }
+        let transcript = app.descendants(matching: .any)["speak.transcript"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "no transcript field")
+        type(text, into: transcript, in: app)
+        let findItems = app.buttons["speak.findItems"]
+        XCTAssertTrue(wait(for: findItems, enabled: true, timeout: 5))
+        findItems.tap()
+        let confirm = app.buttons["review.confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 15), "Scan review did not open")
+        for merge in app.buttons.matching(identifier: "review.merge").allElementsBoundByIndex where merge.isHittable {
+            merge.tap()
+        }
+        scrollUntilHittable(confirm, in: app)
+        XCTAssertTrue(wait(for: confirm, enabled: true, timeout: 5), "Confirm stayed disabled")
+        confirm.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "pantry.row").firstMatch.waitForExistence(timeout: 15),
+                      "pantry did not list the added items")
+    }
+
+    private func openSeededRecipe(_ app: XCUIApplication) {
+        searchExplore(app, for: "Gochujang")
+        let card = app.staticTexts["Gochujang Chicken Thighs"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "Explore did not list the seeded recipe")
+        card.tap()
+    }
+
+    private func waitForLabel(_ element: XCUIElement, prefix: String, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label BEGINSWITH %@", prefix), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForLabelChange(_ element: XCUIElement, from old: String, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", old), object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
     // MARK: - Helpers
