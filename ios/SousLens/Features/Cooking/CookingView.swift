@@ -139,15 +139,10 @@ struct CookingView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !layout.controlsScrollWithContent {
+                    // The inset is the controls' measured height, so the step's last line can always
+                    // scroll fully above them; the scrim keeps text from reading through the glass.
                     controls(model)
-                        .background(alignment: .bottom) {
-                            // A soft fade so step text never reads through the gaps between controls.
-                            LinearGradient(stops: [.init(color: SLColor.background.opacity(0), location: 0),
-                                                   .init(color: SLColor.background, location: 0.3)],
-                                           startPoint: .top, endPoint: .bottom)
-                                .ignoresSafeArea(edges: .bottom)
-                                .allowsHitTesting(false)
-                        }
+                        .bottomBarScrim()
                 }
             }
         }
@@ -835,6 +830,9 @@ struct CookingButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let label = configuration.label
             .font(.system(.title3, design: .default, weight: .bold))
+            // "Back" must never break mid-word at accessibility sizes.
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .frame(maxWidth: .infinity, minHeight: Metrics.cookingControl)
             .padding(.horizontal, Spacing.md)
             .contentShape(Capsule())

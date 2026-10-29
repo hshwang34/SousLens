@@ -86,25 +86,42 @@ final class ExploreFitLoader {
         self.fit = fit
     }
 
-    /// Refetches only when the cards or the pantry changed.
+    /// At most this many fit requests in flight at once.
+    nonisolated static let maxConcurrent = 6
+
+    /// Refetches only when the cards or the pantry changed. A load that was cancelled (the user
+    /// opened a recipe mid-load) or where every fit failed doesn't count as loaded, so the next
+    /// call retries instead of keeping empty chips.
     func load(versionIds: [UUID], pantryRevision: Int) async {
         let key = "\(pantryRevision):" + versionIds.map(\.uuidString).joined(separator: ",")
         guard key != loadedKey, !versionIds.isEmpty else { return }
         loadedKey = key
         let fit = self.fit
+        let ids = Array(Set(versionIds))
         var results: [UUID: CardFitSummary] = [:]
         await withTaskGroup(of: (UUID, CardFitSummary?).self) { group in
-            for id in Set(versionIds) {
+            var next = 0
+            func addNext() {
+                guard next < ids.count else { return }
+                let id = ids[next]
+                next += 1
                 group.addTask {
                     let summary = try? await fit(id)
                     return (id, summary.map(CardFitSummary.init(fit:)))
                 }
             }
+            for _ in 0..<min(Self.maxConcurrent, ids.count) { addNext() }
             for await (id, summary) in group {
                 if let summary { results[id] = summary }
+                if !Task.isCancelled { addNext() }
             }
         }
         guard key == loadedKey else { return }
+        guard !Task.isCancelled else {
+            loadedKey = nil
+            return
+        }
+        if results.isEmpty { loadedKey = nil }
         fits = results
     }
 }

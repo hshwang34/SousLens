@@ -128,6 +128,58 @@ final class ExploreFitTests: XCTestCase {
         XCTAssertEqual(calls.value, 4, "pantry changed: refetch")
     }
 
+    func testCancelledLoadRetriesOnTheNextCall() async throws {
+        let fit = try PantryFixtures.decode(PantryFit.self, PantryFixtures.fitJSON)
+        let id = UUID()
+        let calls = CallCounter()
+        let loader = await ExploreFitLoader { _ in
+            // The first request hangs until cancelled; later ones answer at once.
+            if calls.incrementAndGet() == 1 { try await Task.sleep(for: .seconds(30)) }
+            return fit
+        }
+        // Cancelled mid-load (the user opened a recipe): nothing counts as loaded.
+        let task = Task { await loader.load(versionIds: [id], pantryRevision: 0) }
+        while calls.value == 0 { await Task.yield() }
+        task.cancel()
+        await task.value
+        let afterCancel = await loader.fits
+        XCTAssertTrue(afterCancel.isEmpty)
+
+        // Coming back with the same cards and pantry loads again instead of keeping empty chips.
+        await loader.load(versionIds: [id], pantryRevision: 0)
+        XCTAssertEqual(calls.value, 2, "same key after a cancel must refetch")
+        let loaded = await loader.fits
+        XCTAssertEqual(Set(loaded.keys), [id])
+    }
+
+    func testAllFailedLoadRetries() async throws {
+        let calls = CallCounter()
+        let loader = await ExploreFitLoader { _ in
+            calls.increment()
+            throw APIError.cancelled
+        }
+        let id = UUID()
+        await loader.load(versionIds: [id], pantryRevision: 0)
+        await loader.load(versionIds: [id], pantryRevision: 0)
+        XCTAssertEqual(calls.value, 2, "a load where every fit failed is retried")
+    }
+
+    func testFitLoaderCapsConcurrency() async throws {
+        let fit = try PantryFixtures.decode(PantryFit.self, PantryFixtures.fitJSON)
+        let gauge = ConcurrencyGauge()
+        let loader = await ExploreFitLoader { _ in
+            gauge.enter()
+            try await Task.sleep(for: .milliseconds(20))
+            gauge.leave()
+            return fit
+        }
+        let ids = (0..<20).map { _ in UUID() }
+        await loader.load(versionIds: ids, pantryRevision: 0)
+        let count = await loader.fits.count
+        XCTAssertEqual(count, 20)
+        XCTAssertLessThanOrEqual(gauge.peak, ExploreFitLoader.maxConcurrent)
+    }
+
     private func card(title: String, tags: [String]) -> RecipeCard {
         RecipeCard(recipeId: UUID(), slug: title.lowercased(), title: title, summary: nil, tags: tags,
                    creator: Creator(id: UUID(), displayName: "Test Cook"), servings: 2, prepMinutes: 5,
@@ -141,4 +193,14 @@ private final class CallCounter: @unchecked Sendable {
     private var count = 0
     var value: Int { lock.withLock { count } }
     func increment() { lock.withLock { count += 1 } }
+    func incrementAndGet() -> Int { lock.withLock { count += 1; return count } }
+}
+
+private final class ConcurrencyGauge: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = 0
+    private var maximum = 0
+    var peak: Int { lock.withLock { maximum } }
+    func enter() { lock.withLock { current += 1; maximum = max(maximum, current) } }
+    func leave() { lock.withLock { current -= 1 } }
 }

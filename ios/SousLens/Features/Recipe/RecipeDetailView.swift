@@ -111,11 +111,7 @@ struct RecipeDetailView: View {
                 primaryActions(model)
                     .padding(.horizontal, Spacing.screen)
                     .padding(.vertical, Spacing.sm)
-                    .background(alignment: .bottom) {
-                        LinearGradient(colors: [SLColor.background.opacity(0), SLColor.background],
-                                       startPoint: .top, endPoint: .center)
-                            .allowsHitTesting(false)
-                    }
+                    .bottomBarScrim()
             }
         }
         .confirmationDialog("Unpublish this recipe?", isPresented: $showUnpublishConfirmation, titleVisibility: .visible) {

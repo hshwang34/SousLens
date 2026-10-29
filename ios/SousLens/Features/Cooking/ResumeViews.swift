@@ -42,7 +42,9 @@ struct ResumeBanner: View {
             .padding(.vertical, Spacing.sm)
             .foregroundStyle(SLColor.textPrimary)
             // Controls layer: a resume prompt, not content.
-            .adaptiveGlass(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), interactive: true)
+            // Not interactive: the banner holds two buttons, and interactive glass on the container
+            // can compete with their taps.
+            .adaptiveGlass(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
             .padding(.horizontal, Spacing.md)
         }
     }

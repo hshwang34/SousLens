@@ -61,6 +61,31 @@ struct AdaptiveGlassContainer<Content: View>: View {
     }
 }
 
+// MARK: - Bottom bars
+
+extension View {
+    /// Backing for a bar pinned with `safeAreaInset(edge: .bottom)` over scrolling content: a short
+    /// fade, then a solid paper surface under the bar itself. Content passing behind is never read
+    /// through glass, and the solid part takes the touches, so nothing under the bar can be tapped
+    /// by accident. The inset itself is the bar's measured height, so the last line of content can
+    /// always scroll fully above it.
+    func bottomBarScrim() -> some View {
+        background {
+            SLColor.background
+                .ignoresSafeArea(edges: .bottom)
+                .overlay(alignment: .top) {
+                    LinearGradient(colors: [SLColor.background.opacity(0), SLColor.background],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: Spacing.xl)
+                        .offset(y: -Spacing.xl)
+                        .allowsHitTesting(false)
+                }
+                .contentShape(Rectangle())
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // MARK: - Motion
 
 extension Animation {

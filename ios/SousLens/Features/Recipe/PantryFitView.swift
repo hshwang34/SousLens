@@ -210,7 +210,9 @@ struct PantryFitView: View {
         }
         .padding(.horizontal, Spacing.screen)
         .padding(.vertical, Spacing.sm)
-        .background(.regularMaterial)
+        // Solid, not material: swap cautions live in this bar, and rows passing behind it must
+        // not be tappable through it (the List's inset lets every row scroll fully above it).
+        .bottomBarScrim()
     }
 
     private func header(_ model: PantryFitViewModel) -> some View {
