@@ -40,8 +40,9 @@ struct ResumeBanner: View {
             }
             .padding(.horizontal, Spacing.md)
             .padding(.vertical, Spacing.sm)
-            .background(SLColor.surfaceRaised, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+            .foregroundStyle(SLColor.textPrimary)
+            // Controls layer: a resume prompt, not content.
+            .adaptiveGlass(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), interactive: true)
             .padding(.horizontal, Spacing.md)
         }
     }
@@ -53,9 +54,13 @@ struct ResumeBanner: View {
     }
 }
 
-/// Floating current-session entry while browsing (PRD §6).
+/// Current-session entry while browsing (PRD §6): the tab bar's bottom accessory on iOS 26.1+
+/// (the system draws the glass), its own floating glass pill elsewhere.
 struct CurrentSessionPill: View {
+    enum Style { case floating, accessory }
+
     let store: CookingSessionStore
+    var style: Style = .floating
 
     var body: some View {
         if let active = store.active {
@@ -63,20 +68,37 @@ struct CurrentSessionPill: View {
                 store.resume()
             } label: {
                 HStack(spacing: Spacing.sm) {
-                    Image(systemName: "flame.fill").accessibilityHidden(true)
+                    Image(systemName: "flame.fill")
+                        .foregroundStyle(SLColor.tomato)
+                        .accessibilityHidden(true)
                     Text(active.title).lineLimit(1)
-                    Text("· \(store.resumeStepText ?? "")").monospacedDigit()
+                    Text("· \(store.resumeStepText ?? "")")
+                        .font(SLFont.stepCounter)
+                        .foregroundStyle(SLColor.textSecondary)
+                        .lineLimit(1)
                 }
                 .font(SLFont.callout.weight(.semibold))
+                .foregroundStyle(SLColor.textPrimary)
                 .padding(.horizontal, Spacing.lg)
                 .frame(minHeight: Metrics.minTapTarget)
-                .foregroundStyle(Color.white)
-                .background(SLColor.accent, in: Capsule())
-                .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                .frame(maxWidth: style == .accessory ? .infinity : nil)
+                .contentShape(Capsule())
+                .modifier(PillBackground(style: style))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Continue cooking \(active.title), \(store.resumeStepText ?? "")")
             .accessibilityIdentifier("resume.pill")
+        }
+    }
+
+    private struct PillBackground: ViewModifier {
+        let style: Style
+
+        func body(content: Content) -> some View {
+            switch style {
+            case .floating: content.adaptiveGlass(interactive: true)
+            case .accessory: content
+            }
         }
     }
 }

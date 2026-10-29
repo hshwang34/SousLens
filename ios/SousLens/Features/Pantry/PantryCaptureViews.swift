@@ -44,7 +44,7 @@ struct SpeakCaptureView: View {
                     Task { await model.findItems() }
                 } label: {
                     if model.isSubmitting {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity)
+                        ProgressView().tint(SLColor.onAccent).frame(maxWidth: .infinity)
                     } else {
                         Text("Find items")
                     }
@@ -86,7 +86,7 @@ struct SpeakCaptureView: View {
                     .frame(width: 96, height: 96)
                 Image(systemName: model.isListening ? "waveform" : "mic.fill")
                     .font(.system(size: 36, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(model.isListening ? SLColor.onDanger : SLColor.onAccent)
                     .accessibilityHidden(true)
             }
             .scaleEffect(pressing ? 1.08 : 1)
@@ -266,7 +266,7 @@ struct ScanCaptureView: View {
             if model.cameraOn {
                 Label("Camera on", systemImage: "circle.fill")
                     .font(SLFont.caption)
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(SLColor.onDanger)
                     .padding(.horizontal, Spacing.sm)
                     .padding(.vertical, Spacing.xs)
                     .background(SLColor.danger, in: Capsule())
@@ -299,7 +299,7 @@ struct ScanCaptureView: View {
                     Task { await model.findItems() }
                 } label: {
                     if model.isSubmitting {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity)
+                        ProgressView().tint(SLColor.onAccent).frame(maxWidth: .infinity)
                     } else {
                         Text("Find items")
                     }

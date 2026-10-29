@@ -1,74 +1,139 @@
 import SwiftUI
 
-/// Explore list card. Shows title, creator, total time, and tags.
+/// Explore / Saved card (brief 006): a full-bleed cover with an optional glass pantry-fit chip,
+/// then the title in New York and one quiet metadata line. The card itself is content (solid);
+/// only the fit chip sits on glass, over a scrim so it stays legible on any photo.
 struct RecipeCardView: View {
     let card: RecipeCard
+    var fit: CardFitSummary? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            cover
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
+                RecipeCoverArt(url: card.coverImageURL, seed: card.recipeId)
+                    .aspectRatio(Metrics.cardAspect, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+                    .accessibilityHidden(true)
+                if let chip = fit?.chipText {
+                    LinearGradient(colors: [.clear, .black.opacity(0.35)], startPoint: .center, endPoint: .bottom)
+                        .accessibilityHidden(true)
+                    FitChip(text: chip, complete: fit?.hasEverything == true)
+                        .padding(Spacing.md)
+                }
+            }
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(card.title)
                     .font(SLFont.title3)
                     .foregroundStyle(SLColor.textPrimary)
                     .multilineTextAlignment(.leading)
-                Text("by \(card.creator.displayName)")
+                Text(metadataLine)
                     .font(SLFont.subheadline)
                     .foregroundStyle(SLColor.textSecondary)
+                    .multilineTextAlignment(.leading)
             }
-            HStack(spacing: Spacing.sm) {
-                if let time = RecipeFormatting.totalTime(prep: card.prepMinutes, cook: card.cookMinutes) {
-                    MetadataPill(text: time, systemImage: "clock", accessibilityLabel: "Total time \(time)")
-                }
-                MetadataPill(text: "Serves \(card.servings)", systemImage: "person.2")
-            }
-            if !card.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.xs) {
-                        ForEach(card.tags, id: \.self) { tag in
-                            MetadataPill(text: tag, style: .accent)
-                        }
-                    }
-                }
-                .accessibilityLabel("Tags: \(card.tags.joined(separator: ", "))")
-            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(Spacing.lg)
-        .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .strokeBorder(SLColor.separator, lineWidth: 1)
-        )
+        .background(SLColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the recipe")
     }
 
-    @ViewBuilder
-    private var cover: some View {
+    /// "by Min-ji Park · 40 min · Serves 4"
+    private var metadataLine: String {
+        var parts = ["by \(card.creator.displayName)"]
+        if let time = RecipeFormatting.totalTime(prep: card.prepMinutes, cook: card.cookMinutes) { parts.append(time) }
+        parts.append("Serves \(card.servings)")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// "You have 9 of 10" on a card cover. Glass (controls layer), over the card's scrim.
+struct FitChip: View {
+    let text: String
+    var complete = false
+
+    var body: some View {
+        Label(text, systemImage: complete ? "checkmark.circle.fill" : "basket")
+            .font(SLFont.caption.weight(.semibold))
+            .foregroundStyle(SLColor.textPrimary)
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.xs + 2)
+            .adaptiveGlass()
+    }
+}
+
+/// A recipe's cover photo, or a warm Mise gradient (picked from the recipe id) until it has one.
+struct RecipeCoverArt: View {
+    let url: URL?
+    let seed: UUID
+
+    var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                .fill(SLColor.accentSoft)
-            if let url = card.coverImageURL {
+            MiseArt.gradient(for: seed)
+            Image(systemName: "fork.knife")
+                .font(SLFont.glyph)
+                .foregroundStyle(.white.opacity(0.75))
+            if let url {
                 AsyncImage(url: url) { phase in
                     if case .success(let image) = phase {
                         image.resizable().scaledToFill()
-                    } else {
-                        placeholderGlyph
                     }
                 }
-            } else {
-                placeholderGlyph
             }
         }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-        .accessibilityHidden(true)
+    }
+}
+
+/// Decorative art. Not tokens: never used for text or backgrounds behind text.
+enum MiseArt {
+    private static let palettes: [[UInt32]] = [
+        [0xC9572B, 0xE8A04A, 0x6E8B3D],
+        [0x8B3A1E, 0xD27A3A],
+        [0x2F6B3A, 0x8DAA5B],
+        [0xB3401E, 0xE8A04A],
+        [0x6E8B3D, 0xC9A24A],
+    ]
+
+    static func gradient(for seed: UUID) -> LinearGradient {
+        let index = Int(seed.uuid.0) % palettes.count
+        return LinearGradient(colors: palettes[index].map(color), startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    private var placeholderGlyph: some View {
-        Image(systemName: "fork.knife")
-            .font(.system(size: 36, weight: .light))
-            .foregroundStyle(SLColor.accent)
+    private static func color(_ hex: UInt32) -> Color {
+        Color(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+    }
+}
+
+/// Loading placeholder with the card's shape. Breathes gently; still under Reduce Motion.
+struct RecipeCardSkeleton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(SLColor.surfaceRaised)
+                .aspectRatio(Metrics.cardAspect, contentMode: .fit)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Capsule().fill(SLColor.surfaceRaised).frame(width: 200, height: 14)
+                Capsule().fill(SLColor.surfaceRaised).frame(width: 140, height: 10)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.lg)
+        }
+        .background(SLColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .opacity(dim ? 0.55 : 1)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { dim = true }
+        }
+        .accessibilityHidden(true)
     }
 }
 

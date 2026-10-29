@@ -6,6 +6,7 @@ import SwiftUI
 struct RecipeDetailView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let recipeId: UUID
     var card: RecipeCard? = nil
@@ -76,7 +77,9 @@ struct RecipeDetailView: View {
                     prepMinutes: model.prepMinutes,
                     cookMinutes: model.cookMinutes,
                     servings: model.servings,
-                    coverImageURL: model.coverImageURL
+                    coverImageURL: model.coverImageURL,
+                    artSeed: recipeId,
+                    heroBleed: Spacing.screen
                 )
                 switch model.phase {
                 case .loading:
@@ -94,9 +97,26 @@ struct RecipeDetailView: View {
                     )
                 }
                 actions(model)
+                if dynamicTypeSize.isAccessibilitySize {
+                    // Accessibility sizes: the main actions scroll with the recipe instead of
+                    // pinning a bar that would cover half the screen.
+                    primaryActions(model)
+                }
             }
             .padding(.horizontal, Spacing.screen)
             .padding(.bottom, Spacing.xxl)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !dynamicTypeSize.isAccessibilitySize {
+                primaryActions(model)
+                    .padding(.horizontal, Spacing.screen)
+                    .padding(.vertical, Spacing.sm)
+                    .background(alignment: .bottom) {
+                        LinearGradient(colors: [SLColor.background.opacity(0), SLColor.background],
+                                       startPoint: .top, endPoint: .center)
+                            .allowsHitTesting(false)
+                    }
+            }
         }
         .confirmationDialog("Unpublish this recipe?", isPresented: $showUnpublishConfirmation, titleVisibility: .visible) {
             Button("Unpublish", role: .destructive) {
@@ -122,59 +142,91 @@ struct RecipeDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityLabel("Save failed: \(error)")
             }
-            Button {
-                Task { await model.toggleSave() }
-            } label: {
-                Label(model.isSaved ? "Unsave" : "Save", systemImage: model.isSaved ? "bookmark.fill" : "bookmark")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.sm) { saveButton(model, loaded: loaded); shareButton(model) }
+                VStack(spacing: Spacing.sm) { saveButton(model, loaded: loaded); shareButton(model) }
             }
-            .buttonStyle(SLButtonStyle(prominent: false))
-            .disabled(!loaded || model.isTogglingSave)
-            .slDisabledAppearance(!loaded)
-            .accessibilityIdentifier("recipe.save")
-            .accessibilityHint(model.isSaved ? "Removes this recipe from Saved" : "Adds this recipe to Saved")
-
-            ShareLink(item: model.shareURL, subject: Text(model.title), message: Text("\(model.title) on SousLens")) {
-                Label("Share", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(SLButtonStyle(prominent: false))
-            .accessibilityIdentifier("recipe.share")
 
             if isOwner {
                 ownerActions(model)
             }
+        }
+        .accessibilityElement(children: .contain)
+    }
 
-            Button {
-                showPantryFit = true
-            } label: {
-                Label("Check my pantry", systemImage: "basket")
-            }
-            .buttonStyle(SLButtonStyle(prominent: false))
-            .disabled(!loaded)
-            .slDisabledAppearance(!loaded)
-            .accessibilityIdentifier("recipe.checkPantry")
-            .accessibilityHint("Shows which ingredients you have, which to check, and which are missing")
+    /// Check my pantry + Start cooking: pinned above the tab bar so they're always in reach.
+    /// Controls layer: the buttons themselves are solid capsules; errors sit on a solid surface.
+    private func primaryActions(_ model: RecipeDetailViewModel) -> some View {
+        VStack(spacing: Spacing.sm) {
             if let startError = starter?.errorMessage {
                 Text(startError)
                     .font(SLFont.footnote)
                     .foregroundStyle(SLColor.danger)
+                    .padding(Spacing.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
             }
-            Button {
-                Task { await startCooking() }
-            } label: {
-                if starter?.isStarting == true {
-                    ProgressView().tint(.white)
-                } else {
-                    Label("Start cooking", systemImage: "flame")
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.sm) { checkPantryButton(model); startCookingButton(model) }
+                VStack(spacing: Spacing.sm) { checkPantryButton(model); startCookingButton(model) }
             }
-            .buttonStyle(SLButtonStyle(prominent: true))
-            .disabled(!loaded || starter?.isStarting == true)
-            .slDisabledAppearance(!loaded)
-            .accessibilityIdentifier("recipe.startCooking")
-            .accessibilityHint("Starts this version as written. Check my pantry first to swap missing ingredients.")
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private func checkPantryButton(_ model: RecipeDetailViewModel) -> some View {
+        let loaded = model.detail != nil
+        return Button {
+            showPantryFit = true
+        } label: {
+            Label("Check my pantry", systemImage: "basket")
+                .lineLimit(1)
+        }
+        .buttonStyle(SLButtonStyle(prominent: false))
+        .disabled(!loaded)
+        .slDisabledAppearance(!loaded)
+        .accessibilityIdentifier("recipe.checkPantry")
+        .accessibilityHint("Shows which ingredients you have, which to check, and which are missing")
+    }
+
+    private func startCookingButton(_ model: RecipeDetailViewModel) -> some View {
+        let loaded = model.detail != nil
+        return Button {
+            Task { await startCooking() }
+        } label: {
+            if starter?.isStarting == true {
+                ProgressView().tint(SLColor.onAccent)
+            } else {
+                Label("Start cooking", systemImage: "flame")
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(SLButtonStyle(prominent: true))
+        .disabled(!loaded || starter?.isStarting == true)
+        .slDisabledAppearance(!loaded)
+        .accessibilityIdentifier("recipe.startCooking")
+        .accessibilityHint("Starts this version as written. Check my pantry first to swap missing ingredients.")
+    }
+
+    private func saveButton(_ model: RecipeDetailViewModel, loaded: Bool) -> some View {
+        Button {
+            Task { await model.toggleSave() }
+        } label: {
+            Label(model.isSaved ? "Unsave" : "Save", systemImage: model.isSaved ? "bookmark.fill" : "bookmark")
+        }
+        .buttonStyle(SLButtonStyle(prominent: false))
+        .disabled(!loaded || model.isTogglingSave)
+        .slDisabledAppearance(!loaded)
+        .accessibilityIdentifier("recipe.save")
+        .accessibilityHint(model.isSaved ? "Removes this recipe from Saved" : "Adds this recipe to Saved")
+    }
+
+    private func shareButton(_ model: RecipeDetailViewModel) -> some View {
+        ShareLink(item: model.shareURL, subject: Text(model.title), message: Text("\(model.title) on SousLens")) {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .buttonStyle(SLButtonStyle(prominent: false))
+        .accessibilityIdentifier("recipe.share")
     }
 
     @ViewBuilder
@@ -256,7 +308,7 @@ struct RecipeDetailView: View {
         .foregroundStyle(SLColor.warning)
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SLColor.surfaceRaised, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }
@@ -271,49 +323,34 @@ struct RecipeHeaderView: View {
     let cookMinutes: Int?
     let servings: Int?
     let coverImageURL: URL?
+    /// Picks the placeholder gradient when there is no photo (the recipe id keeps it stable).
+    var artSeed: UUID? = nil
+    /// How far the hero bleeds past the parent's horizontal padding (full-bleed on detail).
+    var heroBleed: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.section) {
+        VStack(alignment: .leading, spacing: Spacing.xl) {
             hero
             header
         }
     }
 
     private var hero: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .fill(SLColor.accentSoft)
-            if let url = coverImageURL {
-                AsyncImage(url: url) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFill()
-                    } else {
-                        heroPlaceholder
-                    }
-                }
-            } else {
-                heroPlaceholder
-            }
-        }
-        .aspectRatio(Metrics.heroAspect, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .accessibilityLabel(coverImageURL == nil ? "No photo yet" : "Recipe photo")
+        RecipeCoverArt(url: coverImageURL, seed: artSeed ?? Self.fallbackSeed)
+            .aspectRatio(Metrics.heroAspect, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: heroBleed > 0 ? 0 : Radius.card, style: .continuous))
+            .padding(.horizontal, -heroBleed)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(coverImageURL == nil ? "No photo yet" : "Recipe photo")
     }
 
-    private var heroPlaceholder: some View {
-        VStack(spacing: Spacing.sm) {
-            Image(systemName: "fork.knife")
-                .font(.system(size: 48, weight: .light))
-            Text("No photo yet")
-                .font(SLFont.caption)
-        }
-        .foregroundStyle(SLColor.accent)
-    }
+    private static let fallbackSeed = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             Text(title)
-                .font(SLFont.title)
+                .font(SLFont.display)
                 .foregroundStyle(SLColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: Spacing.sm) {
@@ -337,17 +374,23 @@ struct RecipeHeaderView: View {
                     .font(SLFont.body)
                     .foregroundStyle(SLColor.textPrimary)
             }
-            HStack(spacing: Spacing.sm) {
-                if let prep = prepMinutes {
-                    MetadataPill(text: "Prep \(RecipeFormatting.minutes(prep))", systemImage: "knife")
-                }
-                if let cook = cookMinutes {
-                    MetadataPill(text: "Cook \(RecipeFormatting.minutes(cook))", systemImage: "flame")
-                }
-                if let servings {
-                    MetadataPill(text: "Serves \(servings)", systemImage: "person.2")
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Spacing.sm) { metadataPills }
+                VStack(alignment: .leading, spacing: Spacing.xs) { metadataPills }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var metadataPills: some View {
+        if let prep = prepMinutes {
+            MetadataPill(text: "Prep \(RecipeFormatting.minutes(prep))", systemImage: "knife")
+        }
+        if let cook = cookMinutes {
+            MetadataPill(text: "Cook \(RecipeFormatting.minutes(cook))", systemImage: "flame")
+        }
+        if let servings {
+            MetadataPill(text: "Serves \(servings)", systemImage: "person.2")
         }
     }
 }
@@ -430,7 +473,7 @@ struct RecipeDetailContent: View {
         .foregroundStyle(SLColor.warning)
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SLColor.surfaceRaised, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 
@@ -448,9 +491,9 @@ private struct IngredientRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
             Text(RecipeFormatting.quantity(ingredient.quantity, unit: ingredient.unit) ?? "—")
-                .font(SLFont.bodyEmphasis.monospacedDigit())
+                .font(SLFont.quantity)
                 .foregroundStyle(SLColor.accent)
-                .frame(minWidth: 56, alignment: .leading)
+                .frame(minWidth: 64, alignment: .leading)
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 HStack(spacing: Spacing.xs) {
                     Text(ingredient.name)
@@ -502,8 +545,8 @@ private struct StepRow: View {
         HStack(alignment: .top, spacing: Spacing.md) {
             Text(presentation.numberText)
                 .font(SLFont.numeral)
-                .foregroundStyle(Color.white)
-                .frame(width: 36, height: 36)
+                .foregroundStyle(SLColor.onAccent)
+                .frame(minWidth: 36, minHeight: 36)
                 .background(SLColor.accent, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.sm) {

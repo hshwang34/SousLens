@@ -98,16 +98,19 @@ struct CookingView: View {
     }
 
     private func ready(_ model: CookingViewModel) -> some View {
-        VStack(spacing: 0) {
+        let layout = CookingLayout.forSize(dynamicTypeSize)
+        return VStack(spacing: 0) {
             topBar(model)
             if model.isOffline || model.isProvisional {
                 OfflineBanner(model: model)
             }
-            // Regular sizes: the step scrolls above fixed controls. Accessibility sizes: everything,
-            // controls included, scrolls together so nothing is pushed off screen.
+            // Regular sizes: the step owns the screen and the controls float over it on glass.
+            // Accessibility sizes: everything, controls included, scrolls together so nothing is
+            // pushed off screen.
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
-                    StepContent(model: model, onRevert: { swapToRevert = $0 })
+                    SessionNotices(model: model, onRevert: { swapToRevert = $0 })
+                    StepPager(model: model)
                     if let suggestion = model.timerSuggestion, model.canSendCommands {
                         TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
                                             onStart: { Task { await model.startSuggestedTimer() } },
@@ -115,21 +118,43 @@ struct CookingView: View {
                     }
                     TimersList(model: model, onCancel: { timerToCancel = $0 })
                     if let error = model.errorMessage, !model.isOffline {
-                        Text(error)
+                        Label(error, systemImage: "exclamationmark.circle")
                             .font(SLFont.callout)
                             .foregroundStyle(SLColor.danger)
+                            .padding(Spacing.md)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                             .accessibilityIdentifier("cooking.error")
                     }
+                    Text("Look is coming with camera help")
+                        .font(SLFont.caption)
+                        .foregroundStyle(SLColor.textSecondary)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, Spacing.screen)
                 .padding(.vertical, Spacing.lg)
-                if CookingLayout.forSize(dynamicTypeSize).controlsScrollWithContent {
+                if layout.controlsScrollWithContent {
                     controls(model)
                 }
             }
-            if !CookingLayout.forSize(dynamicTypeSize).controlsScrollWithContent {
-                controls(model)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !layout.controlsScrollWithContent {
+                    controls(model)
+                        .background(alignment: .bottom) {
+                            // A soft fade so step text never reads through the gaps between controls.
+                            LinearGradient(stops: [.init(color: SLColor.background.opacity(0), location: 0),
+                                                   .init(color: SLColor.background, location: 0.3)],
+                                           startPoint: .top, endPoint: .bottom)
+                                .ignoresSafeArea(edges: .bottom)
+                                .allowsHitTesting(false)
+                        }
+                }
             }
+        }
+        // A light tap only once the server has confirmed the new step (the index is the server's).
+        .sensoryFeedback(trigger: model.session?.stepIndex) { old, new in
+            guard let old, let new, old != new else { return nil }
+            return .impact(weight: .light)
         }
         .overlay(alignment: .top) {
             if let toast = model.toast {
@@ -187,50 +212,59 @@ struct CookingView: View {
     // MARK: Top bar
 
     private func topBar(_ model: CookingViewModel) -> some View {
-        HStack(spacing: Spacing.md) {
-            Button {
-                model.stopSpeaking()
-                environment.cooking.closeCookingScreen()
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.title3.weight(.semibold))
-                    .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
-            }
-            .accessibilityLabel("Leave cooking screen")
-            .accessibilityHint("The session stays open; continue it from the banner")
-            .accessibilityIdentifier("cooking.close")
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(model.session?.recipe.title ?? "Cooking")
-                    .font(SLFont.headline)
-                    .lineLimit(1)
-                if let counter = model.stepCounterText {
-                    Text(counter)
-                        .font(SLFont.subheadline.monospacedDigit())
-                        .foregroundStyle(SLColor.textSecondary)
-                        .accessibilityIdentifier("cooking.stepCounter")
+        VStack(spacing: Spacing.sm) {
+            HStack(spacing: Spacing.md) {
+                Button {
+                    model.stopSpeaking()
+                    environment.cooking.closeCookingScreen()
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
+                        .adaptiveGlass(in: Circle(), interactive: true)
                 }
-            }
-            Spacer()
-            Menu {
-                Toggle("Read steps aloud", isOn: Binding(get: { model.readAloudEnabled }, set: { model.readAloudEnabled = $0 }))
-                if let adaptations = model.session?.adaptations, !adaptations.isEmpty {
-                    Section("Your swaps") {
-                        ForEach(adaptations) { swap in
-                            Button("Undo: \(swap.original) → \(swap.replacement)") { swapToRevert = swap }
-                                .disabled(!model.canSendCommands)
-                        }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Leave cooking screen")
+                .accessibilityHint("The session stays open; continue it from the banner")
+                .accessibilityIdentifier("cooking.close")
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.session?.recipe.title ?? "Cooking")
+                        .font(SLFont.headline)
+                        .lineLimit(1)
+                    if let counter = model.stepCounterText {
+                        Text(counter)
+                            .font(SLFont.stepCounter)
+                            .foregroundStyle(SLColor.textSecondary)
+                            .contentTransition(.numericText())
+                            .accessibilityIdentifier("cooking.stepCounter")
                     }
                 }
-                Button("Stop cooking…", systemImage: "xmark.octagon", role: .destructive) { confirmAbandon = true }
-                    .disabled(!model.canSendCommands)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title2)
-                    .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
+                Spacer()
+                Menu {
+                    Toggle("Read steps aloud", isOn: Binding(get: { model.readAloudEnabled }, set: { model.readAloudEnabled = $0 }))
+                    if let adaptations = model.session?.adaptations, !adaptations.isEmpty {
+                        Section("Your swaps") {
+                            ForEach(adaptations) { swap in
+                                Button("Undo: \(swap.original) → \(swap.replacement)") { swapToRevert = swap }
+                                    .disabled(!model.canSendCommands)
+                            }
+                        }
+                    }
+                    Button("Stop cooking…", systemImage: "xmark.octagon", role: .destructive) { confirmAbandon = true }
+                        .disabled(!model.canSendCommands)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: Metrics.minTapTarget, height: Metrics.minTapTarget)
+                        .adaptiveGlass(in: Circle(), interactive: true)
+                }
+                .accessibilityLabel("Cooking options")
+                .accessibilityIdentifier("cooking.menu")
             }
-            .accessibilityLabel("Cooking options")
-            .accessibilityIdentifier("cooking.menu")
+            if let session = model.session, session.stepsCount > 0 {
+                StepProgress(index: session.stepIndex, count: session.stepsCount)
+            }
         }
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.xs)
@@ -241,7 +275,7 @@ struct CookingView: View {
 
     private func controls(_ model: CookingViewModel) -> some View {
         let layout = CookingLayout.forSize(dynamicTypeSize)
-        return VStack(spacing: Spacing.md) {
+        return VStack(spacing: Spacing.sm) {
             if model.isNotStarted {
                 Button {
                     Task { await model.start() }
@@ -261,49 +295,47 @@ struct CookingView: View {
                 .disabled(!model.canSendCommands)
                 .accessibilityIdentifier("cooking.resume")
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.sm), count: layout.toolColumns),
-                      spacing: Spacing.sm) {
-                SmallControl(title: "Repeat", systemImage: "arrow.counterclockwise", identifier: "cooking.repeat") {
-                    Task { await model.repeatStep() }
-                }
-                .disabled(model.currentStep == nil || model.isNotStarted)
-                SmallControl(title: "Slower", systemImage: "tortoise", identifier: "cooking.slower") {
-                    Task { await model.slower() }
-                }
-                .disabled(model.currentStep == nil || model.isNotStarted)
-                SmallControl(title: "Ask", systemImage: "bubble.left.and.text.bubble.right", identifier: "cooking.ask") {
-                    showAssistant = true
-                }
-                .disabled(model.session == nil)
-                SmallControl(title: "Look", systemImage: "camera.viewfinder", identifier: "cooking.look") {}
-                    .disabled(true)
-                    .accessibilityHint("Coming with camera help")
-            }
-            Text("Look is coming with camera help")
-                .font(SLFont.caption)
-                .foregroundStyle(SLColor.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .accessibilityHidden(true)
-            if layout.stacksNavigation {
-                VStack(spacing: Spacing.sm) {
-                    nextButton(model)
-                    HStack(spacing: Spacing.sm) {
-                        backButton(model)
-                        pauseButton(model)
+            AdaptiveGlassContainer(spacing: Spacing.sm) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.sm), count: layout.toolColumns),
+                          spacing: Spacing.sm) {
+                    GlassTool(title: "Repeat", systemImage: "arrow.counterclockwise", identifier: "cooking.repeat") {
+                        Task { await model.repeatStep() }
                     }
+                    .disabled(model.currentStep == nil || model.isNotStarted)
+                    GlassTool(title: "Slower", systemImage: "tortoise", identifier: "cooking.slower") {
+                        Task { await model.slower() }
+                    }
+                    .disabled(model.currentStep == nil || model.isNotStarted)
+                    GlassTool(title: "Ask", systemImage: "bubble.left.and.text.bubble.right", identifier: "cooking.ask") {
+                        showAssistant = true
+                    }
+                    .disabled(model.session == nil)
+                    GlassTool(title: "Look", systemImage: "camera.viewfinder", identifier: "cooking.look") {}
+                        .disabled(true)
+                        .accessibilityHint("Coming with camera help")
                 }
-            } else {
-                HStack(spacing: Spacing.sm) {
-                    backButton(model)
-                    pauseButton(model).frame(maxWidth: 96)
-                    nextButton(model)
+            }
+            AdaptiveGlassContainer(spacing: Spacing.sm) {
+                if layout.stacksNavigation {
+                    VStack(spacing: Spacing.sm) {
+                        nextButton(model)
+                        HStack(spacing: Spacing.sm) {
+                            backButton(model)
+                            pauseButton(model)
+                        }
+                    }
+                } else {
+                    HStack(spacing: Spacing.sm) {
+                        backButton(model).frame(maxWidth: 120)
+                        pauseButton(model).frame(maxWidth: Metrics.cookingControl)
+                        nextButton(model)
+                    }
                 }
             }
         }
         .padding(.horizontal, Spacing.screen)
         .padding(.top, Spacing.md)
-        .padding(.bottom, Spacing.lg)
-        .background(SLColor.surface.ignoresSafeArea(edges: .bottom))
+        .padding(.bottom, Spacing.sm)
     }
 
     private func backButton(_ model: CookingViewModel) -> some View {
@@ -312,7 +344,7 @@ struct CookingView: View {
         } label: {
             Label("Back", systemImage: "chevron.left")
         }
-        .buttonStyle(CookingButtonStyle(kind: .secondary))
+        .buttonStyle(CookingButtonStyle(kind: .glass))
         .disabled(!model.canGoBack)
         .accessibilityIdentifier("cooking.back")
     }
@@ -325,7 +357,7 @@ struct CookingView: View {
             } label: {
                 Image(systemName: "pause.fill")
             }
-            .buttonStyle(CookingButtonStyle(kind: .secondary))
+            .buttonStyle(CookingButtonStyle(kind: .glass))
             .disabled(!model.canSendCommands)
             .accessibilityLabel("Pause")
             .accessibilityIdentifier("cooking.pause")
@@ -342,7 +374,7 @@ struct CookingView: View {
             }
         } label: {
             if model.isSending {
-                ProgressView().tint(.white)
+                ProgressView().tint(SLColor.onAccent)
             } else {
                 Label(model.nextTitle, systemImage: model.isLastStep ? "flag.checkered" : "chevron.right")
                     .labelStyle(TrailingIconLabelStyle())
@@ -357,39 +389,97 @@ struct CookingView: View {
 
 // MARK: - Step
 
-private struct StepContent: View {
+/// Session-wide notices above the step. They never move with the step transition, so an
+/// allergy conflict is never slid away or hidden by an animation. Always solid.
+private struct SessionNotices: View {
     let model: CookingViewModel
     let onRevert: (SessionAdaptation) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            if model.isPaused {
-                Label("Paused — your step and timers are kept", systemImage: "pause.circle.fill")
-                    .font(SLFont.headline)
-                    .foregroundStyle(SLColor.warning)
-                    .accessibilityIdentifier("cooking.pausedBanner")
-            }
-            if model.isNotStarted {
-                Text("Ready when you are. Tap Start to begin with step 1.")
-                    .font(SLFont.title3)
-                    .foregroundStyle(SLColor.textSecondary)
-            }
-            ForEach(model.conflictingAdaptations) { swap in
-                Button {
-                    onRevert(swap)
-                } label: {
-                    Label("Conflicts with your allergies — revert?", systemImage: "exclamationmark.octagon.fill")
-                        .font(SLFont.headline)
-                        .foregroundStyle(Color.white)
-                        .padding(Spacing.md)
-                        .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget, alignment: .leading)
-                        .background(SLColor.danger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        if model.isPaused {
+            Label("Paused — your step and timers are kept", systemImage: "pause.circle.fill")
+                .font(SLFont.headline)
+                .foregroundStyle(SLColor.warning)
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                .accessibilityIdentifier("cooking.pausedBanner")
+        }
+        if model.isNotStarted {
+            Text("Ready when you are. Tap Start to begin with step 1.")
+                .font(SLFont.title3)
+                .foregroundStyle(SLColor.textSecondary)
+        }
+        ForEach(model.conflictingAdaptations) { swap in
+            Button {
+                onRevert(swap)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        Text("Conflicts with your allergies — revert?")
+                            .font(SLFont.headline)
+                        Text("\(swap.replacement) is on your allergy list. Undo it before you go on.")
+                            .font(SLFont.callout)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.octagon.fill")
                 }
-                .buttonStyle(.plain)
-                .disabled(!model.canSendCommands)
-                .accessibilityLabel("\(swap.replacement) conflicts with your allergies. Revert to \(swap.original)?")
-                .accessibilityIdentifier("cooking.allergyConflict")
+                .foregroundStyle(SLColor.onDanger)
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget, alignment: .leading)
+                .background(SLColor.danger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             }
+            .buttonStyle(.plain)
+            .disabled(!model.canSendCommands)
+            .accessibilityLabel("\(swap.replacement) conflicts with your allergies. Revert to \(swap.original)?")
+            .accessibilityIdentifier("cooking.allergyConflict")
+        }
+    }
+}
+
+/// The step, keyed by the server's index: Next pushes the new step in from the trailing edge,
+/// Back from the leading edge. Under Reduce Motion it crossfades. The index only ever changes
+/// when the server says so, so nothing is shown as done before it is.
+private struct StepPager: View {
+    let model: CookingViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The index from the previous render: tells Next from Back.
+    @State private var shownIndex: Int?
+    @State private var lastMoveWasForward = false
+
+    var body: some View {
+        let index = model.session?.stepIndex ?? 0
+        let forward = index >= (shownIndex ?? index)
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                if lastMoveWasForward, index > 0, !model.isNotStarted {
+                    Label("Step \(index) done. Nice and steady.", systemImage: "checkmark")
+                        .font(SLFont.subheadline.weight(.semibold))
+                        .foregroundStyle(SLColor.success)
+                        .accessibilityIdentifier("cooking.stepDone")
+                }
+                StepContent(model: model)
+            }
+            .id(index)
+            .transition(.misePush(from: forward ? .trailing : .leading, reduceMotion: reduceMotion))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+        .animation(.mise(reduceMotion: reduceMotion), value: index)
+        .onAppear { shownIndex = index }
+        .onChange(of: index) { old, new in
+            lastMoveWasForward = new > old
+            shownIndex = new
+        }
+    }
+}
+
+/// What the current step says. Step text and its warnings are content: always solid.
+private struct StepContent: View {
+    let model: CookingViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
             if let badge = model.adaptedBadgeText {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Spacing.sm) { badgeView(badge); Spacer(); originalToggle }
@@ -399,6 +489,9 @@ private struct StepContent: View {
                     Label(line, systemImage: "exclamationmark.circle")
                         .font(SLFont.callout)
                         .foregroundStyle(SLColor.warning)
+                        .padding(Spacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 }
                 if model.showOriginal {
                     Text("Original recipe text")
@@ -408,7 +501,7 @@ private struct StepContent: View {
             }
             if let text = model.instructionText {
                 Text(text)
-                    .font(.system(.title, design: .default, weight: .semibold))
+                    .font(SLFont.stepText)
                     .foregroundStyle(SLColor.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("cooking.instruction")
@@ -416,14 +509,14 @@ private struct StepContent: View {
             if let recipeStep = model.currentRecipeStep {
                 ForEach(recipeStep.warnings, id: \.self) { warning in
                     Label {
-                        Text(warning).font(SLFont.title3)
+                        Text(warning).font(SLFont.headline)
                     } icon: {
                         Image(systemName: "exclamationmark.triangle.fill")
                     }
                     .foregroundStyle(SLColor.warning)
                     .padding(Spacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(SLColor.surfaceRaised, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Safety warning: \(warning)")
                 }
@@ -526,16 +619,20 @@ private struct TimersList: View {
                         .foregroundStyle(SLColor.textSecondary)
                 }
                 ForEach(rows) { row in
-                    HStack {
-                        HStack {
-                            Image(systemName: row.isDone ? "bell.fill" : "timer")
-                                .foregroundStyle(row.isDone ? SLColor.success : SLColor.accent)
-                                .accessibilityHidden(true)
-                            Text(row.label).font(SLFont.title3)
-                            Spacer()
-                            Text(row.countdownText)
-                                .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
-                                .foregroundStyle(row.isDone ? SLColor.success : SLColor.textPrimary)
+                    HStack(spacing: Spacing.md) {
+                        HStack(spacing: Spacing.md) {
+                            TimerRing(fraction: fraction(for: row), isDone: row.isDone)
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text(row.countdownText)
+                                    .font(SLFont.timer)
+                                    .foregroundStyle(row.isDone ? SLColor.success : SLColor.textPrimary)
+                                    .contentTransition(.numericText(countsDown: true))
+                                Text(row.label)
+                                    .font(SLFont.callout)
+                                    .foregroundStyle(SLColor.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
                         }
                         // The countdown is one element; the cancel button stays its own.
                         .accessibilityElement(children: .combine)
@@ -547,6 +644,7 @@ private struct TimersList: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.title)
+                                    .foregroundStyle(SLColor.textSecondary)
                                     .frame(width: 60, height: 60)
                                     .contentShape(Rectangle())
                             }
@@ -556,7 +654,7 @@ private struct TimersList: View {
                         }
                     }
                     .padding(Spacing.md)
-                    .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
                     .accessibilityElement(children: .contain)
                 }
             }
@@ -567,6 +665,69 @@ private struct TimersList: View {
                 }
             }
         }
+    }
+
+    /// Remaining share of the timer's length, when its length is known: timers start from the
+    /// step's suggested timer, so that is the total. Unknown → a full ring.
+    private func fraction(for row: TimerRow) -> Double? {
+        guard let session = model.session,
+              let timer = session.timers.first(where: { $0.id == row.id }),
+              let index = timer.stepIndex, session.steps.indices.contains(index),
+              let total = session.steps[index].suggestedTimer?.durationSeconds, total > 0,
+              row.remainingSeconds <= total
+        else { return nil }
+        return Double(row.remainingSeconds) / Double(total)
+    }
+}
+
+/// Countdown ring in herb green; turns to a bell and pulses once at zero (no pulse under Reduce Motion).
+private struct TimerRing: View {
+    let fraction: Double?
+    let isDone: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .title) private var size: CGFloat = 52
+    @State private var pulses = 0
+
+    var body: some View {
+        let diameter = min(size, 96)
+        ZStack {
+            Circle().stroke(SLColor.separator, lineWidth: 5)
+            Circle()
+                .trim(from: 0, to: isDone ? 1 : (fraction ?? 1))
+                .stroke(isDone ? SLColor.success : SLColor.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(reduceMotion ? nil : .linear(duration: 1), value: fraction)
+            Image(systemName: isDone ? "bell.fill" : "timer")
+                .font(SLFont.headline)
+                .foregroundStyle(isDone ? SLColor.success : SLColor.accent)
+        }
+        .frame(width: diameter, height: diameter)
+        .phaseAnimator([1.0, 1.18, 1.0], trigger: pulses) { content, scale in
+            content.scaleEffect(scale)
+        } animation: { _ in .spring(response: 0.28, dampingFraction: 0.55) }
+        .onChange(of: isDone) { _, done in
+            if done, !reduceMotion { pulses += 1 }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Segmented progress: one segment per step, filled through the current one.
+private struct StepProgress: View {
+    let index: Int
+    let count: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<count, id: \.self) { segment in
+                Capsule()
+                    .fill(segment <= index ? SLColor.accent : SLColor.separator)
+                    .frame(height: 4)
+            }
+        }
+        .animation(.mise(reduceMotion: reduceMotion), value: index)
+        .accessibilityHidden(true)
     }
 }
 
@@ -592,7 +753,8 @@ private struct OfflineBanner: View {
                 if model.isOffline, !model.asksToResendStaleTap {
                     Button(model.isSending ? "…" : "Reconnect") { Task { await model.reconnect() } }
                         .buttonStyle(.borderedProminent)
-                        .tint(SLColor.warning)
+                        .tint(SLColor.accent)
+                        .foregroundStyle(SLColor.onAccent)
                         .disabled(model.isSending)
                         .accessibilityIdentifier("cooking.reconnect")
                 }
@@ -604,6 +766,7 @@ private struct OfflineBanner: View {
                     Button("Send it again") { Task { await model.resendStaleTap() } }
                         .buttonStyle(.borderedProminent)
                         .tint(SLColor.accent)
+                        .foregroundStyle(SLColor.onAccent)
                     Button("Discard") { Task { await model.discardStaleTap() } }
                         .buttonStyle(.bordered)
                 }
@@ -612,7 +775,7 @@ private struct OfflineBanner: View {
         }
         .foregroundStyle(SLColor.textPrimary)
         .padding(Spacing.md)
-        .background(SLColor.surfaceRaised)
+        .background(SLColor.warningSurface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("cooking.offline")
     }
@@ -628,7 +791,7 @@ struct ToastView: View {
                 .font(SLFont.callout.weight(.semibold))
                 .padding(.horizontal, Spacing.lg)
                 .padding(.vertical, Spacing.md)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(SLColor.onAccent)
                 .background(SLColor.accent, in: Capsule())
         }
         .buttonStyle(.plain)
@@ -636,7 +799,8 @@ struct ToastView: View {
     }
 }
 
-private struct SmallControl: View {
+/// Repeat / Slower / Ask / Look: one glass tile each, grouped in the floating tool cluster.
+private struct GlassTool: View {
     let title: String
     let systemImage: String
     let identifier: String
@@ -645,14 +809,15 @@ private struct SmallControl: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: Spacing.xs) {
-                Image(systemName: systemImage).font(.title2)
+            VStack(spacing: Spacing.xxs) {
+                Image(systemName: systemImage).font(.title3.weight(.semibold))
                 Text(title).font(SLFont.caption)
             }
-            .frame(maxWidth: .infinity, minHeight: 60)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .foregroundStyle(SLColor.accent)
-            .background(SLColor.accentSoft, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             .opacity(isEnabled ? 1 : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+            .adaptiveGlass(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), interactive: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
@@ -661,19 +826,33 @@ private struct SmallControl: View {
 }
 
 /// Oversized cooking controls (PRD §6.1: the phone may be propped at a distance).
+/// `.primary` is a solid herb-green capsule (Next, Start, Resume); `.glass` sits on glass.
 struct CookingButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary }
+    enum Kind { case primary, glass }
     let kind: Kind
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.title2, design: .default, weight: .bold))
-            .frame(maxWidth: .infinity, minHeight: 72)
-            .foregroundStyle(kind == .primary ? Color.white : SLColor.accent)
-            .background(kind == .primary ? SLColor.accent : SLColor.accentSoft,
-                        in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
+        let label = configuration.label
+            .font(.system(.title3, design: .default, weight: .bold))
+            .frame(maxWidth: .infinity, minHeight: Metrics.cookingControl)
+            .padding(.horizontal, Spacing.md)
+            .contentShape(Capsule())
+        return Group {
+            switch kind {
+            case .primary:
+                label
+                    .foregroundStyle(SLColor.onAccent)
+                    .background(SLColor.accent, in: Capsule())
+                    .shadow(color: SLColor.accent.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
+            case .glass:
+                label
+                    .foregroundStyle(SLColor.accent)
+                    .adaptiveGlass(interactive: true)
+            }
+        }
+        .opacity(isEnabled ? 1 : 0.4)
+        .scaleEffect(configuration.isPressed ? 0.97 : 1)
     }
 }
 

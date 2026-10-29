@@ -25,8 +25,10 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: systemImage)
-                .font(.system(size: 44, weight: .light))
+                .font(SLFont.glyph)
                 .foregroundStyle(SLColor.accent)
+                .padding(Spacing.xl)
+                .background(SLColor.accentSoft, in: Circle())
                 .accessibilityHidden(true)
             VStack(spacing: Spacing.sm) {
                 Text(title)
@@ -63,7 +65,7 @@ struct EmptyStateView: View {
     }
 }
 
-/// Primary / secondary button. Always ≥44pt tall.
+/// Primary / secondary button: a solid capsule (content layer, never glass). Always ≥44pt tall.
 struct SLButtonStyle: ButtonStyle {
     var prominent = true
 
@@ -72,12 +74,10 @@ struct SLButtonStyle: ButtonStyle {
             .font(SLFont.bodyEmphasis)
             .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget)
             .padding(.horizontal, Spacing.lg)
-            .foregroundStyle(prominent ? Color.white : SLColor.accent)
-            .background(
-                prominent ? SLColor.accent : SLColor.accentSoft,
-                in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-            )
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .foregroundStyle(prominent ? SLColor.onAccent : SLColor.accent)
+            .background(prominent ? SLColor.accent : SLColor.accentSoft, in: Capsule())
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
     }
 }
 

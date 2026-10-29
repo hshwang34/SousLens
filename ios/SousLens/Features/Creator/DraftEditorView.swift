@@ -218,7 +218,7 @@ struct DraftEditorView: View {
                     HStack(alignment: .top, spacing: Spacing.md) {
                         Text(String(index + 1))
                             .font(SLFont.numeral)
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(SLColor.onAccent)
                             .frame(width: 28, height: 28)
                             .background(SLColor.accent, in: Circle())
                             .accessibilityHidden(true)
