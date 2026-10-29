@@ -1,6 +1,6 @@
 # 007 — Slice 4: real voice and vision (Gemini, capped)
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
+**Status:** building (backend PR #10 merged; iOS next) · **Owner:** PM · **PR:** #10 · **Updated:** 2026-10-28
 
 ## Problem
 Every AI answer today comes from the mock. Testers can't ask a real question, scan a real pantry,
@@ -44,7 +44,17 @@ Gemini Live streaming, Gemini audio STT/TTS, video (brief 008), glasses (brief 0
 None. The voice route, models and caps are settled in DECISIONS #18–#19.
 
 ## Engineering decisions (filled in by the lead while building)
-- …
+- **Backend (PR #10).**
+  - Models are `gemini-3.8-flash` and `gemini-3.5-flash-lite`, verified on 2026-10-28.
+  - Calls to Gemini use a looser schema derived from our Pydantic models, and every answer is
+    still validated strictly against the originals.
+  - Each call is charged at worst case up front and settled to the real cost afterwards.
+  - Timeouts and cancelled calls are charged at worst case, and account deletion doesn't refund
+    the month.
+  - Each call has an 18 s deadline with 3 attempts at most; a safety block is never retried.
+  - Every piece of model text runs through `strip_model_claims`, so model prose can never carry
+    a safety or "free-from" claim.
+  - Over the cap, a pantry photo returns no items rather than demo items.
 
 ## Risks / what could go wrong for users
 - Kitchen noise hurts on-device recognition. Mitigation: the editable transcript plus "Type instead".
