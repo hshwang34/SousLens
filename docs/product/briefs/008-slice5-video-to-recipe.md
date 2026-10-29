@@ -1,6 +1,6 @@
 # 008 — Slice 5: creator video → recipe (Retrace capture)
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
+**Status:** building (backend PR #11 merged; iOS next) · **Owner:** PM · **PR:** #11 · **Updated:** 2026-10-28
 
 ## Problem
 Writing a recipe by hand takes a creator hours. The PRD's creator promise is "film yourself
