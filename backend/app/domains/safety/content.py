@@ -1311,3 +1311,41 @@ def strip_certifications(answer: str, *, high_risk: bool = False) -> tuple[str, 
 
 def is_high_risk(texts: Iterable[str]) -> bool:
     return bool([k for k in protein_kinds(texts) if k != "rice"])
+
+
+# --- Model prose filter (brief 007 fix round 1) -------------------------------------------------
+# Claims a model must never make in its own words: that something is safe for this user, won't
+# trigger an allergy, or is allergen-free (PRD §13.1, DECISIONS #15). Free-from wording ("nut-free",
+# "free of gluten") is only dropped from advisor prose, where it would read as clearing an allergy;
+# recipe text quoted by the coach may legitimately say "use tamari for gluten-free".
+_ALLERGY_CLAIM_RE = re.compile(
+    r"\b(?:safe for (?:you|you to|your|people|anyone|those|someone|celiacs?|kids|children|"
+    r"everyone)|(?:won'?t|will not|wouldn'?t|doesn'?t|does not|shouldn'?t|should not|can'?t|"
+    r"cannot) (?:trigger|cause|set off)\b[^.!?]*\ballerg|hypoallergenic|allergen[- ]free|"
+    r"allergy[- ](?:safe|friendly)|no (?:allergy|allergen|allergic) (?:risk|concerns?|issues?)|"
+    r"fine for (?:people|anyone|those|someone|celiacs?)|"
+    r"(?:not |isn'?t |never )?expired|still good to eat|fresh enough to eat|hasn'?t gone off)"
+)
+_FREE_FROM_RE = re.compile(r"\b[a-z]+-free\b|\bfree (?:of|from)\b")
+
+
+def strip_model_claims(
+    text: str, *, high_risk: bool = False, free_from: bool = False
+) -> tuple[str, int]:
+    """:func:`strip_certifications` plus every sentence with an allergy / safe-for-you / expiry
+    claim (and, with ``free_from``, any free-from wording). Returns (kept, dropped)."""
+    kept_text, dropped = strip_certifications(text, high_risk=high_risk)
+    kept: list[str] = []
+    for sentence in _SENTENCE_RE.split(kept_text):
+        plain = _plain(sentence)
+        if not plain:
+            continue
+        if _ALLERGY_CLAIM_RE.search(plain) or (free_from and _FREE_FROM_RE.search(plain)):
+            dropped += 1
+            continue
+        kept.append(sentence)
+    return " ".join(kept).strip(), dropped
+
+
+def makes_model_claim(text: str, *, free_from: bool = False) -> bool:
+    return strip_model_claims(text, free_from=free_from)[1] > 0

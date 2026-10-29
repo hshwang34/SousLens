@@ -1,0 +1,15 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "promptFeedback": {
+      "blockReason": "SAFETY"
+    },
+    "usageMetadata": {
+      "promptTokenCount": 900,
+      "candidatesTokenCount": 0,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 900
+    }
+  }
+}

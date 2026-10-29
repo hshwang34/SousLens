@@ -403,3 +403,32 @@ def test_candidate_food_safety() -> None:
 
     assert candidate_food_safety_verdict("raw egg yolk") is not None
     assert candidate_food_safety_verdict("cooked chicken breast") is None
+
+
+# --- brief 007 fix round 1: model-claim filter ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "This is allergen-free and safe for you.",
+        "Totally nut-free, no allergy risk.",
+        "It will not trigger your allergy.",
+        "Gluten-free so fine for celiacs.",
+        "Cooked through, safe to eat.",
+        "These eggs are not expired.",
+        "A hypoallergenic choice.",
+    ],
+)
+def test_model_claims_are_dropped(claim: str) -> None:
+    from app.domains.safety.content import strip_model_claims
+
+    kept, dropped = strip_model_claims(f"Adds brightness. {claim}", free_from=True)
+    assert (kept, dropped) == ("Adds brightness.", 1)
+
+
+def test_free_from_only_dropped_when_asked() -> None:
+    from app.domains.safety.content import strip_model_claims
+
+    assert strip_model_claims("Use tamari for gluten-free.") == ("Use tamari for gluten-free.", 0)
+    assert strip_model_claims("Use tamari for gluten-free.", free_from=True) == ("", 1)

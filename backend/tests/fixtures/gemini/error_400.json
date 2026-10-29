@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 400,
+    "message": "fixture",
+    "status": "INVALID_ARGUMENT"
+  }
+}

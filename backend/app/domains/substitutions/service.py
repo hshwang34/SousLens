@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -31,6 +32,7 @@ from app.ai.providers.base import (
     SubstitutionConstraints,
     SubstitutionRequest,
     SubstitutionResponse,
+    SubstitutionSuggestion,
 )
 from app.core.errors import (
     AppError,
@@ -51,7 +53,9 @@ from app.domains.safety.content import (
     allergen_flags,
     candidate_safety_risks,
     conflicts,
+    makes_model_claim,
     scan,
+    strip_model_claims,
 )
 from app.domains.safety.rules import Precedence, RuleVerdict
 from app.domains.substitutions import policy
@@ -73,6 +77,7 @@ ADVISOR_CALLS_PER_HOUR = 60  # per user, only counted when the advisor is called
 SUGGESTION_TTL = timedelta(hours=24)
 PROVIDER_TIMEOUT_SECONDS = 20.0
 NOT_EXACT = "Not an exact match."
+_FREE_FROM = re.compile(r"\b[a-z]+-free\b|\bfree (?:of|from)\b")
 _CONF_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -179,6 +184,50 @@ async def _advise(
             log.warning("substitution provider failed", extra={"error_type": type(exc).__name__})
             raise ProviderUnavailable("The substitution service is unavailable") from exc
     raise AssertionError("unreachable")  # pragma: no cover
+
+
+def _advisor_prose(text: str) -> str:
+    """Model prose with every certifying / allergy / free-from claim removed (DECISIONS #15);
+    an emptied text becomes the fixed label-check warning, never the model's words."""
+    kept, _dropped = strip_model_claims(text, free_from=True)
+    return kept or LABEL_CHECK
+
+
+def _ai_draft(s: SubstitutionSuggestion) -> _Draft | None:
+    """An advisor suggestion with its prose filtered. A candidate or amount that itself makes a
+    claim ("nut-free butter, safe for you") is dropped whole: its name can't be rewritten."""
+    if makes_model_claim(s.candidate) or makes_model_claim(s.ratio_or_amount):
+        return None
+    flagged = False
+
+    def clean(text: str) -> str:
+        nonlocal flagged
+        kept, dropped = strip_model_claims(text, free_from=True)
+        flagged = flagged or dropped > 0
+        return (kept or LABEL_CHECK) if dropped else kept
+
+    rationale = clean(s.rationale)
+    flavor = clean(s.impact_flavor)
+    texture = clean(s.impact_texture)
+    kept_risks: list[str] = []
+    for risk in s.risks:
+        kept, dropped = strip_model_claims(risk, free_from=True)
+        flagged = flagged or dropped > 0
+        if kept:
+            kept_risks.append(kept)
+    if flagged or _FREE_FROM.search(s.candidate.lower()):
+        kept_risks.append(LABEL_CHECK)
+    return _Draft(
+        source="ai",
+        candidate=s.candidate,
+        kind=s.kind,
+        ratio_or_amount=s.ratio_or_amount,
+        rationale=rationale,
+        impact_flavor=flavor,
+        impact_texture=texture,
+        confidence=confidence_label(s.confidence),
+        risks=list(dict.fromkeys(kept_risks)),
+    )
 
 
 def allergy_warning_for(
@@ -294,26 +343,17 @@ async def suggest(
                 raise
             advice = None  # vetted rules still answer; the advisor is a bonus
         if advice is not None:
-            advisor_reason = advice.reason if advice.cannot_substitute else None
+            reason = advice.reason if advice.cannot_substitute else None
+            advisor_reason = _advisor_prose(reason) if reason else None
             for s in advice.suggestions:
                 if s.kind == "not_recommended":
-                    advisor_reason = advisor_reason or s.rationale
+                    advisor_reason = advisor_reason or _advisor_prose(s.rationale)
                     continue
                 if _own_food(s.candidate, own_names, dictionary):
                     continue  # "use mirin instead of mirin" or the line's own alternative
-                drafts.append(
-                    _Draft(
-                        source="ai",
-                        candidate=s.candidate,
-                        kind=s.kind,
-                        ratio_or_amount=s.ratio_or_amount,
-                        rationale=s.rationale,
-                        impact_flavor=s.impact_flavor,
-                        impact_texture=s.impact_texture,
-                        confidence=confidence_label(s.confidence),
-                        risks=list(s.risks),
-                    )
-                )
+                draft = _ai_draft(s)
+                if draft is not None:
+                    drafts.append(draft)
 
     kept: list[_Draft] = []
     dropped: list[RuleVerdict] = []

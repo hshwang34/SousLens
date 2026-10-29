@@ -256,6 +256,9 @@ class CoachResponse(StrictModel):
 
 
 class InspectRequest(StrictModel):
+    """``image_bytes`` is the in-memory photo (never stored or logged, PRD §13.2); like the pantry
+    photo it is excluded from dumps and reprs. ``image_ref`` is a label only (mock / tests)."""
+
     session_id: str
     grounded_revision: int = Field(ge=0)
     query: str
@@ -263,6 +266,9 @@ class InspectRequest(StrictModel):
     mime_type: str = "image/jpeg"
     captured_at: str | None = None
     current_step: StepSummary
+    image_bytes: bytes | None = Field(default=None, exclude=True, repr=False)
+    recipe_title: str | None = None
+    ingredient_names: list[str] = Field(default_factory=list)
 
 
 class InspectResponse(StrictModel):

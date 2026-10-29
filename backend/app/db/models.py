@@ -656,6 +656,45 @@ class UsageEvent(Base):
     )
 
 
+class AIUsage(Base):
+    """Gemini spend ledger (brief 007 cost guard).
+
+    One row per guarded provider call. It is inserted as ``reserved`` at the capability's
+    worst-case ceiling *before* the call (so concurrent calls see each other), then replaced by
+    the price of the reported ``usage_metadata`` (``settled``). A row that is never settled
+    keeps counting at its ceiling: a crash can only make the guard stricter.
+
+    ``user_id`` is ``SET NULL`` on delete so deleting an account never refunds the global
+    monthly budget. No prompt, image or answer text is stored here.
+    """
+
+    __tablename__ = "ai_usage"
+    __table_args__ = (
+        Index("ix_ai_usage_created", "created_at"),
+        Index("ix_ai_usage_user_created", "user_id", "created_at"),
+        CheckConstraint("status IN ('reserved', 'settled')", name="status_known"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    capability: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    reserved_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    thinking_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class MediaConsent(Base):
     __tablename__ = "media_consents"
 

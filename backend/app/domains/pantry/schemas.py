@@ -21,6 +21,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.ai.notice import AINotice, notice_field
 from app.db.models import PantryItem
 from app.domains.matching.units import PantryUnit
 from app.domains.recipes.draft_schemas import NOTE_MAX, check_text
@@ -185,3 +186,4 @@ class ObservationOut(BaseModel):
     unknowns: list[str]
     requires_confirmation: Literal[True] = True
     expires_at: datetime
+    ai_notice: AINotice | None = notice_field()  # brief 007; omitted unless set

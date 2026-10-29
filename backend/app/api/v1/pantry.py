@@ -11,7 +11,8 @@ import pydantic
 from fastapi import APIRouter, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 
-from app.ai.providers.base import AIProvider, PantryObservationRequest
+from app.ai.guard import notice_of, provider_for
+from app.ai.providers.base import PantryObservationRequest
 from app.core.errors import NotFound, UnsupportedMediaType, ValidationError
 from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
@@ -143,15 +144,17 @@ async def create_observation(
     else:
         raise UnsupportedMediaType("Send JSON for a transcript or multipart/form-data for a photo")
 
-    provider: AIProvider = request.app.state.ai_provider
+    provider = provider_for(request, user.id)
     dictionary = await load_dictionary(session)
     try:
-        return await observations.create_observation(
+        out = await observations.create_observation(
             session, user, provider, provider.name, obs_request, dictionary, _now()
         )
     finally:
         # The photo is processed in memory only (PRIV-01); drop our reference straight away.
         obs_request.image_bytes = None
+    out.ai_notice = notice_of(provider)  # set when the labelled demo path answered
+    return out
 
 
 @router.patch("/{item_id}", response_model=PantryItemOut)

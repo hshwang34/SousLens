@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.5-flash-lite",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"candidates\": [{\"raw_label\": \"Kikkoman Soy Sauce\", \"canonical_name\": \"soy sauce\", \"quantity\": null, \"unit\": null, \"confidence\": 0.93, \"evidence\": \"label reads 'soy sauce'\", \"quantity_is_estimate\": false}, {\"raw_label\": \"eggs\", \"canonical_name\": \"egg\", \"quantity\": 6, \"unit\": \"count\", \"confidence\": 0.8, \"evidence\": \"six eggs visible in the carton\", \"quantity_is_estimate\": false}, {\"raw_label\": \"green jar\", \"canonical_name\": null, \"quantity\": null, \"unit\": null, \"confidence\": 0.3, \"evidence\": \"label not readable\", \"quantity_is_estimate\": false}], \"notes\": [], \"unknowns\": [\"contents of the green jar\"]}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1500,
+      "candidatesTokenCount": 160,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 1660
+    }
+  }
+}

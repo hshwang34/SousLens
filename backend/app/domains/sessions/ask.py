@@ -62,7 +62,7 @@ from app.domains.safety.content import (
     is_raw_tasting_request,
     is_temperature_question,
     mentions_safety_terms,
-    strip_certifications,
+    strip_model_claims,
     temperature_table,
 )
 from app.domains.sessions import intent, service
@@ -352,8 +352,23 @@ def _postprocess(
     # come back with a sentence certifying doneness or safety, or a bare "Yes!" at a high-risk
     # step (security reviews of bab9b53 and 279b861).
     context = [current.instruction, *current.warnings, *names.values()]
-    touched = mentions_safety_terms(body.query) or mentions_safety_terms(answer)
-    answer, dropped = strip_certifications(answer, high_risk=is_high_risk(context))
+    high_risk = is_high_risk(context)
+    # A notice that is verbatim creator warning text is the recipe's own words; anything else
+    # is model prose and is filtered and checked exactly like the answer (fix round 1).
+    creator_warnings = {
+        w for st in (packet.previous_step, current, packet.next_step) if st for w in st.warnings
+    }
+    model_notice = safety_notice is not None and safety_notice not in creator_warnings
+    touched = (
+        mentions_safety_terms(body.query)
+        or mentions_safety_terms(answer)
+        or (model_notice and mentions_safety_terms(safety_notice or ""))
+    )
+    answer, dropped = strip_model_claims(answer, high_risk=high_risk)
+    if model_notice and safety_notice is not None:
+        safety_notice, notice_dropped = strip_model_claims(safety_notice, high_risk=high_risk)
+        safety_notice = safety_notice or None
+        dropped += notice_dropped
     if touched or dropped:
         notice = doneness_notice_for(body.query, context)
         if not answer:

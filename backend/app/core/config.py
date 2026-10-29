@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -56,9 +56,23 @@ class Settings(BaseSettings):
     dev_login_max_failures_per_window: int = 10
     ai_provider: Literal["mock", "gemini"] = "mock"
 
-    gemini_api_key: str | None = None
-    gemini_model_structured: str | None = None
-    gemini_model_live: str | None = None
+    # Gemini (Slice 4, DECISIONS #19). The key is a SecretStr: it never appears in reprs, logs
+    # or error bodies, and it never leaves the backend. Each capability has its own model so a
+    # price or quality change can be made per feature; ids are re-verified at build time.
+    gemini_api_key: SecretStr | None = None
+    gemini_model_coach: str = "gemini-3.8-flash"
+    gemini_model_inspect: str = "gemini-3.8-flash"
+    gemini_model_substitution: str = "gemini-3.8-flash"
+    gemini_model_pantry: str = "gemini-3.5-flash-lite"
+    gemini_model_video: str = "gemini-3.8-flash"  # brief 008
+    # Whole-call deadline for interactive features, retries included (brief 007).
+    gemini_timeout_seconds: float = Field(default=18.0, gt=0, le=60)
+
+    # Cost guard (DECISIONS #18/#19): per-user UTC-day cap, then the global UTC-month soft
+    # degrade (video extraction off) and hard stop (labelled mock fallback for everything).
+    ai_user_daily_cap_usd: float = Field(default=0.25, ge=0)
+    ai_month_soft_cap_usd: float = Field(default=15.0, ge=0)
+    ai_month_hard_cap_usd: float = Field(default=22.0, ge=0)
 
     media_root: Path = BACKEND_DIR / "media"
     ffmpeg_path: str = "ffmpeg"
@@ -84,6 +98,8 @@ class Settings(BaseSettings):
             )
         if self.auth_mode == "dev" and self.environment not in ("dev", "test"):
             raise ValueError("AUTH_MODE=dev is only allowed when ENVIRONMENT is dev or test")
+        if self.ai_month_soft_cap_usd > self.ai_month_hard_cap_usd:
+            raise ValueError("AI_MONTH_SOFT_CAP_USD must not exceed AI_MONTH_HARD_CAP_USD")
         if self.dev_login_echo_code and self.environment != "test":
             raise ValueError("DEV_LOGIN_ECHO_CODE=true is only allowed when ENVIRONMENT=test")
         return self

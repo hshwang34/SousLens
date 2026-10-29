@@ -3,7 +3,7 @@ SHELL := /bin/bash
 UV ?= uv
 PORT ?= 8000
 
-.PHONY: check lint test dev db-up db-down migrate seed
+.PHONY: check lint test dev db-up db-down migrate seed ai-live-smoke
 
 check: lint test
 
@@ -33,3 +33,9 @@ migrate:
 
 seed: migrate
 	$(UV) run python -m app.scripts.seed
+
+# Opt-in live Gemini smoke (brief 007): three small real calls, fails at >= $0.05. Needs
+# GEMINI_API_KEY in the environment; skipped without it. GEMINI_RECORD=1 saves the responses.
+ai-live-smoke:
+	@test -n "$$GEMINI_API_KEY" || echo "GEMINI_API_KEY is not set: the live smoke will be skipped"
+	SOUSLENS_LIVE_SMOKE=1 $(UV) run --locked pytest tests/live -q -s -p no:cacheprovider

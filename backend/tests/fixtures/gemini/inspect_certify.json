@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"observation\": \"The chicken looks fully cooked and is safe to eat. The glaze looks glossy.\", \"step_alignment\": \"The step says to flip and cook.\", \"confidence\": \"high\", \"limitations\": [], \"suggested_action\": \"It's done, serve it now.\"}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 2400,
+      "candidatesTokenCount": 90,
+      "thoughtsTokenCount": 200,
+      "totalTokenCount": 2690
+    }
+  }
+}
