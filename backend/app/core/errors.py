@@ -124,6 +124,66 @@ class AIBlocked(AppError):
     retryable = False
 
 
+# --- Creator video (brief 008) ---------------------------------------------------------------
+
+
+class RightsConfirmationRequired(AppError):
+    """CAP-01: the creator must confirm the video is their own (``owns_rights=true``)."""
+
+    code = "RIGHTS_CONFIRMATION_REQUIRED"
+    status_code = 422
+
+
+class VideoTypeUnsupported(AppError):
+    code = "VIDEO_TYPE_UNSUPPORTED"
+    status_code = 415
+
+
+class VideoTooLarge(AppError):
+    code = "VIDEO_TOO_LARGE"
+    status_code = 413
+
+
+class VideoTooLong(AppError):
+    code = "VIDEO_TOO_LONG"
+    status_code = 422
+
+
+class UploadIncomplete(AppError):
+    """``/uploaded`` was called but the object is missing or not what was declared."""
+
+    code = "UPLOAD_INCOMPLETE"
+    status_code = 409
+    retryable = True
+
+
+class VideoExtractionLimit(AppError):
+    """DECISIONS #19: at most N video extractions per user per UTC month."""
+
+    code = "VIDEO_EXTRACTION_LIMIT"
+    status_code = 429
+
+
+class UploadLimit(AppError):
+    """Too many unfinished uploads, or the monthly upload byte allowance is used up."""
+
+    code = "UPLOAD_LIMIT"
+    status_code = 429
+
+
+class VideoExtractionDisabled(AppError):
+    """DECISIONS #19: video extraction is off for the rest of the month ($15 soft degrade)."""
+
+    code = "VIDEO_EXTRACTION_DISABLED"
+    status_code = 503
+
+
+class StorageUnavailable(AppError):
+    code = "STORAGE_UNAVAILABLE"
+    status_code = 503
+    retryable = True
+
+
 class Internal(AppError):
     code = "INTERNAL"
     status_code = 500

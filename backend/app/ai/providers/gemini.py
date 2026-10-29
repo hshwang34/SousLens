@@ -16,6 +16,9 @@
   cost is unknown (timeout, cancellation) is metered at its worst case.
 * Images are passed as inline bytes for the one call and never stored or logged. Logs carry
   capability, model, status codes and token counts only, never prompts, answers or the key.
+* Video (brief 008): Files API upload → poll until ``ACTIVE`` (bounded) → structured generate at
+  ``MEDIA_RESOLUTION_LOW`` → the file is deleted whatever happened. The reservation ceiling is
+  duration based (~100 tok/s video + 32 tok/s audio, plus a margin).
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import asyncio
 import copy
 import json
 import logging
+import math
 import random
 import time
 from collections.abc import Awaitable, Callable
@@ -45,6 +49,7 @@ from app.ai.prompts import (
     INSPECT_SYSTEM,
     PANTRY_SYSTEM,
     SUBSTITUTION_SYSTEM,
+    VIDEO_SYSTEM,
     data_block,
 )
 from app.ai.providers.base import (
@@ -66,6 +71,7 @@ from app.ai.providers.base import (
     SubstitutionSuggestion,
     UncertaintyLevel,
 )
+from app.ai.video import VideoExtractionDraft, salvage_video, to_extracted
 from app.core.config import Settings
 from app.core.errors import (
     AIBlocked,
@@ -88,7 +94,15 @@ MAX_OUTPUT_TOKENS: dict[str, int] = {
     "pantry_photo": 3072,
     "pantry_transcript": 3072,
     "substitution": 3072,
+    "video": 16384,
 }
+# Video input estimate (brief 008): Gemini bills ~70 tokens per frame at 1 fps with
+# MEDIA_RESOLUTION_LOW plus 32 tokens/s of audio; 100 tok/s of video is a deliberate over-estimate,
+# and the margin covers rounding and container overhead. Settlement uses the real usage.
+VIDEO_TOKENS_PER_SECOND = 100
+AUDIO_TOKENS_PER_SECOND = 32
+VIDEO_TOKEN_MARGIN = 1.25
+FILE_POLL_SECONDS = 2.0
 _BLOCK_FINISH = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY", "RECITATION"}
 _SAFETY_CATEGORIES = (
     types.HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -209,6 +223,16 @@ class GeminiTransport(Protocol):
     ) -> types.GenerateContentResponse: ...
 
 
+class GeminiFileTransport(Protocol):
+    """The Files API surface the video extractor needs (brief 008)."""
+
+    async def upload_file(self, *, path: str, mime_type: str) -> types.File: ...
+
+    async def get_file(self, *, name: str) -> types.File: ...
+
+    async def delete_file(self, *, name: str) -> None: ...
+
+
 class GenAITransport:
     """The real ``google-genai`` async client. SDK-level retries are off; ours are bounded."""
 
@@ -227,6 +251,17 @@ class GenAITransport:
             model=model, contents=contents, config=config
         )
 
+    async def upload_file(self, *, path: str, mime_type: str) -> types.File:
+        return await self._client.aio.files.upload(
+            file=path, config=types.UploadFileConfig(mime_type=mime_type)
+        )
+
+    async def get_file(self, *, name: str) -> types.File:
+        return await self._client.aio.files.get(name=name)
+
+    async def delete_file(self, *, name: str) -> None:
+        await self._client.aio.files.delete(name=name)
+
 
 # --- Call plans ----------------------------------------------------------------------------
 
@@ -240,6 +275,7 @@ class CallPlan:
     schema: dict[str, Any]
     max_output_tokens: int
     attempt_ceiling_usd: Decimal
+    media_resolution: types.MediaResolution | None = None
 
     @property
     def ceiling_usd(self) -> Decimal:
@@ -265,6 +301,12 @@ def estimate_input_tokens(system: str, contents: list[Any], schema: dict[str, An
         else:
             images += 1
     return total // 2 + 256 + images * IMAGE_INPUT_TOKENS_CEILING
+
+
+def video_input_tokens(duration_ms: int) -> int:
+    seconds = math.ceil(max(duration_ms, 0) / 1000)
+    per_second = VIDEO_TOKENS_PER_SECOND + AUDIO_TOKENS_PER_SECOND
+    return math.ceil(seconds * per_second * VIDEO_TOKEN_MARGIN)
 
 
 def _attempt_ceiling(model: str, input_tokens: int, max_output: int) -> Decimal:
@@ -326,6 +368,8 @@ class GeminiProvider:
             "video": settings.gemini_model_video,
         }
         self._deadline_seconds = settings.gemini_timeout_seconds
+        self._video_deadline_seconds = settings.gemini_video_timeout_seconds
+        self._file_active_timeout = settings.gemini_file_active_timeout_seconds
         self._sleep = sleep
         self._clock = clock
 
@@ -417,8 +461,40 @@ class GeminiProvider:
         ]
         return self._plan("substitution", SUBSTITUTION_SYSTEM, contents, SubstitutionDraft)
 
+    def plan_video(self, request: ExtractionRequest, file: types.File | None = None) -> CallPlan:
+        contents: list[Any] = [
+            "Extract a draft recipe from the attached cooking video.",
+            data_block(
+                "creator_data",
+                {"title_hint": request.title_hint, "creator_notes": request.creator_notes},
+            ),
+        ]
+        if file is not None and file.uri:
+            contents.append(
+                types.Part.from_uri(
+                    file_uri=file.uri, mime_type=file.mime_type or request.mime_type
+                )
+            )
+        model = self._models["video"]
+        max_out = MAX_OUTPUT_TOKENS["video"]
+        schema = gemini_schema(VideoExtractionDraft)
+        text_tokens = estimate_input_tokens(VIDEO_SYSTEM, contents[:2], schema)
+        media_tokens = video_input_tokens(request.duration_ms or 0)
+        return CallPlan(
+            capability="video",
+            model=model,
+            system=VIDEO_SYSTEM,
+            contents=contents,
+            schema=schema,
+            max_output_tokens=max_out,
+            attempt_ceiling_usd=_attempt_ceiling(model, text_tokens + media_tokens, max_out),
+            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
+        )
+
     def plan_for(self, capability: Capability, request: Any) -> CallPlan:
         match capability:
+            case "video":
+                return self.plan_video(request)
             case "coach":
                 return self.plan_coach(request)
             case "inspect":
@@ -433,6 +509,7 @@ class GeminiProvider:
 
     def _config(self, plan: CallPlan, timeout_s: float) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
+            media_resolution=plan.media_resolution,
             system_instruction=plan.system,
             response_mime_type="application/json",
             response_json_schema=plan.schema,
@@ -450,11 +527,12 @@ class GeminiProvider:
         meter: UsageMeter | None = None,
         *,
         salvage: Callable[[str], D | None] | None = None,
+        deadline_seconds: float | None = None,
     ) -> D:
         if self._transport is None:
             raise self.unavailable(plan.capability)
         meter = meter or UsageMeter(model=plan.model, at=datetime.now(UTC))
-        deadline = self._clock() + self._deadline_seconds
+        deadline = self._clock() + (deadline_seconds or self._deadline_seconds)
         malformed = 0
         transient = 0
         last_text: str | None = None
@@ -550,8 +628,75 @@ class GeminiProvider:
 
     # --- Protocol methods ----------------------------------------------------------------
 
-    async def extract(self, request: ExtractionRequest) -> ExtractedRecipeDraft:
-        raise ProviderNotConfigured("Gemini video extraction arrives with brief 008 (Slice 5).")
+    async def extract(
+        self,
+        request: ExtractionRequest,
+        meter: UsageMeter | None = None,
+        *,
+        on_file: Callable[[str], Awaitable[None]] | None = None,
+    ) -> ExtractedRecipeDraft:
+        """``request.media_ref`` is a local file path (the worker's download of the source).
+        ``on_file`` is told the Files API name right after upload, so a crashed worker's
+        successor can delete a file this attempt never got to clean up."""
+        transport = self._transport
+        if transport is None:
+            raise self.unavailable("video extraction")
+        if not all(hasattr(transport, m) for m in ("upload_file", "get_file", "delete_file")):
+            raise self.unavailable("video extraction")
+        files: GeminiFileTransport = transport  # type: ignore[assignment]
+        try:
+            uploaded = await files.upload_file(path=request.media_ref, mime_type=request.mime_type)
+        except genai_errors.APIError as exc:
+            log.warning("gemini file upload failed", extra={"status_code": exc.code})
+            raise ProviderUnavailable("The video couldn't be sent to the AI; try again") from exc
+        name = uploaded.name or ""
+        try:
+            if on_file is not None and name:
+                await on_file(name)
+            active = await self._wait_active(files, uploaded)
+            plan = self.plan_video(request, active)
+            draft = await self.run(
+                plan,
+                VideoExtractionDraft,
+                meter,
+                salvage=salvage_video,
+                deadline_seconds=self._video_deadline_seconds,
+            )
+        finally:
+            if name:
+                await self.delete_file(name)
+        return to_extracted(draft)
+
+    async def _wait_active(self, files: GeminiFileTransport, file: types.File) -> types.File:
+        deadline = self._clock() + self._file_active_timeout
+        current = file
+        while True:
+            state = getattr(current.state, "value", current.state)
+            if state == "ACTIVE":
+                return current
+            if state == "FAILED":
+                raise ProviderUnavailable("The AI couldn't process this video")
+            if self._clock() >= deadline:
+                raise ProviderUnavailable("The AI took too long to process this video; try again")
+            await self._sleep(FILE_POLL_SECONDS)
+            try:
+                current = await files.get_file(name=file.name or "")
+            except genai_errors.APIError as exc:
+                if int(exc.code or 0) == 429 or int(exc.code or 0) >= 500:
+                    continue
+                raise ProviderUnavailable("The AI couldn't process this video") from exc
+
+    async def delete_file(self, name: str) -> bool:
+        """Best effort (files also expire after 48 h on Google's side). Never raises."""
+        transport = self._transport
+        if transport is None or not hasattr(transport, "delete_file"):
+            return False
+        try:
+            await transport.delete_file(name=name)  # type: ignore[attr-defined]
+            return True
+        except Exception as exc:
+            log.warning("gemini file delete failed", extra={"error_type": type(exc).__name__})
+            return False
 
     async def observe(
         self, request: PantryObservationRequest, meter: UsageMeter | None = None

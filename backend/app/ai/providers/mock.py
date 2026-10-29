@@ -26,10 +26,13 @@ from app.ai.providers.base import (
     SubstitutionResponse,
     SubstitutionSuggestion,
 )
+from app.ai.video import VideoExtractionDraft, to_extracted
 from app.domains.safety.content import is_doneness_question
 from app.domains.sessions import intent
 
 PHOTO_FIXTURE_SUBDIR = "pantry_observations"
+VIDEO_FIXTURE_SUBDIR = "video_extractions"
+DEFAULT_VIDEO_FIXTURE = "demo"
 DEFAULT_PHOTO_FIXTURE = "demo_counter"
 
 _NUMBER_WORDS: dict[str, float] = {
@@ -380,18 +383,15 @@ class MockAIProvider:
 
     # RecipeExtractor
     async def extract(self, request: ExtractionRequest) -> ExtractedRecipeDraft:
-        title = request.title_hint or Path(request.media_ref).stem.replace("-", " ").title() or None
-        return ExtractedRecipeDraft(
-            title=title,
-            summary=None,
-            ingredients=[],
-            steps=[],
-            unknowns=[
-                "mock provider does not analyze video; ingredients and steps must be authored",
-            ],
-            confidence=0.0,
-            requires_review=True,
-        )
+        """The labelled demo extraction (brief 008): a fixed sample recipe in the Gemini output
+        shape, run through the same parser. It is never presented as read from the video: the
+        pipeline marks the draft ``demo`` and says so in its unknowns."""
+        path = self.fixtures_dir / VIDEO_FIXTURE_SUBDIR / f"{DEFAULT_VIDEO_FIXTURE}.json"
+        draft = VideoExtractionDraft.model_validate_json(path.read_text(encoding="utf-8"))
+        extracted = to_extracted(draft)
+        if request.title_hint:
+            extracted = extracted.model_copy(update={"title": request.title_hint})
+        return extracted
 
     # PantryExtractor
     async def observe(self, request: PantryObservationRequest) -> PantryObservation:

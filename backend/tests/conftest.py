@@ -197,3 +197,58 @@ async def ingredients(engine: AsyncEngine, clean_tables: None) -> None:
     async with make_sessionmaker(engine)() as session:
         await seed_ingredients(session, FIXTURES_DIR)
         await session.commit()
+
+
+# --- Slice 5 (brief 008): tiny generated video, ffmpeg, moto-backed object storage -----------
+
+FFMPEG_REQUIRED = os.environ.get("SOUSLENS_REQUIRE_FFMPEG") == "1"
+
+
+def require_ffmpeg() -> None:
+    """Skip locally without ffmpeg; CI sets SOUSLENS_REQUIRE_FFMPEG=1 so it fails instead."""
+    import shutil
+
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        return
+    if FFMPEG_REQUIRED:
+        raise RuntimeError("ffmpeg/ffprobe are required (SOUSLENS_REQUIRE_FFMPEG=1)")
+    pytest.skip("ffmpeg/ffprobe not installed")
+
+
+def make_test_video(path: Path, *, seconds: float = 5.0, audio: bool = True) -> Path:
+    """A few seconds of lavfi testsrc (+ a sine tone): a real H.264/AAC MP4, ~30-60 KB."""
+    import subprocess
+
+    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-f", "lavfi", "-i"]
+    cmd.append(f"testsrc=size=320x240:rate=15:duration={seconds}")
+    if audio:
+        cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=22050:duration={seconds}"]
+    cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+    if audio:
+        cmd += ["-c:a", "aac", "-shortest"]
+    cmd += [str(path)]
+    subprocess.run(cmd, check=True, timeout=60)
+    return path
+
+
+@pytest.fixture(scope="session")
+def test_video(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_ffmpeg()
+    return make_test_video(tmp_path_factory.mktemp("video") / "creator.mp4")
+
+
+@pytest.fixture
+def s3_storage(settings: Settings):  # type: ignore[no-untyped-def]
+    """The real ``S3Storage`` against moto's in-process S3 (no network, no MinIO)."""
+    from moto import mock_aws
+
+    from app.media.storage import S3Storage
+
+    with mock_aws():
+        storage = S3Storage(
+            settings.model_copy(
+                update={"storage_endpoint_url": None, "storage_region": "us-east-1"}
+            )
+        )
+        storage.client.create_bucket(Bucket=storage.bucket)
+        yield storage

@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -233,22 +234,75 @@ class RecipeVersion(CreatedAtMixin, Base):
 
 
 class RecipeMedia(CreatedAtMixin, Base):
+    """A creator's source video or a rendered step clip (brief 008). Bytes live in object
+    storage under ``storage_key``; this row is the only way to get a signed URL for them.
+
+    * ``owner_user_id`` is the creator; every read/write goes through ``get_owned_or_404``
+      except the public clip read, which also requires a published, non-private recipe.
+    * A source video is kept until the creator deletes it (DECISIONS #20). A clip is attached to
+      the first published version that used it (``version_id``); clips that never reached a
+      published version are deleted with their draft.
+    * ``recipe_id`` is null until the first publish of the draft the media belongs to.
+    """
+
     __tablename__ = "recipe_media"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'ready', 'failed', 'rejected')", name="status_known"
+        ),
+        Index("ix_recipe_media_owner_kind", "owner_user_id", "media_kind"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    recipe_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    recipe_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipes.id", ondelete="CASCADE"), nullable=True, index=True
     )
     version_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_versions.id", ondelete="SET NULL")
     )
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipe_drafts.id", ondelete="SET NULL"), index=True
+    )
+    # A clip's source video (SET NULL when the creator deletes the source; the clip stays).
+    source_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipe_media.id", ondelete="SET NULL")
+    )
+    step_id: Mapped[str | None] = mapped_column(String(64))
     media_kind: Mapped[MediaKind] = mapped_column(_enum(MediaKind, "media_kind"), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default=text("'pending'")
+    )
     storage_key: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str | None] = mapped_column(String(100))
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
     start_ms: Mapped[int | None] = mapped_column(Integer)
     end_ms: Mapped[int | None] = mapped_column(Integer)
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     consent_record_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("media_consents.id", ondelete="SET NULL")
+    )
+
+
+class MediaDeletion(Base):
+    """Transactional outbox for object-storage deletes (brief 008).
+
+    Migration 0008 installs an ``AFTER DELETE`` trigger on ``recipe_media`` that inserts the
+    row's ``storage_key`` here, so *every* removal (creator delete, draft delete, recipe or
+    account deletion by cascade) queues its object in the same transaction. The extraction
+    worker drains it. Code only inserts rows directly for objects that never got a media row.
+    """
+
+    __tablename__ = "media_deletions"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
 
 
@@ -285,17 +339,37 @@ class RecipeDraft(TimestampMixin, Base):
 
 
 class ExtractionJob(TimestampMixin, Base):
+    """A background job on a creator's video (brief 008): ``extract`` (video → draft + clips)
+    or ``trim`` (re-render one step clip). Claimed by the worker with ``FOR UPDATE SKIP
+    LOCKED``; ``lease_expires_at`` lets another worker resume it after a crash."""
+
     __tablename__ = "extraction_jobs"
+    __table_args__ = (
+        CheckConstraint("kind IN ('extract', 'trim')", name="kind_known"),
+        # One extraction per uploaded video: marking it uploaded twice returns the same job.
+        Index(
+            "uq_extraction_jobs_one_extract_per_media",
+            "original_media_id",
+            unique=True,
+            postgresql_where=text("kind = 'extract'"),
+        ),
+        Index("ix_extraction_jobs_owner_created", "owner_user_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    draft_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("recipe_drafts.id", ondelete="CASCADE"), nullable=False, index=True
+    # SET NULL, not CASCADE: a job outlives its draft so deleting a draft can never refund a
+    # monthly video extraction (fix round 1).
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipe_drafts.id", ondelete="SET NULL"), nullable=True, index=True
     )
     original_media_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_media.id", ondelete="SET NULL")
+    )
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="extract", server_default=text("'extract'")
     )
     status: Mapped[ExtractionStatus] = mapped_column(
         _enum(ExtractionStatus, "extraction_status"),
@@ -304,8 +378,24 @@ class ExtractionJob(TimestampMixin, Base):
         index=True,
     )
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    progress: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    stage: Mapped[str | None] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    # Checkpoints (extraction result, rendered clips, Gemini file name) so a resumed job never
+    # pays for the same Gemini call twice and never re-renders a finished clip.
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    params_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # False when the job ended before any AI spend (bad video, budget refusal): it then does
+    # not use up one of the user's monthly video extractions.
+    counts_toward_limit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    worker_id: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Save(CreatedAtMixin, Base):
@@ -651,6 +741,8 @@ class UsageEvent(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Optional quantity for byte/amount budgets (brief 008: ``video_upload_bytes``).
+    amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -728,6 +820,7 @@ OWNED_TABLES: tuple[type[Base], ...] = (
     Recipe,
     RecipeDraft,
     ExtractionJob,
+    RecipeMedia,
     PantryItem,
     PantryObservation,
     CookingSession,

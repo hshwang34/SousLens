@@ -24,6 +24,7 @@ class StrictModel(BaseModel):
 
 class ExtractionRequest(StrictModel):
     media_ref: str = Field(description="Storage key or local path of the creator's own video")
+    mime_type: str = "video/mp4"
     duration_ms: int | None = Field(default=None, ge=0)
     title_hint: str | None = None
     creator_notes: list[str] = Field(default_factory=list)

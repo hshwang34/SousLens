@@ -18,5 +18,15 @@ services:
       timeout: 3s
       retries: 20
 
+  # Dev S3 (brief 008). Production is Tigris. MinIO's community images are no longer pullable
+  # from Docker Hub/Quay, so dev uses moto's S3 server on the same port the settings default to
+  # (http://localhost:9000). It is in-memory: uploads vanish when the container restarts. The
+  # worker creates the bucket on start in dev.
+  s3:
+    image: motoserver/moto:5.1.4
+    container_name: souslens-s3
+    ports:
+      - "9000:5000"
+
 volumes:
   souslens-pgdata:

@@ -139,6 +139,7 @@ class DraftIngredientIn(BaseModel):
     optional: bool = False
     preparation: Preparation | None = None
     notes: Note | None = None
+    evidence_origin: EvidenceOrigin | None = None
 
 
 class DraftStepIn(BaseModel):
@@ -187,6 +188,7 @@ class DraftPatch(BaseModel):
         return validate_https_url(value)
 
     # Read-only Draft fields: tolerated so `PATCH` can receive a whole Draft, never applied.
+    extraction: Any = Field(default=None, exclude=True)
     id: Any = Field(default=None, exclude=True)
     recipe_id: Any = Field(default=None, exclude=True)
     status: Any = Field(default=None, exclude=True)
@@ -212,6 +214,24 @@ CONTENT_FIELDS: frozenset[str] = frozenset(
 )
 
 
+class DraftExtraction(BaseModel):
+    """Where an AI draft came from (brief 008). Written by the extraction pipeline only; a
+    client PATCH can never set it. Omitted from responses for hand-authored drafts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: uuid.UUID
+    source_media_id: uuid.UUID | None = None
+    demo: bool = False
+    partial: bool = False
+    unknowns: list[str] = Field(default_factory=list)
+    notice: str | None = None
+
+
+def _absent(value: object) -> bool:
+    return value is None
+
+
 class DraftContent(BaseModel):
     """What ``recipe_drafts.structured_draft_json`` holds. Tolerant on read."""
 
@@ -228,6 +248,7 @@ class DraftContent(BaseModel):
     steps: list[StepOut] = Field(default_factory=list)
     creator_notes: list[str] = Field(default_factory=list)
     dietary_warnings: list[str] = Field(default_factory=list)
+    extraction: DraftExtraction | None = None
 
 
 class DraftProblem(BaseModel):
@@ -256,6 +277,7 @@ class DraftSummary(BaseModel):
     validation: DraftValidation
     created_at: datetime
     updated_at: datetime
+    extraction: DraftExtraction | None = Field(default=None, exclude_if=_absent)
 
 
 class Draft(BaseModel):
@@ -276,6 +298,7 @@ class Draft(BaseModel):
     validation: DraftValidation
     created_at: datetime
     updated_at: datetime
+    extraction: DraftExtraction | None = Field(default=None, exclude_if=_absent)
 
 
 class DraftList(BaseModel):

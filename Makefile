@@ -5,7 +5,7 @@ SIM ?= iPhone 15
 # which fails whenever the newest runtime lacks that model (e.g. iPhone 15 only ships with iOS 17.x).
 SIM_OS ?= $(shell ios/scripts/sim-os.sh "$(SIM)")
 
-.PHONY: check backend-check ai-live-smoke ios-check ios-smoke env db-up db-down backend-dev seed ios-project
+.PHONY: check backend-check ai-live-smoke ios-check ios-smoke env db-up db-down backend-dev backend-worker seed ios-project
 
 check: backend-check ios-check
 
@@ -26,6 +26,9 @@ db-down:
 
 backend-dev:
 	$(MAKE) -C backend dev
+
+backend-worker:
+	$(MAKE) -C backend worker
 
 seed:
 	$(MAKE) -C backend seed

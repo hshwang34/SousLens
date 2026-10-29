@@ -16,12 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # ffmpeg is not needed until Slice 5 (video extraction); re-add it there. The apt mirror
-      # hung twice on 2026-10-23 and blocked an otherwise green PR.
+      # Slice 5 needs ffmpeg/ffprobe. Not from apt (the mirror hung twice on 2026-10-23): a static
+      # build via the setup action, bounded by its own step timeout as well as the job's.
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+        timeout-minutes: 5
+        with:
+          ffmpeg-version: release
       - working-directory: backend
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
           DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
           JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
           AUTH_MODE: dev
+          SOUSLENS_REQUIRE_FFMPEG: "1"   # ffmpeg tests fail instead of skipping in CI
         run: make check

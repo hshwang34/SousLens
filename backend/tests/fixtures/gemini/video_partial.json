@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"title\": \"Garlic Noodles\", \"servings\": \"lots\", \"ingredients\": [{\"id\": \"ing-1\", \"name\": \"noodles\", \"quantity\": 200, \"unit\": \"g\", \"quantity_source\": \"shown\", \"confidence\": 0.9}, {\"id\": \"ing-2\", \"name\": \"\", \"quantity_source\": \"maybe\", \"confidence\": 3}], \"steps\": [{\"instruction\": \"Boil the noodles.\", \"start\": \"00:00\", \"end\": \"00:02\", \"ingredient_ids\": [\"ing-1\"], \"evidence\": \"shown\", \"confidence\": 0.8}, {\"instruction\": \"Toss with garlic.\", \"confidence\": 1.7}], \"unknowns\": [], \"extra_field\": true}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 12000,
+      "candidatesTokenCount": 900,
+      "thoughtsTokenCount": 300,
+      "totalTokenCount": 13200
+    }
+  }
+}

@@ -26,6 +26,9 @@ REPO_DIR = BACKEND_DIR.parent
 
 APP_VERSION = "0.1.0"
 MIN_JWT_SECRET_BYTES = 32
+# Matches the MinIO container in backend/docker-compose.yml; refused in prod.
+DEV_STORAGE_ACCESS_KEY = "souslens-dev"
+DEV_STORAGE_SECRET_KEY = "souslens-dev-secret"
 
 
 class Settings(BaseSettings):
@@ -78,6 +81,41 @@ class Settings(BaseSettings):
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
 
+    # Object storage (brief 008): any S3-compatible store. Production is Tigris
+    # (https://t3.storage.dev, region "auto", virtual-hosted addressing); dev is the MinIO
+    # container in docker-compose. The dev credentials below only match that container and are
+    # refused when ENVIRONMENT=prod. No media bytes ever live in Postgres.
+    storage_endpoint_url: str | None = "http://localhost:9000"
+    # Host the *phone* uses for presigned URLs when it differs from the backend's own route to
+    # the store (e.g. a LAN IP for a device build in dev). Defaults to storage_endpoint_url.
+    storage_public_endpoint_url: str | None = None
+    storage_bucket: str = "souslens-media"
+    storage_region: str = "auto"
+    storage_addressing_style: Literal["path", "virtual", "auto"] = "path"
+    storage_access_key_id: SecretStr = SecretStr(DEV_STORAGE_ACCESS_KEY)
+    storage_secret_access_key: SecretStr = SecretStr(DEV_STORAGE_SECRET_KEY)
+    storage_upload_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    storage_download_url_ttl_seconds: int = Field(default=3600, ge=60, le=12 * 3600)
+
+    # CAP-01 limits for a creator's own video (brief 008).
+    video_max_bytes: int = Field(default=200 * 1024 * 1024, gt=0)
+    video_max_duration_ms: int = Field(default=15 * 60 * 1000, gt=0)
+    # DECISIONS #19: 5 video extractions per user (counted per UTC month).
+    ai_user_video_extractions_per_month: int = Field(default=5, ge=0)
+    # Storage abuse caps (fix round 1): unconfirmed uploads in flight, and source bytes per UTC
+    # month (declared size, counted at intent time, never refunded).
+    video_max_pending_uploads: int = Field(default=2, ge=1)
+    video_upload_bytes_per_month: int = Field(default=1024 * 1024 * 1024, gt=0)
+
+    # Extraction worker (``python -m app.workers.extraction``).
+    worker_lease_seconds: int = Field(default=120, ge=10)
+    worker_poll_seconds: float = Field(default=2.0, gt=0)
+    worker_max_attempts: int = Field(default=3, ge=1, le=10)
+    worker_workdir: Path | None = None  # default: a temp dir per process
+    # Gemini video: Files API processing wait, then the generate deadline (retries included).
+    gemini_file_active_timeout_seconds: float = Field(default=180.0, gt=0)
+    gemini_video_timeout_seconds: float = Field(default=300.0, gt=0, le=900)
+
     fixtures_dir: Path = REPO_DIR / "fixtures"
 
     # Public share link base (brief 003): share_url = f"{share_url_base}/{recipe_id}".
@@ -102,6 +140,15 @@ class Settings(BaseSettings):
             raise ValueError("AI_MONTH_SOFT_CAP_USD must not exceed AI_MONTH_HARD_CAP_USD")
         if self.dev_login_echo_code and self.environment != "test":
             raise ValueError("DEV_LOGIN_ECHO_CODE=true is only allowed when ENVIRONMENT=test")
+        if self.environment == "prod" and (
+            self.storage_access_key_id.get_secret_value() == DEV_STORAGE_ACCESS_KEY
+            or self.storage_secret_access_key.get_secret_value() == DEV_STORAGE_SECRET_KEY
+        ):
+            raise ValueError("Set real STORAGE_ACCESS_KEY_ID / STORAGE_SECRET_ACCESS_KEY in prod")
+        if self.environment == "prod" and not (self.storage_endpoint_url or "").startswith(
+            "https://"
+        ):
+            raise ValueError("STORAGE_ENDPOINT_URL must be https:// in prod")
         return self
 
 

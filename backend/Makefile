@@ -3,7 +3,7 @@ SHELL := /bin/bash
 UV ?= uv
 PORT ?= 8000
 
-.PHONY: check lint test dev db-up db-down migrate seed ai-live-smoke
+.PHONY: check lint test dev worker db-up db-down migrate seed ai-live-smoke
 
 check: lint test
 
@@ -16,6 +16,10 @@ test:
 
 dev:
 	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port $(PORT)
+
+# Creator-video worker (brief 008): claims extraction/trim jobs from Postgres. Needs ffmpeg.
+worker:
+	$(UV) run python -m app.workers.extraction
 
 env:  ## create backend/.env from .env.example with a freshly generated JWT secret
 	@test -f .env && echo ".env already exists; delete it first to regenerate" && exit 1 || true

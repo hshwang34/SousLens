@@ -1,0 +1,19 @@
+{
+  "title": "Demo: Garlic Butter Noodles",
+  "summary": "Sample recipe from the AI-off demo path. It was not read from your video; replace it with your own steps.",
+  "servings": 2,
+  "prep_minutes": 5,
+  "cook_minutes": 10,
+  "ingredients": [
+    {"id": "ing-1", "name": "dried noodles", "quantity": 200, "unit": "g", "quantity_source": "shown", "preparation": null, "optional": false, "confidence": 0.9},
+    {"id": "ing-2", "name": "garlic", "quantity": 4, "unit": "clove", "quantity_source": "spoken", "preparation": "thinly sliced", "optional": false, "confidence": 0.85},
+    {"id": "ing-3", "name": "butter", "quantity": 2, "unit": "tbsp", "quantity_source": "not_stated", "preparation": null, "optional": false, "confidence": 0.6},
+    {"id": "ing-4", "name": "flaky salt", "quantity": null, "unit": null, "quantity_source": "not_stated", "preparation": null, "optional": true, "confidence": 0.5}
+  ],
+  "steps": [
+    {"instruction": "Boil the noodles in salted water until just tender.", "start": "00:00", "end": "00:02", "ingredient_ids": ["ing-1"], "success_cues": ["Noodles bend without snapping"], "warnings": [], "estimated_minutes": 6, "evidence": "shown_and_spoken", "confidence": 0.8},
+    {"instruction": "Melt the butter over low heat and add the garlic.", "start": "00:02", "end": "00:04", "ingredient_ids": ["ing-3", "ing-2"], "success_cues": ["Garlic turns pale gold"], "warnings": ["Garlic burns fast; keep the heat low."], "estimated_minutes": 3, "evidence": "shown", "confidence": 0.75},
+    {"instruction": "Toss the drained noodles through the garlic butter and finish with salt.", "start": "00:04", "end": "00:06", "ingredient_ids": ["ing-1", "ing-4", "ing-9"], "success_cues": ["Every strand is glossy"], "warnings": [], "estimated_minutes": 1, "evidence": "inferred", "confidence": 0.6}
+  ],
+  "unknowns": ["amount of butter not stated", "amount of salt not stated"]
+}
