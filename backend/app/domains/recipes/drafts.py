@@ -291,6 +291,7 @@ def ensure_not_extracting(row: RecipeDraft) -> None:
 
 async def delete_draft(session: AsyncSession, user: User, draft_id: uuid.UUID) -> None:
     row = await get_draft_row(session, user, draft_id)
+    ensure_not_extracting(row)
     await media.discard_unpublished_clips(session, row.id)
     await session.delete(row)
     await session.flush()
@@ -383,16 +384,36 @@ def _reviewed(content: DraftContent) -> DraftContent:
 
 
 async def _check_clips(
-    session: AsyncSession, user: User, content: DraftContent, verdict: DraftValidation
+    session: AsyncSession,
+    user: User,
+    row: RecipeDraft,
+    content: DraftContent,
+    verdict: DraftValidation,
 ) -> list[uuid.UUID]:
-    """Steps that point at one of the creator's rendered clips need that clip to be ready.
-    Free-form clip ids (hand-authored drafts, seeds) are left alone."""
+    """Steps that point at one of the creator's rendered clips need that clip to be ready, and
+    to belong here: an unpublished clip of *this* draft, or a clip already published in *this*
+    recipe. A clip from another draft or recipe would otherwise be re-exposed under this
+    recipe's visibility. Free-form clip ids (hand-authored drafts, seeds) are left alone."""
     wanted = {i: media.clip_uuid(s.source_clip_id) for i, s in enumerate(content.steps)}
     clips = await media.owned_clips(session, user.id, [c for c in wanted.values() if c])
     used: list[uuid.UUID] = []
     for index, clip_id in wanted.items():
         clip = clips.get(clip_id) if clip_id else None
         if clip is None:
+            continue
+        belongs = (clip.version_id is None and clip.draft_id == row.id) or (
+            clip.version_id is not None
+            and row.recipe_id is not None
+            and clip.recipe_id == row.recipe_id
+        )
+        if not belongs:
+            verdict.problems.append(
+                DraftProblem(
+                    field=f"steps[{index}].source_clip_id",
+                    message=f"Step {index + 1}'s clip belongs to another recipe; remove it",
+                )
+            )
+            verdict.publishable = False
             continue
         if clip.status == "ready":
             used.append(clip.id)
@@ -433,7 +454,7 @@ async def publish(
     normalised = normalise(content)
     row.structured_draft_json = normalised
     verdict = validate(content)
-    clip_ids = await _check_clips(session, user, content, verdict)
+    clip_ids = await _check_clips(session, user, row, content, verdict)
     if not verdict.publishable:
         raise ValidationError(
             "Draft is not ready to publish",

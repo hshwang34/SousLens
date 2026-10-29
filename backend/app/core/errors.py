@@ -164,6 +164,13 @@ class VideoExtractionLimit(AppError):
     status_code = 429
 
 
+class UploadLimit(AppError):
+    """Too many unfinished uploads, or the monthly upload byte allowance is used up."""
+
+    code = "UPLOAD_LIMIT"
+    status_code = 429
+
+
 class VideoExtractionDisabled(AppError):
     """DECISIONS #19: video extraction is off for the rest of the month ($15 soft degrade)."""
 

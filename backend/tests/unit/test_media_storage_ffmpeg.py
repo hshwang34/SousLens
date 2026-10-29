@@ -106,10 +106,60 @@ async def test_probe_rejects_other_containers(tmp_path: Path) -> None:
         check=True,
         timeout=30,
     )
-    result = await ffmpeg.probe(wav)
+    # The mov demuxer is forced, so a WAV never even parses.
     with pytest.raises(ffmpeg.InvalidVideo) as exc:
-        ffmpeg.validate_probe(result, max_duration_ms=60_000)
+        await ffmpeg.probe(wav)
+    assert exc.value.code == "VIDEO_UNREADABLE"
+    # And a container the probe did read but that isn't MP4/MOV is refused by validation.
+    other = ffmpeg.ProbeResult(
+        duration_ms=1000,
+        format_names=frozenset({"matroska", "webm"}),
+        has_video=True,
+        has_audio=False,
+        width=1,
+        height=1,
+    )
+    with pytest.raises(ffmpeg.InvalidVideo) as exc:
+        ffmpeg.validate_probe(other, max_duration_ms=60_000)
     assert exc.value.code == "VIDEO_TYPE_UNSUPPORTED"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\n{url}/seg.ts\n#EXT-X-ENDLIST\n",
+        "ffconcat version 1.0\nfile '{url}/seg.mp4'\nfile '/etc/hosts'\n",
+    ],
+)
+async def test_playlist_disguised_as_mp4_fetches_nothing(
+    tmp_path: Path, test_video: Path, body: str
+) -> None:
+    """HLS / ffconcat text named .mp4 must be rejected without any network or file fetch."""
+    hits: list[bytes] = []
+
+    async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        hits.append(await reader.read(100))
+        writer.close()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    evil = tmp_path / "evil.mp4"
+    evil.write_text(body.format(url=f"http://127.0.0.1:{port}"))
+    try:
+        with pytest.raises(ffmpeg.InvalidVideo):
+            await ffmpeg.probe(evil)
+        with pytest.raises(ffmpeg.MediaToolError):
+            await ffmpeg.render_clip(evil, tmp_path / "out.mp4", start_ms=0, end_ms=1000)
+        await asyncio.sleep(0.2)
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert hits == []
+
+
+def test_every_invocation_uses_the_safe_input_options() -> None:
+    assert ffmpeg.SAFE_INPUT_ARGS[:4] == ("-f", "mov", "-protocol_whitelist", "file")
+    assert "-probesize" in ffmpeg.SAFE_INPUT_ARGS and "-analyzeduration" in ffmpeg.SAFE_INPUT_ARGS
 
 
 async def test_render_clip_is_h264_aac_mp4(test_video: Path, tmp_path: Path) -> None:

@@ -64,6 +64,7 @@ from app.db.models import (
     RecipeMedia,
 )
 from app.domains.extraction.pipeline import build_content
+from app.domains.media.service import reap_expired_uploads
 from app.domains.recipes import drafts
 from app.domains.recipes.draft_schemas import DraftContent, DraftExtraction
 from app.media import ffmpeg
@@ -86,6 +87,7 @@ MSG = {
     "SOURCE_DELETED": "The video was deleted before it could be processed.",
     "JOB_FAILED": "Processing kept failing. The draft is editable; try uploading again later.",
     "CLIP_SUPERSEDED": "A newer trim replaced this clip.",
+    "DRAFT_DELETED": "The draft was deleted.",
     "CLIP_RENDER_FAILED": "This clip couldn't be made. Try trimming it again.",
 }
 
@@ -148,6 +150,7 @@ class ExtractionWorker:
             workdir or settings.worker_workdir or Path(tempfile.mkdtemp(prefix="souslens-worker-"))
         )
         self._lease = timedelta(seconds=settings.worker_lease_seconds)
+        self.heartbeat_seconds = max(self._lease.total_seconds() / 3, 1.0)
 
     # --- loop -----------------------------------------------------------------------------
 
@@ -167,7 +170,9 @@ class ExtractionWorker:
         log.info("worker stopped", extra={"worker_id": self.worker_id})
 
     async def run_once(self) -> bool:
-        """Drain deletions, then claim and process at most one job. True if a job was taken."""
+        """Reap expired uploads, drain deletions, then claim and process at most one job.
+        True if a job was taken."""
+        await self.reap_uploads()
         await self.drain_deletions()
         job = await self.claim()
         if job is None:
@@ -269,22 +274,44 @@ class ExtractionWorker:
         if res.rowcount == 0:  # type: ignore[attr-defined]
             raise JobLost
 
-    async def _heartbeat(self, job: Claimed) -> None:
-        interval = max(self._lease.total_seconds() / 3, 1.0)
+    async def _heartbeat(self, job: Claimed, work: asyncio.Task[bool], lost: asyncio.Event) -> None:
+        """Extend the lease. If the lease is lost, or can't be confirmed (any error), the work
+        is cancelled: once another worker may own the job, this one must stop spending."""
         while True:
-            await asyncio.sleep(interval)
+            await asyncio.sleep(self.heartbeat_seconds)
             try:
                 await self._checkpoint(job)
             except JobLost:
-                return
+                log.warning("lease lost; cancelling work", extra={"job_id": str(job.id)})
             except Exception:
-                log.warning("heartbeat failed", extra={"job_id": str(job.id)})
+                log.exception("heartbeat failed; cancelling work", extra={"job_id": str(job.id)})
+            else:
+                continue
+            lost.set()
+            work.cancel()
+            return
 
     # --- process --------------------------------------------------------------------------
 
     async def process(self, job: Claimed) -> None:
-        heartbeat = asyncio.create_task(self._heartbeat(job))
         jobdir = self._workdir / str(job.id)
+        lost = asyncio.Event()
+        work = asyncio.create_task(self._work(job, jobdir))
+        heartbeat = asyncio.create_task(self._heartbeat(job, work, lost))
+        try:
+            finished = await work
+        except asyncio.CancelledError:
+            if not lost.is_set():
+                raise  # the worker itself is shutting down
+            log.info("job abandoned after lease loss", extra={"job_id": str(job.id)})
+            finished = False
+        finally:
+            heartbeat.cancel()
+        if finished:
+            shutil.rmtree(jobdir, ignore_errors=True)
+
+    async def _work(self, job: Claimed, jobdir: Path) -> bool:
+        """Run the job; map every outcome to failed / retry. True when the job is finished."""
         finished = True
         try:
             if job.kind == "trim":
@@ -293,6 +320,8 @@ class ExtractionWorker:
                 await self._extract(job, jobdir)
         except JobLost:
             log.info("job lost; stopping", extra={"job_id": str(job.id)})
+            # Still ours but its draft is gone: end it (no-op if another worker owns it).
+            await self._fail(job, "DRAFT_DELETED", MSG["DRAFT_DELETED"], counts=True)
         except ffmpeg.InvalidVideo as exc:
             await self._fail(job, exc.code, exc.message, counts=False, media_status="rejected")
         except JobFailed as exc:
@@ -312,10 +341,7 @@ class ExtractionWorker:
         except Exception:
             log.exception("job crashed", extra={"job_id": str(job.id)})
             finished = await self._retry_or_fail(job, "Exception")
-        finally:
-            heartbeat.cancel()
-            if finished:
-                shutil.rmtree(jobdir, ignore_errors=True)
+        return finished
 
     async def _retry_or_fail(self, job: Claimed, error_type: str) -> bool:
         if job.attempts >= self._settings.worker_max_attempts:
@@ -409,6 +435,8 @@ class ExtractionWorker:
 
     async def _extract(self, job: Claimed, jobdir: Path) -> None:
         settings = self._settings
+        if job.draft_id is None:
+            raise JobLost
         await self._checkpoint(job, progress=5, stage="downloading")
         source = await self._load_source(job)
         path = await self._download(source, jobdir)
@@ -524,6 +552,7 @@ class ExtractionWorker:
             job.result.pop("gemini_file", None)
             await self._checkpoint(job, save_result=True)
         plan = provider.plan_video(request)
+        await self._checkpoint(job)  # still ours? never reserve for a job someone else holds
         decision = await self._guard.reserve(
             job.owner_user_id, "video", plan.model, plan.ceiling_usd
         )
@@ -532,6 +561,7 @@ class ExtractionWorker:
         meter = UsageMeter(model=plan.model, at=datetime.now(UTC))
         outcome = "cancelled"
         try:
+            await self._checkpoint(job)  # and again right before the paid call
             extracted = await provider.extract(
                 request, meter, on_file=lambda name: self._save_gemini_file(job, name)
             )
@@ -542,6 +572,9 @@ class ExtractionWorker:
             raise
         except ProviderOutputInvalid:
             outcome = "malformed"
+            raise
+        except JobLost:
+            outcome = "lost"
             raise
         except Exception:
             outcome = "error"
@@ -678,6 +711,13 @@ class ExtractionWorker:
                 raise JobLost
 
     # --- deletion outbox ------------------------------------------------------------------
+
+    async def reap_uploads(self) -> int:
+        async with self._sm() as session, session.begin():
+            n = await reap_expired_uploads(session, self._settings)
+        if n:
+            log.info("reaped expired uploads", extra={"count": n})
+        return n
 
     async def drain_deletions(self) -> int:
         deleted = 0

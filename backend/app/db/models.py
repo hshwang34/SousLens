@@ -290,9 +290,10 @@ class RecipeMedia(CreatedAtMixin, Base):
 class MediaDeletion(Base):
     """Transactional outbox for object-storage deletes (brief 008).
 
-    A row is written in the same transaction that removes the ``recipe_media`` row, so a
-    rollback never orphans a live row without its object and a commit never forgets the object.
-    The extraction worker drains it.
+    Migration 0008 installs an ``AFTER DELETE`` trigger on ``recipe_media`` that inserts the
+    row's ``storage_key`` here, so *every* removal (creator delete, draft delete, recipe or
+    account deletion by cascade) queues its object in the same transaction. The extraction
+    worker drains it. Code only inserts rows directly for objects that never got a media row.
     """
 
     __tablename__ = "media_deletions"
@@ -359,8 +360,10 @@ class ExtractionJob(TimestampMixin, Base):
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    draft_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("recipe_drafts.id", ondelete="CASCADE"), nullable=False, index=True
+    # SET NULL, not CASCADE: a job outlives its draft so deleting a draft can never refund a
+    # monthly video extraction (fix round 1).
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipe_drafts.id", ondelete="SET NULL"), nullable=True, index=True
     )
     original_media_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("recipe_media.id", ondelete="SET NULL")
@@ -738,6 +741,8 @@ class UsageEvent(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Optional quantity for byte/amount budgets (brief 008: ``video_upload_bytes``).
+    amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

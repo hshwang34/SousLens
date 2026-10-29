@@ -3,8 +3,12 @@
 * Every row is owned; another creator's media is the same 404 as a missing one.
 * A source video is kept until the creator deletes it (DECISIONS #20). Clips attach to the first
   published version that uses them and are then kept; unpublished clips go with their draft.
-* Storage deletes go through the ``media_deletions`` outbox in the same transaction as the row
-  delete, so a rollback can never leave a row pointing at a deleted object.
+* Storage deletes go through the ``media_deletions`` outbox: a database trigger queues the
+  object whenever a ``recipe_media`` row is deleted (by any path, cascades included), in the
+  same transaction, so a rollback never orphans a row and a commit never forgets an object.
+* Abuse caps (fix round 1): at most N pending (unconfirmed) source uploads per user, and a
+  monthly byte budget per user counted from a durable ledger (deleting media never refunds it).
+  Pending uploads whose URL expired are reaped by the worker.
 """
 
 from __future__ import annotations
@@ -17,9 +21,10 @@ from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.budget import month_start
 from app.core.config import Settings
 from app.core.errors import (
     NotFound,
@@ -27,6 +32,7 @@ from app.core.errors import (
     StateConflict,
     StorageUnavailable,
     UploadIncomplete,
+    UploadLimit,
     VideoTooLarge,
     VideoTooLong,
     VideoTypeUnsupported,
@@ -39,6 +45,7 @@ from app.db.models import (
     MediaKind,
     Recipe,
     RecipeMedia,
+    UsageEvent,
     User,
     Visibility,
 )
@@ -49,6 +56,7 @@ log = logging.getLogger("souslens.media")
 
 VIDEO_TYPES: dict[str, str] = {"video/mp4": "mp4", "video/quicktime": "mov"}
 CONSENT_TYPE = "own_video_rights"
+UPLOAD_BYTES_KIND = "video_upload_bytes"
 ACTIVE_JOB_STATUSES = (ExtractionStatus.QUEUED, ExtractionStatus.WORKING)
 
 
@@ -155,8 +163,36 @@ async def create_upload_intent(
     storage: ObjectStorage,
 ) -> UploadIntentOut:
     content_type = check_declared(body, settings)
-    media_id = uuid.uuid4()
+    await lock_user_video(session, user.id)
     now = datetime.now(UTC)
+    pending = await session.scalar(
+        select(func.count(RecipeMedia.id)).where(
+            RecipeMedia.owner_user_id == user.id,
+            RecipeMedia.media_kind == MediaKind.SOURCE_VIDEO,
+            RecipeMedia.status == "pending",
+        )
+    )
+    if int(pending or 0) >= settings.video_max_pending_uploads:
+        raise UploadLimit(
+            "Finish or cancel your other video upload first.",
+            extra={"details": {"pending": int(pending or 0)}},
+        )
+    used = await session.scalar(
+        select(func.coalesce(func.sum(UsageEvent.amount), 0)).where(
+            UsageEvent.user_id == user.id,
+            UsageEvent.kind == UPLOAD_BYTES_KIND,
+            UsageEvent.created_at >= month_start(now),
+        )
+    )
+    if int(used or 0) + body.size_bytes > settings.video_upload_bytes_per_month:
+        raise UploadLimit(
+            "You've reached this month's video upload allowance.",
+            extra={"details": {"limit_bytes": settings.video_upload_bytes_per_month}},
+        )
+    session.add(
+        UsageEvent(user_id=user.id, kind=UPLOAD_BYTES_KIND, amount=body.size_bytes, created_at=now)
+    )
+    media_id = uuid.uuid4()
     consent = MediaConsent(
         owner_user_id=user.id,
         content_id=media_id,
@@ -234,7 +270,33 @@ async def confirm_upload(
     return row
 
 
+async def lock_user_video(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Serialise one user's video limit checks (transaction-scoped advisory lock)."""
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+        {"k": f"souslens:video:{user_id}"},
+    )
+
+
+async def reap_expired_uploads(
+    session: AsyncSession, settings: Settings, now: datetime | None = None
+) -> int:
+    """Delete pending source rows whose upload URL has expired (plus a minute of grace); the
+    trigger queues their objects in case a late PUT landed."""
+    now = now or datetime.now(UTC)
+    cutoff = now - timedelta(seconds=settings.storage_upload_url_ttl_seconds + 60)
+    res = await session.execute(
+        delete(RecipeMedia).where(
+            RecipeMedia.media_kind == MediaKind.SOURCE_VIDEO,
+            RecipeMedia.status == "pending",
+            RecipeMedia.created_at < cutoff,
+        )
+    )
+    return int(res.rowcount or 0)  # type: ignore[attr-defined]
+
+
 def enqueue_deletions(session: AsyncSession, keys: Iterable[str]) -> None:
+    """For objects that have no ``recipe_media`` row (rows are queued by the trigger)."""
     for key in keys:
         session.add(MediaDeletion(storage_key=key))
 
@@ -267,7 +329,6 @@ async def delete_media(session: AsyncSession, user: User, media_id: uuid.UUID) -
             )
     elif row.version_id is not None:
         raise StateConflict("This clip is part of a published recipe version and is kept with it")
-    enqueue_deletions(session, [row.storage_key])
     await session.delete(row)
     await session.flush()
     # Audit trail for creator deletions (PRD §13.2); ids only, never content.
@@ -320,7 +381,6 @@ async def discard_unpublished_clips(
     rows = [r for r in (await session.execute(stmt)).scalars().all() if r.id not in (keep or ())]
     if not rows:
         return 0
-    enqueue_deletions(session, [r.storage_key for r in rows])
     await session.execute(delete(RecipeMedia).where(RecipeMedia.id.in_([r.id for r in rows])))
     return len(rows)
 
@@ -362,9 +422,11 @@ async def attach_on_publish(
     the draft's other unpublished clips are discarded. The source video joins the recipe."""
     clips = await owned_clips(session, owner_id, clip_ids)
     for clip in clips.values():
+        # A clip already in a published version is immutable: never re-pointed (publish
+        # validation only lets this draft's own clips or this recipe's clips through).
         if clip.version_id is None:
             clip.version_id = version_id
-        clip.recipe_id = recipe_id
+            clip.recipe_id = recipe_id
     await discard_unpublished_clips(session, draft_id, keep=set(clips))
     if source_media_id is not None:
         source = await session.get(RecipeMedia, source_media_id)

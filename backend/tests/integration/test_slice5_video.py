@@ -769,6 +769,10 @@ async def test_concurrent_workers_never_share_a_job(env: Env) -> None:
     assert sorted(got) == sorted(ids) and len(set(got)) == 3
 
 
+class WorkerKilled(BaseException):
+    """Stands in for the process dying (SIGKILL, OOM) mid-job."""
+
+
 class CountingProvider(MockAIProvider):
     def __init__(self, fail_first: int = 0, fail_always: bool = False) -> None:
         super().__init__(FIXTURES_DIR)
@@ -819,12 +823,12 @@ async def test_crash_mid_clips_resumes_without_paying_twice(env: Env, monkeypatc
     async def crash_on_second(*args: Any, **kwargs: Any) -> None:
         rendered.append(kwargs["start_ms"])
         if len(rendered) == 2:
-            raise SystemExit("worker killed")  # not an Exception: nothing handles it
+            raise WorkerKilled  # not an Exception: nothing in the worker handles it
         await real(*args, **kwargs)
 
     monkeypatch.setattr(ffmpeg, "render_clip", crash_on_second)
     crashed = env.worker(provider)
-    with pytest.raises(SystemExit):
+    with pytest.raises(WorkerKilled):
         await crashed.run_once()
     out = await job(env, headers, started["id"])
     assert out["status"] == "processing" and out["stage"] == "rendering_clips"
@@ -883,15 +887,23 @@ async def test_draft_deleted_mid_job_stops_cleanly(env: Env) -> None:
 
     class DeletingProvider(MockAIProvider):
         async def extract(self, request: ExtractionRequest):  # type: ignore[no-untyped-def]
+            # The API refuses while extracting...
             res = await env.client.delete(
                 f"/v1/recipes/drafts/{started['draft_id']}", headers=headers
             )
-            assert res.status_code == 204
+            assert res.status_code == 409
+            # ...so simulate an out-of-band delete (operator, cascade) racing the worker.
+            async with env.app.state.sessionmaker() as s, s.begin():
+                await s.execute(
+                    text("DELETE FROM recipe_drafts WHERE id = :id"), {"id": started["draft_id"]}
+                )
             return await super().extract(request)
 
     assert await env.worker(DeletingProvider(FIXTURES_DIR)).run_once()
     async with env.app.state.sessionmaker() as s:
-        assert await s.get(ExtractionJob, uuid.UUID(started["id"])) is None
+        row = await s.get(ExtractionJob, uuid.UUID(started["id"]))
+        assert row is not None and row.draft_id is None  # kept: still counts this month
+        assert row.status == ExtractionStatus.FAILED and row.error_code == "DRAFT_DELETED"
         clips = (
             await s.execute(select(RecipeMedia).where(RecipeMedia.media_kind == "step_clip"))
         ).all()

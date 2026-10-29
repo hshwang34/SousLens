@@ -34,11 +34,14 @@ GET  /media/{clip_id}  → short-lived signed URL to play a clip
 }
 ```
 
+An intent that is never confirmed is deleted about a minute after `expires_at`.
 Content-Type and Content-Length are part of the signature: a different type or size is rejected
 by storage. Errors: `RIGHTS_CONFIRMATION_REQUIRED` 422, `VIDEO_TYPE_UNSUPPORTED` 415,
 `VIDEO_TOO_LARGE` 413, `VIDEO_TOO_LONG` 422, `VIDEO_EXTRACTION_LIMIT` 429
 (`details: {limit, used}`; 5 per user per UTC month), `VIDEO_EXTRACTION_DISABLED` 503 (monthly
 soft budget reached; matches `GET /ai/status → video_extraction_enabled: false`),
+`UPLOAD_LIMIT` 429 (2 unconfirmed uploads in flight, `details.pending`; or the 1 GB per UTC
+month upload allowance, `details.limit_bytes`; deleting media never refunds bytes),
 `PROVIDER_NOT_CONFIGURED` 503. Show `error.message` as is; every one leaves "write it by hand".
 
 ## 2. Mark uploaded — `POST /media/{media_id}/uploaded` → **202** (new) / **200** (repeat)
@@ -56,7 +59,7 @@ errors above, `STORAGE_UNAVAILABLE` 503 (retryable). Response: a **Job** (below)
   "status": "queued|processing|ready|failed",
   "stage": "queued|downloading|validating|extracting|rendering_clips|done",
   "progress": 0,                    // 0–100, monotonic within an attempt
-  "draft_id": "uuid",               // always present: the (partial) draft to open
+  "draft_id": "uuid|null",          // the (partial) draft; null only if it was deleted
   "media_id": "uuid|null",          // source video
   "clip_id": "uuid|null",           // trim jobs: the clip being rendered
   "demo": false,                    // true = AI-off demo content (see 4)
@@ -88,8 +91,9 @@ restart; just keep polling.
 - AI quantities are `null` (with `unit: null`) unless shown or spoken in the video: render as
   unresolved. AI steps carry `source_start_ms` / `source_end_ms` (padded ±1 s, clamped to the
   video) and `source_clip_id` (a media id) when a clip was rendered.
-- While the job is `queued|processing`, PATCH / publish / trim → 409 `STATE_CONFLICT`
-  (`details.job_id`).
+- While the job is `queued|processing`, PATCH / publish / trim / DELETE → 409
+  `STATE_CONFLICT` (`details.job_id`). Deleting a draft never refunds its extraction, and a
+  video that was extracted once can't be extracted again (`/uploaded` returns the same job).
 
 ## 5. Trim — `POST /recipes/drafts/{draft_id}/steps/{step_id}/trim` → **202** Job
 
@@ -102,7 +106,8 @@ published or extracting, or the source video was deleted), 422 (range).
 
 - `ai_extracted` ingredients/steps are published as `creator_reviewed` ("AI-extracted,
   creator-verified").
-- A step whose clip is still rendering or failed → 422 with a `steps[i].source_clip_id` problem.
+- A step whose clip is still rendering or failed, or whose clip belongs to another draft or
+  recipe, → 422 with a `steps[i].source_clip_id` problem. Published clips are never moved.
 - Clips used by the published steps are attached to the version and kept; the draft's other
   clips are deleted. The source video is kept until the creator deletes it (DECISIONS #20).
 - `GET /recipes/{id}` exposes `steps[].source_clip_id`; no URLs are embedded (they expire).

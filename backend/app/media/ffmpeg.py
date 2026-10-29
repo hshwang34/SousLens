@@ -11,6 +11,8 @@ the H.264 + AAC encode flags that iOS plays reliably (no B-frames, explicit BT.7
   ``-avoid_negative_ts make_zero`` keeps the timestamps iOS needs.
 * Clips are scaled so the longer side is at most 1280 px.
 * Every subprocess has a timeout and is killed when it runs over; no shell is involved.
+* Every read of user media forces the mov demuxer, whitelists only the file protocol and caps
+  probing (``SAFE_INPUT_ARGS``), so playlist tricks can't make ffmpeg fetch anything.
 """
 
 from __future__ import annotations
@@ -24,6 +26,27 @@ from pathlib import Path
 log = logging.getLogger("souslens.media.ffmpeg")
 
 PROBE_TIMEOUT_SECONDS = 30.0
+# Input options for every invocation over user media (fix round 1). Forcing the mov/mp4 demuxer
+# means a playlist (HLS, concat, ffconcat) disguised as .mp4 is never interpreted as one, the
+# file-only protocol whitelist means nothing can be fetched over the network or from another
+# path, and the probe caps bound how much of a hostile file is read before deciding.
+SAFE_INPUT_ARGS: tuple[str, ...] = (
+    "-f",
+    "mov",
+    "-protocol_whitelist",
+    "file",
+    "-probesize",
+    str(50 * 1024 * 1024),
+    "-analyzeduration",
+    str(30 * 1000 * 1000),
+)
+
+
+def _input(path: Path) -> str:
+    # "file:" so a path can never be read as another protocol ("concat:", "http:" ...).
+    return f"file:{path}"
+
+
 ACCEPTED_FORMATS = frozenset({"mov", "mp4"})
 MAX_CLIP_SIDE = 1280
 
@@ -81,7 +104,8 @@ async def probe(path: Path, *, ffprobe: str = "ffprobe") -> ProbeResult:
             "format=format_name,duration:stream=codec_type,width,height",
             "-of",
             "json",
-            str(path),
+            *SAFE_INPUT_ARGS,
+            _input(path),
         ],
         PROBE_TIMEOUT_SECONDS,
     )
@@ -147,8 +171,9 @@ async def render_clip(
         "error",
         "-ss",
         f"{start_ms / 1000:.3f}",
+        *SAFE_INPUT_ARGS,
         "-i",
-        str(source),
+        _input(source),
         "-t",
         f"{duration_ms / 1000:.3f}",
         "-map",

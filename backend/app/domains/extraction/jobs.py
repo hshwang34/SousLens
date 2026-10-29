@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.budget import CostGuard, month_start
@@ -81,7 +81,7 @@ class JobOut(BaseModel):
     status: JobStatusOut
     stage: str | None
     progress: int = Field(ge=0, le=100)
-    draft_id: uuid.UUID
+    draft_id: uuid.UUID | None  # null once the draft was deleted (the job is kept)
     media_id: uuid.UUID | None
     clip_id: uuid.UUID | None
     demo: bool
@@ -142,10 +142,7 @@ async def get_job(session: AsyncSession, user: User, job_id: uuid.UUID) -> Extra
 
 
 async def _lock_user(session: AsyncSession, user_id: uuid.UUID) -> None:
-    await session.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
-        {"k": f"souslens:video:{user_id}"},
-    )
+    await media.lock_user_video(session, user_id)
 
 
 async def monthly_extractions(
@@ -307,8 +304,7 @@ async def request_trim(
     if old_id is not None:
         old = await session.get(RecipeMedia, old_id)
         if old is not None and old.owner_user_id == user.id and old.version_id is None:
-            media.enqueue_deletions(session, [old.storage_key])
-            await session.delete(old)
+            await session.delete(old)  # the trigger queues its object
 
     clip_id = uuid.uuid4()
     session.add(

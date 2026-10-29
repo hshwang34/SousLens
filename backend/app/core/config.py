@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     video_max_duration_ms: int = Field(default=15 * 60 * 1000, gt=0)
     # DECISIONS #19: 5 video extractions per user (counted per UTC month).
     ai_user_video_extractions_per_month: int = Field(default=5, ge=0)
+    # Storage abuse caps (fix round 1): unconfirmed uploads in flight, and source bytes per UTC
+    # month (declared size, counted at intent time, never refunded).
+    video_max_pending_uploads: int = Field(default=2, ge=1)
+    video_upload_bytes_per_month: int = Field(default=1024 * 1024 * 1024, gt=0)
 
     # Extraction worker (``python -m app.workers.extraction``).
     worker_lease_seconds: int = Field(default=120, ge=10)
