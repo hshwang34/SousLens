@@ -146,3 +146,29 @@ designer's recommendation: it fits trust and safety messaging and builds on the 
 - Each actual production deploy, App Store Connect upload and the TestFlight external-review
   submission still gets a one-line confirmation from the PM at that moment.
 *Lives in:* briefs 006–010.
+
+#19 · 2026-10-28 · **Release shape after research.**
+- **Hosting: Fly.io (API + worker + Tigris) with Neon Postgres free tier.** This replaces Fly
+  Managed Postgres ($38/mo). The target is about $5–10/mo plus Gemini.
+- **Glasses ship to the PM only, via Meta Developer Mode.** Meta does not yet allow App
+  Store distribution of DAT apps, and the SDK's ExternalAccessory use risks Apple review
+  rejection. So the **public TestFlight build does not link DAT at all**. A separate glasses
+  build (`MetaAppID=0`, custom URL scheme) installs on the PM's phone. The path to Meta release
+  channels and App Store GA is documented in `docs/release/` for when Meta opens it.
+- **Voice: Apple on-device speech** (SFSpeechRecognizer on-device + AVSpeechSynthesizer). Audio
+  never leaves the phone, and the transcript is shown before it's sent. Gemini audio is not used.
+- **Gemini runs on the paid tier only.** Free-tier prompts may be used for training, which
+  conflicts with the photo privacy promise. It runs in a dedicated personal Cloud project. Models:
+  `gemini-3.8-flash` for coach, inspect and video, and `gemini-3.5-flash-lite` for pantry photos.
+  Ids get re-verified at build time.
+- **Budget guard:** soft-degrade at $15 (video extraction off), hard stop at $22 of the $25 cap,
+  then fall back to labelled mock. Per-user caps: $0.25/day and 5 video extractions.
+*Lives in:* briefs 007–011.
+
+#20 · 2026-10-28 · **Briefs 007–011 approved.**
+- **Creator source video:** kept until the creator deletes it (not auto-deleted after publish).
+  Delete is always available from the creator's recipe screen.
+- **Public TestFlight link:** capped at 100 testers.
+- **Support / privacy contact:** jacogoby@gmail.com.
+- **Site domain:** the free `*.vercel.app` domain for the beta.
+*Lives in:* briefs 008, 010, 011.
