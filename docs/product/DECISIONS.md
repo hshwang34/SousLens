@@ -172,3 +172,9 @@ designer's recommendation: it fits trust and safety messaging and builds on the 
 - **Support / privacy contact:** jacogoby@gmail.com.
 - **Site domain:** the free `*.vercel.app` domain for the beta.
 *Lives in:* briefs 008, 010, 011.
+
+#21 · 2026-10-28 · **Repo `hshwang34/SousLens` is now public.** GitHub Actions stopped running
+because the account's payment failed or its spending limit was hit. The PM chose to make the repo
+public (Actions are free for public repos) over fixing billing. The full history was scanned
+first: it holds only placeholder secrets and only personal commit identities. Side effect: iOS
+CI (macOS) is now free, so it can run on every iOS PR instead of manual dispatch only.

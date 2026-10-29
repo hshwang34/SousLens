@@ -1,6 +1,6 @@
 # 011 — Product website with TestFlight link
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
+**Status:** in review (PR #9 merged; deploy pending) · **Owner:** PM · **PR:** #9 · **Updated:** 2026-10-28
 
 ## Problem
 A TestFlight link alone tells nobody what SousLens is or why to install it.
