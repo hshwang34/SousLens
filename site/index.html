@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SousLens</title>
+  <meta name="description" content="Record a recipe once. Anyone can cook it with what they have. SousLens matches recipes to your pantry and coaches you through every step on iPhone.">
+  <meta name="theme-color" content="#FBF6EE" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17130F" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="SousLens">
+  <meta property="og:description" content="Record a recipe once. Anyone can cook it with what they have.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..500&amp;display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="masthead">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="SousLens home">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="none" stroke="currentColor" stroke-width="5"/><path d="M20 44c0-14 9-24 25-25-1 16-11 25-25 25z" fill="var(--herb)"/><path d="M20 44c6-7 12-12 19-17" fill="none" stroke="var(--paper)" stroke-width="2.5" stroke-linecap="round"/><circle cx="45" cy="45" r="4" fill="var(--tomato)"/></svg>
+        SousLens
+      </a>
+      <nav aria-label="Main">
+        <ul>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#safety">Safety</a></li>
+          <li><a href="#privacy">Privacy</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <div>
+          <h1 id="hero-title">Record a recipe once. <span class="turn">Anyone can cook it with what they have.</span></h1>
+          <p class="lead">SousLens turns a cook’s recipe into a lesson. Check your pantry, see what’s missing, approve any swaps, then cook step by step with a coach that sticks to the recipe.</p>
+          <div class="actions">
+            <span class="cta" data-cta>Beta opening soon</span>
+            <p class="cta-note" data-cta-note>The public beta opens on TestFlight soon, for up to 100 testers.</p>
+          </div>
+          <dl class="yield">
+            <div><dt>Works on</dt><dd>iPhone, iOS 17.2 or later</dd></div>
+            <div><dt>Your voice</dt><dd>Stays on your phone</dd></div>
+            <div><dt>Meta AI glasses</dt><dd>In development</dd></div>
+          </dl>
+        </div>
+        <!-- Screenshot slot: drop the real explore.png from the Mise brand build into assets/screens/. -->
+        <figure class="plate">
+          <div class="phone">
+            <div class="screen">
+              <div class="pending" aria-hidden="true"><b>Explore</b><span>Screenshot from the beta build coming soon</span></div>
+              <img src="assets/screens/explore.png" width="1179" height="2556" alt="The Explore screen in SousLens, listing recipes from real cooks.">
+            </div>
+          </div>
+          <figcaption>Explore: recipes from real cooks.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="how-title">How it works</h2>
+          <p>Three steps, in the order you’d do them.</p>
+        </div>
+        <ol class="method">
+          <li>
+            <div class="step-text">
+              <h3>Record it once</h3>
+              <p>A creator writes the recipe as ingredients and numbered steps, with notes and warnings where they matter. Or they upload their own cooking video and SousLens drafts the steps, with a clip for each one.</p>
+              <p class="aside">The creator reviews and edits every draft. Nothing is published until they approve it.</p>
+            </div>
+            <!-- Screenshot slot: assets/screens/recipe.png -->
+            <figure class="plate">
+              <div class="phone">
+                <div class="screen">
+                  <div class="pending" aria-hidden="true"><b>Recipe</b><span>Screenshot from the beta build coming soon</span></div>
+                  <img src="assets/screens/recipe.png" width="1179" height="2556" loading="lazy" alt="A recipe page in SousLens with ingredients, steps and the creator’s name.">
+                </div>
+              </div>
+              <figcaption>A published recipe keeps its creator’s name.</figcaption>
+            </figure>
+          </li>
+          <li>
+            <div class="step-text">
+              <h3>Match your pantry</h3>
+              <p>Tell SousLens what’s in your kitchen by typing, speaking, or taking a photo. It suggests items and you confirm each one. Every recipe then shows what you can make, what’s missing, and what it isn’t sure about.</p>
+              <p class="aside">A suggestion from a photo never goes into your pantry until you tap to confirm it.</p>
+            </div>
+            <!-- Screenshot slot: assets/screens/pantry.png -->
+            <figure class="plate">
+              <div class="phone">
+                <div class="screen">
+                  <div class="pending" aria-hidden="true"><b>Pantry</b><span>Screenshot from the beta build coming soon</span></div>
+                  <img src="assets/screens/pantry.png" width="1179" height="2556" loading="lazy" alt="The Pantry screen in SousLens, showing confirmed ingredients.">
+                </div>
+              </div>
+              <figcaption>Your pantry, confirmed item by item.</figcaption>
+            </figure>
+          </li>
+          <li>
+            <div class="step-text">
+              <h3>Cook with coaching</h3>
+              <p>Go one step at a time and have each step read aloud. Ask “what does fold mean?” or “can I use lime instead of lemon?” and the coach answers from this recipe and this step.</p>
+              <p class="aside">You approve every swap, and the original recipe stays as written. Only you move to the next step.</p>
+            </div>
+            <!-- Screenshot slot: assets/screens/cooking.png -->
+            <figure class="plate">
+              <div class="phone">
+                <div class="screen">
+                  <div class="pending" aria-hidden="true"><b>Cooking</b><span>Screenshot from the beta build coming soon</span></div>
+                  <img src="assets/screens/cooking.png" width="1179" height="2556" loading="lazy" alt="Cooking mode in SousLens, showing the current step.">
+                </div>
+              </div>
+              <figcaption>Cooking mode shows one step at a time.</figcaption>
+            </figure>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section band" id="safety" aria-labelledby="safety-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="safety-title">Clear about what’s AI and what isn’t</h2>
+          <p>Every step shows where it came from, and safety rules always win over the model.</p>
+        </div>
+        <div class="two-col">
+          <ul class="labels">
+            <li><span class="label creator">Creator instructions</span><p>Written by the recipe’s creator.</p></li>
+            <li><span class="label">AI-extracted, creator-verified</span><p>Drafted from the creator’s video, then checked by the creator before publishing.</p></li>
+            <li><span class="label ai">AI-extracted</span><p>Drafted by AI. Never shown as the creator’s own words.</p></li>
+            <li><span class="label ai">AI suggested adaptation</span><p>A swap the coach proposed for your kitchen. You approve it first.</p></li>
+          </ul>
+          <div>
+            <div class="notice">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>
+              <blockquote><p>“I can’t tell from a description or photo whether food is cooked.”</p></blockquote>
+              <p>Ask if the chicken is done and this is what you hear, along with what the recipe says to look for and how to check with a thermometer.</p>
+            </div>
+            <ul class="rules">
+              <li>Safe cooking temperatures come from a USDA table, never from the model. Poultry is 165 °F.</li>
+              <li>Allergies come first. A “free-from” label never clears an allergy match; the app asks you to check the package.</li>
+              <li>Recipes that pickle, cure or ferment keep their salt, acid and sugar as written.</li>
+              <li>Nothing is saved to your pantry, swapped or published without your tap.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="privacy" aria-labelledby="privacy-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="privacy-title">Your kitchen stays yours</h2>
+          <p>Your voice is transcribed on your iPhone. Photos of your pantry are analysed once and never stored.</p>
+        </div>
+        <div class="ledger">
+          <section aria-labelledby="l1">
+            <h3 id="l1">Stays on your iPhone</h3>
+            <ul>
+              <li>Your voice. Apple’s on-device speech recognition turns it into text, and you see the text before it’s sent.</li>
+              <li>Spoken steps and answers, read aloud by your phone.</li>
+            </ul>
+          </section>
+          <section aria-labelledby="l2">
+            <h3 id="l2">Analysed, never stored</h3>
+            <ul>
+              <li>Pantry photos and photos you take while cooking.</li>
+              <li>They’re held in memory while Google Gemini looks at them, on a paid plan that doesn’t train on your data, then discarded.</li>
+            </ul>
+          </section>
+          <section aria-labelledby="l3">
+            <h3 id="l3">Kept until you delete it</h3>
+            <ul>
+              <li>Your account, pantry, saved recipes and cooking sessions.</li>
+              <li>Recipes you publish, and creator videos and step clips.</li>
+              <li>Deleting your account in the app removes all of it.</li>
+            </ul>
+          </section>
+        </div>
+        <p class="ledger-foot">The camera only runs when you start it, and nothing records in the background. <a href="privacy.html">Read the privacy policy</a>.</p>
+      </div>
+    </section>
+
+    <section class="section band" id="creators" aria-labelledby="creators-title">
+      <div class="wrap two-col">
+        <div class="section-head">
+          <h2 id="creators-title">For the cook who knows it by heart</h2>
+          <p>You know what “until glossy” looks like. SousLens helps you pass it on.</p>
+        </div>
+        <div class="step-text">
+          <p>Upload your own cooking video, up to 15 minutes, and SousLens drafts the ingredients and steps with a timestamped clip for each step. You review every line before anything goes public.</p>
+          <p>Your name stays on the recipe. When you edit a published recipe, it becomes a new version, so nobody’s cook changes halfway through.</p>
+          <p>Your original video is kept until you delete it, which you can do from the recipe at any time.</p>
+          <p class="aside">Only upload video you made or have the right to share.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="glasses" aria-labelledby="glasses-title">
+      <div class="wrap two-col">
+        <div class="section-head">
+          <span class="status">In development</span>
+          <h2 id="glasses-title">Meta AI glasses</h2>
+        </div>
+        <div class="step-text">
+          <p>We’re building support for Meta AI glasses, so you can check ingredients and hear the next step without picking up your phone.</p>
+          <p>Glasses aren’t part of the public beta, and the beta app doesn’t connect to them. Everything on this page works on iPhone alone.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="faq-title">Questions</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Who can join the beta?</summary>
+            <div class="answer"><p>Anyone with an iPhone on iOS 17.2 or later, until the 100 tester places are taken. You install it through Apple’s free TestFlight app and sign in with Apple.</p></div>
+          </details>
+          <details>
+            <summary>Does it cost anything?</summary>
+            <div class="answer"><p>No. The beta is free.</p></div>
+          </details>
+          <details>
+            <summary>Can it tell me if my food is safe to eat?</summary>
+            <div class="answer"><p>No. SousLens never judges doneness or safety from a photo or a description. It tells you what the recipe says to look for and how to check with a thermometer.</p></div>
+          </details>
+          <details>
+            <summary>What happens to the photos I take?</summary>
+            <div class="answer"><p>They’re analysed in memory to suggest ingredients or answer your question, then discarded. They aren’t saved on our servers or used to train AI.</p></div>
+          </details>
+          <details>
+            <summary>Does it still work if the AI is unavailable?</summary>
+            <div class="answer"><p>Yes. You can still browse recipes, keep your pantry, see what you can make and step through a recipe. The app tells you when AI help is off.</p></div>
+          </details>
+          <details>
+            <summary>Do I need Meta glasses?</summary>
+            <div class="answer"><p>No. Glasses support is in development and isn’t in the beta. SousLens works on iPhone alone.</p></div>
+          </details>
+          <details>
+            <summary>How do I delete my account?</summary>
+            <div class="answer"><p>Open Profile in the app and delete your account. Your pantry, recipes, sessions and videos are deleted with it.</p></div>
+          </details>
+        </div>
+        <p class="ledger-foot">Something else? See <a href="support.html">Support</a>.</p>
+      </div>
+    </section>
+
+    <section class="section band closing" aria-labelledby="closing-title">
+      <div class="wrap">
+        <h2 id="closing-title">Cook someone’s recipe with what’s in your kitchen.</h2>
+        <span class="cta" data-cta>Beta opening soon</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p>SousLens public beta, 2026. Questions: <a href="mailto:jacogoby@gmail.com">jacogoby@gmail.com</a></p>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href="privacy.html">Privacy policy</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="site.js"></script>
+</body>
+</html>
