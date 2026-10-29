@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SousLens Brand Board</title>
+<style>
+:root{
+  --page:#F6F4F0; --ink:#1C1B19; --muted:#6B675F; --line:#E3DED5; --card:#FFFFFF;
+  --serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --round: ui-rounded, "SF Pro Rounded", -apple-system, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --page:#121110; --ink:#F1EEE8; --muted:#A39E95; --line:#2C2925; --card:#1B1A18; }
+}
+:root[data-theme="dark"]{ --page:#121110; --ink:#F1EEE8; --muted:#A39E95; --line:#2C2925; --card:#1B1A18; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:16px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:48px 16px 96px}
+header h1{font:700 clamp(36px,6vw,64px)/1.02 var(--serif);letter-spacing:-.02em;margin:0 0 12px}
+header p{max-width:680px;color:var(--muted);font-size:18px;margin:0}
+.kicker{font:600 12px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:40px;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--card)}
+.seg button{all:unset;cursor:pointer;padding:6px 14px;border-radius:999px;font:500 13px var(--sans);color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--page)}
+h2{font:700 30px/1.15 var(--serif);margin:0;letter-spacing:-.01em}
+section.dir{margin-top:72px;padding-top:40px;border-top:1px solid var(--line)}
+.dirhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.dirhead .tag{font:600 12px var(--sans);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.dirhead .tag.rec{background:#2F6B3A;color:#fff;border-color:transparent}
+.lede{color:var(--muted);margin:6px 0 0;max-width:620px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:32px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
+.panel h3{font:600 12px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.panel + .panel{margin-top:16px}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+.sw{border-radius:12px;overflow:hidden;border:1px solid var(--line);font-size:11px}
+.sw i{display:block;height:52px}
+.sw div{padding:6px 8px;line-height:1.3}
+.sw b{display:block;font-weight:600;font-size:11px}
+.sw code{font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+.copy li{margin:0 0 8px}
+.copy li span{display:block;font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+ul{padding-left:18px;margin:0}
+.phones{display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+.phone{width:270px;height:560px;border-radius:44px;padding:10px;background:#0b0b0b;box-shadow:0 30px 60px -30px rgba(0,0,0,.45)}
+.screen{position:relative;width:100%;height:100%;border-radius:35px;overflow:hidden;background:var(--bg);color:var(--tx);font-family:var(--sans)}
+.island{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:84px;height:24px;border-radius:20px;background:#000;z-index:5}
+.status{height:44px}
+.glass{background:color-mix(in srgb,var(--sf) 55%,transparent);backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);border:1px solid color-mix(in srgb,#fff 45%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 50%,transparent),0 8px 24px -10px rgba(0,0,0,.35)}
+.dark .glass{border-color:color-mix(in srgb,#fff 14%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent),0 8px 24px -10px rgba(0,0,0,.6)}
+.scroll{position:absolute;inset:44px 0 0 0;overflow:hidden;padding:0 14px}
+.large{font:var(--titleWeight) 26px/1.1 var(--titleFont);margin:6px 0 10px}
+.chiprow{display:flex;gap:6px;margin-bottom:12px}
+.chip{font:600 10px var(--sans);padding:5px 9px;border-radius:999px;background:var(--sf);color:var(--tx);border:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+.chip.on{background:var(--pri);color:var(--onpri);border-color:transparent}
+.rcard{border-radius:18px;overflow:hidden;background:var(--sf);margin-bottom:12px}
+.rcard .img{height:120px;position:relative}
+.fit{position:absolute;left:8px;bottom:8px;font:600 10px var(--sans);padding:5px 9px;border-radius:999px;color:var(--tx)}
+.rcard .meta{padding:9px 11px 11px}
+.rcard h4{margin:0;font:var(--titleWeight) 15px/1.2 var(--titleFont)}
+.rcard p{margin:3px 0 0;font-size:10px;opacity:.7}
+.tabbar{position:absolute;left:14px;right:14px;bottom:14px;height:54px;border-radius:30px;display:flex;justify-content:space-around;align-items:center;z-index:4}
+.tab{display:flex;flex-direction:column;align-items:center;font:600 8px var(--sans);gap:2px;opacity:.6}
+.tab.on{opacity:1;color:var(--pri)}
+.tab svg{width:18px;height:18px}
+.cook{position:absolute;inset:44px 0 0 0;padding:6px 18px}
+.prog{display:flex;gap:3px;margin:4px 0 14px}
+.prog i{flex:1;height:4px;border-radius:2px;background:color-mix(in srgb,var(--tx) 15%,transparent)}
+.prog i.d{background:var(--pri)}
+.stepno{font:600 11px var(--round);letter-spacing:.06em;text-transform:uppercase;opacity:.65}
+.steptext{font:var(--titleWeight) 23px/1.22 var(--titleFont);margin:6px 0 14px}
+.steptext b{color:var(--pri);font-family:var(--round)}
+.warn{display:flex;gap:8px;align-items:flex-start;padding:10px 11px;border-radius:12px;background:var(--wbg);color:var(--wtx);font-size:11px;line-height:1.35;font-weight:500}
+.warn svg{flex:none;width:14px;height:14px;margin-top:1px}
+.ring{display:flex;align-items:center;gap:10px;margin-top:14px}
+.ring svg{width:46px;height:46px}
+.ring div{font:600 20px var(--round);font-variant-numeric:tabular-nums}
+.ring small{display:block;font:500 10px var(--sans);opacity:.65}
+.tools{position:absolute;left:14px;right:14px;bottom:84px;display:flex;justify-content:center;gap:8px}
+.tools span{width:44px;height:44px;border-radius:50%;display:grid;place-items:center}
+.tools svg{width:18px;height:18px}
+.nav{position:absolute;left:14px;right:14px;bottom:18px;display:flex;gap:8px}
+.nav .b{height:54px;border-radius:28px;display:grid;place-items:center;font:600 14px var(--sans)}
+.nav .back{width:80px}
+.nav .next{flex:1;background:var(--pri);color:var(--onpri);border:none;box-shadow:0 10px 24px -10px var(--pri)}
+.moments{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:20px}
+.moment{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.moment b{font:700 17px/1.25 var(--serif);display:block;margin-bottom:6px}
+.moment p{margin:0;color:var(--muted);font-size:14px}
+.moment code{font:11px ui-monospace,Menlo,monospace;color:var(--muted);display:block;margin-top:10px}
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+@media (max-width:700px){.rules{grid-template-columns:1fr}}
+.rules .panel li{margin-bottom:6px}
+.dirtoggle{margin-left:auto}
+@media (prefers-reduced-motion:no-preference){
+  .next{animation:breathe 3.2s ease-in-out infinite}
+  @keyframes breathe{50%{transform:scale(1.015)}}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="kicker">SousLens · Brand directions · Oct 2026</div>
+    <div class="seg" role="group" aria-label="Page theme">
+      <button data-t="auto" aria-pressed="true">Auto</button><button data-t="light" aria-pressed="false">Light</button><button data-t="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+  <header>
+    <h1>Pick a personality<br>for SousLens.</h1>
+    <p>Three directions for the brand, drawn on the two screens that matter most: Explore, and a live cooking step. Glass sits only on the controls layer (tab bar, cooking tools, Next). Recipe text and safety warnings stay solid. Every colour pair below passes WCAG AA, in both light and dark.</p>
+  </header>
+
+  <div id="dirs"></div>
+
+  <section class="dir">
+    <div class="dirhead"><div><h2>Signature moments</h2><p class="lede">These ship whichever direction you pick. Listed in order of value to the cook. Each one has a Reduce Motion fallback.</p></div></div>
+    <div class="moments">
+      <div class="moment"><b>Cooking step card</b><p>One step fills the screen in large type, with a segmented progress bar. The tool cluster floats on glass and is minimised until you need it.</p><code>GlassEffectContainer · glassEffectID</code></div>
+      <div class="moment"><b>Step advance</b><p>The old step slides away and the new one slides in. A light haptic fires only once the server confirms the step. Nothing is shown as done before it really is.</p><code>.transition(.push) · sensoryFeedback</code></div>
+      <div class="moment"><b>Timer ring</b><p>A ring counts down in rounded numerals and pulses once at zero, with a distinct haptic.</p><code>TimelineView · KeyframeAnimator · numericText</code></div>
+      <div class="moment"><b>"You can make this" reveal</b><p>The pantry-fit count ticks up, and the chip morphs into the recipe's fit summary.</p><code>PhaseAnimator · symbolEffect(.bounce)</code></div>
+      <div class="moment"><b>Pantry scan → chips</b><p>Detected items peel off the photo and land in the review list. Nothing is saved until you confirm.</p><code>matchedGeometryEffect · sensoryFeedback(.success)</code></div>
+      <div class="moment"><b>Card → recipe zoom</b><p>The Explore card grows into the recipe's hero image, and swiping back shrinks it home.</p><code>navigationTransition(.zoom) (iOS 18+)</code></div>
+      <div class="moment"><b>Resume pill</b><p>The "Continue cooking" banner morphs into a pill that rides above the tab bar.</p><code>tabViewBottomAccessory (iOS 26)</code></div>
+      <div class="moment"><b>Finished</b><p>A check mark draws itself in, then a short summary of your swaps and notes appears.</p><code>symbolEffect(.drawOn) / PhaseAnimator</code></div>
+    </div>
+  </section>
+
+  <section class="dir">
+    <div class="dirhead"><div><h2>Rules that don't bend</h2></div></div>
+    <div class="rules">
+      <div class="panel"><h3>Glass goes here</h3><ul><li>Tab bar (minimises on scroll)</li><li>Navigation toolbars, search</li><li>Cooking tools and Back / Next</li><li>Sheet backgrounds (the assistant drawer)</li></ul></div>
+      <div class="panel"><h3>Never on glass</h3><ul><li>Recipe text, ingredients, step text</li><li>Allergy blocks, food-safety notices, swap cautions</li><li>Error and offline banners, confirmation dialogs</li><li>Animation never hides or auto-dismisses a safety message</li></ul></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const DIRS=[
+ {id:'mise',name:'Mise',rec:true,line:'Warm editorial: calm, confident, trustworthy. Like a well-loved cookbook.',
+  why:'Builds on the serif already in the app. "Teach anyone to cook" reads as trustworthy rather than gimmicky. Warm paper gives the glass something to refract. Its dark variant doubles as a kitchen-at-night cooking mode.',
+  font:{t:'var(--serif)',w:700,desc:'New York Bold for titles · SF Pro for body · SF Rounded for quantities and timers'},
+  icon:'Cream tile with a herb-green leaf whose edge is notched like a camera lens',
+  motion:'Gentle springs and unhurried reveals',
+  light:{bg:'#FBF6EE',sf:'#FFFFFF',tx:'#2A2118',pri:'#2F6B3A',onpri:'#FFFFFF',sec:'#B3401E',wbg:'#FFF4D6',wtx:'#8A5300',al:'#A4161A'},
+  dark:{bg:'#16130F',sf:'#221E19',tx:'#F5EEE3',pri:'#7FCB8C',onpri:'#10230F',sec:'#FF8F6B',wbg:'#3A2A0E',wtx:'#F2B24B',al:'#FF7B72'},
+  img:['linear-gradient(135deg,#C9572B,#E8A04A 55%,#6E8B3D)','linear-gradient(135deg,#8B3A1E,#D27A3A)'],
+  copy:["Your pantry's empty. Add what's on the shelf and we'll find dinner.","Step done. Nice and steady.","This has peanuts. You said no peanuts, so we've stopped here."]},
+ {id:'pass',name:'Pass',line:'Pro kitchen: dark-first, high energy, built around rings. Like a restaurant line at service.',
+  why:'Risk: it can feel cold to home cooks, and glass gets lost against near-black. Its ring and big-numeral ideas are worth borrowing for cooking mode whichever direction wins.',
+  font:{t:'var(--sans)',w:800,desc:'SF Pro Display Heavy for titles, tight tracking · SF Rounded for numbers'},
+  icon:'Black tile with a lime timer arc',
+  motion:'Snappy: sharp springs, rings that fill',
+  light:{bg:'#F4F5F7',sf:'#FFFFFF',tx:'#14161A',pri:'#3F5F00',onpri:'#FFFFFF',sec:'#0B5CAD',wbg:'#FFF1DC',wtx:'#8A4B00',al:'#B0181F'},
+  dark:{bg:'#0E0F12',sf:'#1A1C21',tx:'#F2F3F5',pri:'#D6F24A',onpri:'#141800',sec:'#7CC4FF',wbg:'#33240A',wtx:'#FFB020',al:'#FF6B6B'},
+  img:['linear-gradient(135deg,#1d1f22,#4a3a2a 50%,#b5532b)','linear-gradient(135deg,#222,#5b6b2a)'],
+  copy:["Empty pantry. Add items.","Done. Next.","Allergy hit: peanuts. Not on this one."]},
+ {id:'larder',name:'Larder',line:'Playful home-cook community: bright, chatty, celebratory.',
+  why:'Risk: the cheerful voice clashes with safety messages and undercuts the creator-quality positioning. Stickers and illustrations also add production cost.',
+  font:{t:'var(--round)',w:700,desc:'SF Rounded Bold for titles · SF Pro for body'},
+  icon:'Plum tile with a saffron sparkle',
+  motion:'Bouncy and celebratory',
+  light:{bg:'#FFF9EC',sf:'#FFFFFF',tx:'#2B1E2A',pri:'#7A2E6E',onpri:'#FFFFFF',sec:'#F2B31B',wbg:'#FFF0C2',wtx:'#8A5300',al:'#B3261E'},
+  dark:{bg:'#1B141A',sf:'#281E27',tx:'#F7EEF5',pri:'#E7A6DC',onpri:'#2B0F26',sec:'#F7C948',wbg:'#3A2A10',wtx:'#F5B94A',al:'#FF8A80'},
+  img:['linear-gradient(135deg,#F2B31B,#E65A4F 60%,#7A2E6E)','linear-gradient(135deg,#7A2E6E,#F2B31B)'],
+  copy:["Nothing here yet! Snap your shelf and let's see what's cooking.","Step done! You're on a roll.","Heads up, this one has peanuts. Not safe for you."]}
+];
+const ic={
+ explore:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>',
+ pantry:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 10h16M4 16h16"/></svg>',
+ saved:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg>',
+ me:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>',
+ warn:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22zm-1 7h2v6h-2zm0 8h2v2h-2z"/></svg>',
+ rep:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 1 0 3-6.2M4 4v4h4"/></svg>',
+ ask:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+ look:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><circle cx="12" cy="12" r="3"/></svg>',
+ slow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 6 5 12l6 6M19 6l-6 6 6 6"/></svg>'
+};
+function vars(p,d){return `--bg:${p.bg};--sf:${p.sf};--tx:${p.tx};--pri:${p.pri};--onpri:${p.onpri};--wbg:${p.wbg};--wtx:${p.wtx};--titleFont:${d.font.t};--titleWeight:${d.font.w}`}
+function explore(d,p){return `<div class="phone"><div class="screen" style="${vars(p,d)}"><div class="island"></div><div class="status"></div><div class="scroll">
+<div class="large">Explore</div>
+<div class="chiprow"><span class="chip on">Can make now</span><span class="chip">Weeknight</span><span class="chip">Korean</span></div>
+<div class="rcard"><div class="img" style="background:${d.img[0]}"><span class="fit glass">✓ You have 9 of 10</span></div><div class="meta"><h4>Gochujang Butter Noodles</h4><p>Min-ji Park · 20 min · Easy</p></div></div>
+<div class="rcard"><div class="img" style="background:${d.img[1]}"><span class="fit glass">2 swaps away</span></div><div class="meta"><h4>Kimchi Fried Rice</h4><p>Dae Kim · 15 min</p></div></div>
+</div><div class="tabbar glass"><span class="tab on">${ic.explore}Explore</span><span class="tab">${ic.pantry}Pantry</span><span class="tab">${ic.saved}Saved</span><span class="tab">${ic.me}You</span></div></div></div>`}
+function cook(d,p){return `<div class="phone"><div class="screen" style="${vars(p,d)}"><div class="island"></div><div class="status"></div><div class="cook">
+<div class="prog"><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i><i></i></div>
+<div class="stepno">Step 4 of 6</div>
+<div class="steptext">Toss the noodles in <b>2 tbsp</b> gochujang butter until glossy.</div>
+<div class="warn" style="background:${p.wbg};color:${p.al}">${ic.warn}<span>Contains sesame, which is on your allergy list. Swap or skip it before you continue.</span></div>
+<div class="ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="21" fill="none" stroke="currentColor" stroke-opacity=".15" stroke-width="5"/><circle cx="25" cy="25" r="21" fill="none" stroke="${p.pri}" stroke-width="5" stroke-linecap="round" stroke-dasharray="132" stroke-dashoffset="44" transform="rotate(-90 25 25)"/></svg><div>3:12<small>Simmer timer</small></div></div>
+</div>
+<div class="tools"><span class="glass">${ic.rep}</span><span class="glass">${ic.slow}</span><span class="glass">${ic.ask}</span><span class="glass">${ic.look}</span></div>
+<div class="nav"><span class="b back glass">Back</span><span class="b next">Next step</span></div></div></div>`}
+function sw(n,h,role){return `<div class="sw"><i style="background:${h}"></i><div><b>${role}</b><code>${h}</code></div></div>`}
+function render(d,mode){const p=d[mode];return `
+<div class="phones ${mode}">${explore(d,p)}${cook(d,p)}</div>`}
+const root=document.getElementById('dirs');
+DIRS.forEach(d=>{
+  const s=document.createElement('section');s.className='dir';
+  s.innerHTML=`<div class="dirhead"><div><h2 style="font-family:${d.font.t};font-weight:${d.font.w}">${d.name}</h2><p class="lede">${d.line}</p></div>
+  <span class="tag ${d.rec?'rec':''}">${d.rec?'Recommended':'Alternative'}</span>
+  <div class="seg dirtoggle" role="group" aria-label="${d.name} mode"><button data-m="light" aria-pressed="true">Light</button><button data-m="dark" aria-pressed="false">Dark</button></div></div>
+  <div class="grid"><div>
+   <div class="panel"><h3>Palette · light / dark</h3><div class="swatches">
+    ${['bg','sf','tx','pri','sec','al'].map((k,i)=>sw(k,d.light[k],['Background','Surface','Text','Primary','Secondary','Allergy'][i])).join('')}
+    ${['bg','sf','tx','pri','sec','al'].map((k,i)=>sw(k,d.dark[k],['Background','Surface','Text','Primary','Secondary','Allergy'][i])).join('')}
+   </div></div>
+   <div class="panel"><h3>Type · icon · motion</h3><ul><li>${d.font.desc}</li><li>App icon: ${d.icon}</li><li>Motion: ${d.motion}</li></ul></div>
+   <div class="panel copy"><h3>Voice</h3><ul style="list-style:none;padding:0">
+    <li><span>Empty pantry</span>“${d.copy[0]}”</li><li><span>Step complete</span>“${d.copy[1]}”</li><li><span>Allergy block</span>“${d.copy[2]}”</li></ul></div>
+   <div class="panel"><h3>${d.rec?'Why this one':'Trade-off'}</h3><p style="margin:0">${d.why}</p></div>
+  </div><div class="stage">${render(d,'light')}</div></div>`;
+  s.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{s.querySelectorAll('[data-m]').forEach(x=>x.setAttribute('aria-pressed',x===b));s.querySelector('.stage').innerHTML=render(d,b.dataset.m)});
+  root.appendChild(s);
+});
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-t]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  if(b.dataset.t==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',b.dataset.t)});
+</script>
+</body>
+</html>

@@ -119,3 +119,30 @@ found model-prose filtering bypassable and allergy matching too narrow.
 - **A third backend fix round** (past the usual two) was run because the review found allergy
   phrasings like "I'm allergic to peanuts" weren't matched. Safety blockers don't ship.
 *Lives in:* `docs/product/briefs/005-api-contract.md` (fix-round clarifications).
+
+#17 · 2026-10-23 · **Brand = "Mise" (warm editorial); redesign the core loop first.**
+- **Brand.** Cream paper #FBF6EE, herb green #2F6B3A, tomato #B3401E. New York serif for
+  titles, SF Rounded for numbers. A calm, plain voice.
+- **Liquid Glass.** It goes on the controls layer only. Content and safety notices stay solid.
+- **iOS.** Keep iOS 17.2+, with a frosted fallback below iOS 26.
+- **First PR.** Explore, Recipe and Cooking. Pantry, Creator and Profile come in PR 2.
+- **App icon.** Eng draws the app icon in code for the pilot.
+
+*Why:* PM choice from the brand board (`docs/product/design/brand-board.html`), on the
+designer's recommendation: it fits trust and safety messaging and builds on the existing serif.
+*Lives in:* `docs/product/briefs/006-brand-mise-core-loop.md`.
+
+#18 · 2026-10-28 · **Go to finish P0 and release a public TestFlight beta with a product site.**
+- **Gemini spend: go, $25/month hard cap.** Uses the PM's personal Gemini key. The backend enforces
+  per-user daily limits and a monthly kill-switch. When the cap is hit, the app falls back to the
+  labelled mock/AI-off path; it never fails silently. Unlocks Slices 4 and 5.
+- **Glasses: full build (Slice 6).** The PM has compatible Meta glasses. Use the latest publicly
+  released Meta Wearables Device Access Toolkit. The release pipeline (registration, Meta app
+  config, TestFlight distribution with DAT) must be fully laid out.
+- **Hosting: Fly.io + Fly Postgres + Tigris object storage,** on the personal Fly account
+  (jacogoby@gmail.com).
+- **Release: Sign in with Apple** replaces dev-login in production. **Product site on Vercel**
+  (personal `hshwang34`) with the public TestFlight link.
+- Each actual production deploy, App Store Connect upload and the TestFlight external-review
+  submission still gets a one-line confirmation from the PM at that moment.
+*Lives in:* briefs 006–010.
