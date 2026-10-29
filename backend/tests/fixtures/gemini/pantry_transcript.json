@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.5-flash-lite",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"candidates\": [{\"raw_label\": \"two onions\", \"canonical_name\": \"onion\", \"quantity\": 2, \"unit\": \"count\", \"confidence\": 0.9, \"evidence\": \"said 'two onions'\", \"quantity_is_estimate\": false}], \"notes\": [], \"unknowns\": []}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 700,
+      "candidatesTokenCount": 60,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 760
+    }
+  }
+}

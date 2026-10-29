@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"observation\": \"The cucumber pieces appear uneven; a few look larger than bite-sized.\", \"step_alignment\": \"The step asks for bite-sized pieces.\", \"confidence\": \"medium\", \"limitations\": [\"The photo does not show every piece.\"], \"suggested_action\": \"Cut the largest pieces in half.\"}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 2400,
+      "candidatesTokenCount": 90,
+      "thoughtsTokenCount": 200,
+      "totalTokenCount": 2690
+    }
+  }
+}

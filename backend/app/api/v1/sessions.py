@@ -6,19 +6,25 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Literal
 
+import pydantic
 from fastapi import APIRouter, Header, Query, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.ai.providers.base import AIProvider
-from app.core.errors import NotFound
+from app.ai.guard import notice_of, provider_for
+from app.core.errors import NotFound, UnsupportedMediaType, ValidationError
 from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
+from app.domains.pantry import upload
 from app.domains.sessions import ask as ask_service
+from app.domains.sessions import inspect as inspect_service
 from app.domains.sessions import service
 from app.domains.sessions.schemas import (
+    QUERY_MAX,
     AskIn,
     AskOut,
     CommandIn,
+    InspectOut,
     NoteIn,
     NoteOut,
     SessionCreateIn,
@@ -94,8 +100,87 @@ async def run_command(
 async def ask(
     session_id: str, body: AskIn, request: Request, session: DbSession, user: CurrentUser
 ) -> AskOut:
-    provider: AIProvider = request.app.state.ai_provider
-    return await ask_service.ask(session, user, _session_id(session_id), body, provider)
+    provider = provider_for(request, user.id)
+    out = await ask_service.ask(session, user, _session_id(session_id), body, provider)
+    out.ai_notice = notice_of(provider)
+    return out
+
+
+_INSPECT_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "multipart/form-data": {
+                "schema": {
+                    "type": "object",
+                    "required": ["image", "query"],
+                    "properties": {
+                        "image": {"type": "string", "format": "binary"},
+                        "query": {"type": "string", "maxLength": QUERY_MAX},
+                        "grounded_revision": {"type": "integer", "minimum": 0},
+                        "captured_at": {"type": "string", "maxLength": 64},
+                    },
+                }
+            }
+        },
+    }
+}
+
+
+def _revision_field(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+    if not value.isdigit() or len(value) > 9:
+        raise ValidationError(
+            "grounded_revision must be a non-negative integer",
+            extra={"fields": ["grounded_revision"]},
+        )
+    return int(value)
+
+
+@router.post("/{session_id}/inspect", response_model=InspectOut, openapi_extra=_INSPECT_BODY)
+async def inspect(
+    session_id: str, request: Request, session: DbSession, user: CurrentUser
+) -> InspectOut:
+    """One user-initiated photo for the current step (brief 007). The photo is processed in
+    memory and never stored or logged."""
+    sid = _session_id(session_id)
+    content_type = request.headers.get("content-type", "")
+    if content_type.split(";", 1)[0].strip().lower() != "multipart/form-data":
+        raise UnsupportedMediaType("Send the photo as multipart/form-data")
+    body = await upload.read_body_capped(request)
+    parts = upload.parse_multipart(body, content_type)
+    del body
+    image = parts.get("image")
+    if image is None or image.filename is None or not image.data:
+        raise ValidationError("an image file is required", extra={"fields": ["image"]})
+    data = bytes(image.data)
+    image.data.clear()
+    mime = upload.sniff_image(data)
+    try:  # the same text rules as /ask (length, control characters, trimming)
+        query = AskIn(query=upload.text_field(parts, "query") or "").query
+    except pydantic.ValidationError as exc:
+        raise RequestValidationError(exc.errors()) from exc
+    captured_at = upload.text_field(parts, "captured_at")
+    if captured_at is not None and len(captured_at) > 64:
+        raise ValidationError("captured_at is too long", extra={"fields": ["captured_at"]})
+    provider = provider_for(request, user.id)
+    try:
+        out = await inspect_service.inspect(
+            session,
+            user,
+            sid,
+            query=query,
+            grounded_revision=_revision_field(upload.text_field(parts, "grounded_revision")),
+            captured_at=captured_at or None,
+            image=data,
+            mime_type=mime,
+            provider=provider,
+        )
+    finally:
+        del data  # PRIV-01: the photo lives only for this request
+    out.ai_notice = notice_of(provider)
+    return out
 
 
 @router.post("/{session_id}/notes", response_model=NoteOut, status_code=status.HTTP_201_CREATED)

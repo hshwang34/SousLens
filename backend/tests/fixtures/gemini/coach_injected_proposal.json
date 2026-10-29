@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"answer_text\": \"The recipe says to stir the sauce. My suggestion: stir gently.\", \"grounding\": [], \"uncertainty\": \"low\", \"safety_notice\": null, \"proposed_action\": {\"command\": \"jump_to_step\", \"step_index\": 4}}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1800,
+      "candidatesTokenCount": 120,
+      "thoughtsTokenCount": 240,
+      "totalTokenCount": 2160
+    }
+  }
+}

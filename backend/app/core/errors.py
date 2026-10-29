@@ -114,6 +114,16 @@ class ProviderUnavailable(AppError):
     retryable = True
 
 
+class AIBlocked(AppError):
+    """The model provider's safety filter blocked the request or the answer (brief 007).
+
+    A normal user-facing outcome: it is never retried and never replaced by made-up output."""
+
+    code = "AI_SAFETY_BLOCKED"
+    status_code = 422
+    retryable = False
+
+
 class Internal(AppError):
     code = "INTERNAL"
     status_code = 500

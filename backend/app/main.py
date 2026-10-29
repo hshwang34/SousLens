@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.budget import CostGuard
+from app.ai.providers.mock import MockAIProvider
 from app.ai.registry import build_provider
 from app.api.v1 import auth as auth_router
 from app.api.v1.router import router as v1_router
@@ -30,6 +32,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = make_engine(settings.database_url, echo=settings.db_echo)
         app.state.engine = engine
         app.state.sessionmaker = make_sessionmaker(engine)
+        # The Gemini cost guard writes its ledger in its own short transactions.
+        app.state.cost_guard = CostGuard(app.state.sessionmaker, settings)
         log.info(
             "startup",
             extra={
@@ -52,6 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.ai_provider = build_provider(settings)
+    # The labelled demo path used when a Gemini budget cap is reached (brief 007).
+    app.state.ai_fallback = MockAIProvider(settings.fixtures_dir)
     app.state.auth_provider = None
 
     install_error_handlers(app)

@@ -20,6 +20,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.ai.notice import AINotice, notice_field
 from app.domains.recipes.draft_schemas import check_text
 from app.domains.recipes.schemas import RecipeDetail
 from app.domains.sessions.oracle import CommandType
@@ -240,6 +241,31 @@ class AskOut(BaseModel):
     safety_notice: str | None
     proposed_action: ProposedActionOut | None
     requires_confirmation: bool
+    ai_notice: AINotice | None = notice_field()  # brief 007; omitted unless set
+
+
+VISUAL_LABEL = "Visual estimate — not verified"
+
+
+class InspectOut(BaseModel):
+    """``POST /sessions/{id}/inspect`` (PRD §11.2 + brief 007 additions). Always an AI
+    observation: never certifies doneness or safety, never recommends a step change."""
+
+    observation_id: uuid.UUID
+    observation: str
+    step_alignment: str
+    confidence: Literal["low", "medium", "high"]
+    limitations: list[str]
+    suggested_action: str | None
+    food_safety_certified: Literal[False] = False
+    grounded_revision: int
+    recommended_step_change: None = None
+    stale: bool
+    label: Literal["Visual estimate — not verified"] = VISUAL_LABEL
+    evidence_origin: Literal["ai_observation"] = "ai_observation"
+    safety_notice: str | None
+    grounding: list[GroundingOut]
+    ai_notice: AINotice | None = notice_field()
 
 
 class VariationAdaptation(AdaptationOut):

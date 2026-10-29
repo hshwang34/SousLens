@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.ai.notice import AINotice, notice_field
+
 
 class SuggestIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -44,3 +46,4 @@ class SuggestOut(BaseModel):
     cannot_substitute: bool
     reason: str | None
     safety_notice: str | None
+    ai_notice: AINotice | None = notice_field()  # brief 007; omitted unless set

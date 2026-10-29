@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.5-flash-lite",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"candidates\": [{\"raw_label\": \"garlic\", \"canonical_name\": \"garlic\", \"quantity\": 1, \"unit\": \"head\", \"confidence\": 0.9, \"evidence\": \"one garlic head visible\", \"quantity_is_estimate\": true}, {\"raw_label\": \"?\", \"confidence\": 1.7, \"evidence\": \"x\"}], \"notes\": [], \"unknowns\": []}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1500,
+      "candidatesTokenCount": 80,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 1580
+    }
+  }
+}

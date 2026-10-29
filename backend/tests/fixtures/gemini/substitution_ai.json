@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"suggestions\": [{\"candidate\": \"white wine vinegar\", \"kind\": \"flavor_adaptation\", \"ratio_or_amount\": \"1:1\", \"rationale\": \"Similar acidity, a little sharper.\", \"impact_flavor\": \"slightly sharper\", \"impact_texture\": \"none\", \"adjusted_steps\": [], \"confidence\": 0.7, \"risks\": []}], \"cannot_substitute\": false, \"reason\": null}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1200,
+      "candidatesTokenCount": 140,
+      "thoughtsTokenCount": 300,
+      "totalTokenCount": 1640
+    }
+  }
+}

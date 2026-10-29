@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"answer_text\": \"The rec"
+            }
+          ]
+        },
+        "finishReason": "MAX_TOKENS",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1800,
+      "candidatesTokenCount": 2048,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 3848
+    }
+  }
+}

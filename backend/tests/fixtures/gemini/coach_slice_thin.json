@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"answer_text\": \"The recipe says (step 1): trim the ends and smash each cucumber. My suggestion: aim for bite-sized pieces about 2 cm across.\", \"grounding\": [{\"type\": \"recipe_step\", \"id\": \"step-1\"}, {\"type\": \"ingredient\", \"id\": \"ing-1\"}, {\"type\": \"recipe_step\", \"id\": \"step-99\"}], \"uncertainty\": \"low\", \"safety_notice\": \"Keep fingers clear of the knife edge.\", \"proposed_action\": null}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1800,
+      "candidatesTokenCount": 120,
+      "thoughtsTokenCount": 240,
+      "totalTokenCount": 2160
+    }
+  }
+}
