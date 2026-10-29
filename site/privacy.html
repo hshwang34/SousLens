@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SousLens Privacy Policy</title>
+  <meta name="description" content="How SousLens handles your account, pantry, recipes, voice and photos.">
+  <meta name="theme-color" content="#FBF6EE" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17130F" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="SousLens Privacy Policy">
+  <meta property="og:description" content="How SousLens handles your account, pantry, recipes, voice and photos.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..500&amp;display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="masthead">
+    <div class="wrap">
+      <a class="brand" href="index.html" aria-label="SousLens home">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="none" stroke="currentColor" stroke-width="5"/><path d="M20 44c0-14 9-24 25-25-1 16-11 25-25 25z" fill="var(--herb)"/><path d="M20 44c6-7 12-12 19-17" fill="none" stroke="var(--paper)" stroke-width="2.5" stroke-linecap="round"/><circle cx="45" cy="45" r="4" fill="var(--tomato)"/></svg>
+        SousLens
+      </a>
+      <nav aria-label="Main">
+        <ul>
+          <li><a href="index.html#how">How it works</a></li>
+          <li><a href="index.html#safety">Safety</a></li>
+          <li><a href="index.html#privacy">Privacy</a></li>
+          <li><a href="index.html#faq">FAQ</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <article class="doc">
+      <div class="wrap">
+        <header class="doc-head">
+          <h1>Privacy policy</h1>
+          <p>What SousLens keeps, what it never keeps, and who else sees your data.</p>
+          <p class="meta">Effective 28 October 2026. Applies to the SousLens iPhone app beta and this website.</p>
+        </header>
+        <div class="doc-body">
+          <h2>The short version</h2>
+          <ul>
+            <li>Your voice is transcribed on your iPhone. Audio never leaves the phone.</li>
+            <li>Photos of your pantry, and photos you take while cooking, are analysed in memory and never stored.</li>
+            <li>Your account, pantry, recipes, cooking sessions and creator videos are kept until you delete them.</li>
+            <li>AI features use Google Gemini on a paid plan, which doesn’t use your data to train its models.</li>
+            <li>We don’t sell your data or use it for advertising.</li>
+          </ul>
+
+          <h2>Signing in</h2>
+          <p>You sign in with Apple. Apple shares a stable account identifier with us and, if you allow it, your email address. Apple lets you hide your real address behind a private relay address. We never see your Apple password.</p>
+
+          <h2>What we store</h2>
+          <p>These are stored on our servers so the app works across launches, and kept until you delete them:</p>
+          <ul>
+            <li><strong>Your account:</strong> the Apple identifier, your email if you shared it, and the display name you choose.</li>
+            <li><strong>Your pantry:</strong> the ingredients you confirm, plus any allergies and preferences you enter.</li>
+            <li><strong>Recipes:</strong> recipes you save, and recipes you write. A recipe you publish is public, shown with your display name.</li>
+            <li><strong>Cooking sessions:</strong> which recipe version you cooked, your current step, the swaps you approved, timers, notes, and the questions you typed or spoke (as text).</li>
+            <li><strong>Creator videos and clips:</strong> a cooking video you upload, and the step clips made from it, are kept until you delete them. You can delete a video from its recipe at any time.</li>
+          </ul>
+
+          <h2>What we don’t store</h2>
+          <ul>
+            <li><strong>Voice audio.</strong> Apple’s on-device speech recognition turns your speech into text on your iPhone. You see the text before it’s sent. Spoken replies are generated on the phone too.</li>
+            <li><strong>Pantry and cooking photos.</strong> When you take a photo to add ingredients or to ask about a step, it’s sent over an encrypted connection, held in memory while it’s analysed, then discarded. It isn’t written to our storage or database.</li>
+            <li><strong>Background recording.</strong> The camera and microphone only run when you start them, and the app shows when they’re on.</li>
+          </ul>
+
+          <h2>AI processing by Google Gemini</h2>
+          <p>To suggest ingredients from a photo, answer cooking questions, and draft recipes from creator videos, SousLens sends the relevant photo, text or video to the Google Gemini API, together with the recipe step it’s about. We use Gemini’s paid tier, under which Google does not use your prompts or responses to improve its models. Google may keep requests for a limited time to detect abuse, as described in the <a href="https://ai.google.dev/gemini-api/terms">Gemini API terms</a>.</p>
+          <p>AI answers are suggestions. SousLens never decides from a photo whether food is cooked or safe to eat.</p>
+
+          <h2>Where your data lives</h2>
+          <p>Our servers run on Fly.io, with the database on Neon and media files in Tigris object storage. Data is encrypted in transit and at rest, and media is only reachable through short-lived signed links. Our operational logs record technical details such as request times and error codes. They never contain photos, audio or the content of your requests.</p>
+
+          <h2>Who else sees your data</h2>
+          <ul>
+            <li>Other people see only what you publish: your recipes, their clips, and your display name.</li>
+            <li>The service providers above process data on our behalf to run SousLens.</li>
+            <li>Apple’s TestFlight may send us crash reports and any feedback you choose to submit, under Apple’s own terms.</li>
+          </ul>
+          <p>We don’t sell personal data, share it with advertisers, or use third-party advertising or tracking tools.</p>
+
+          <h2>Deleting your data</h2>
+          <ul>
+            <li><strong>Your whole account:</strong> open Profile in the app and delete your account. This deletes your account, pantry, saved and authored recipes, cooking sessions, videos and clips, and disconnects Sign in with Apple.</li>
+            <li><strong>One video:</strong> delete it from the creator screen of its recipe.</li>
+            <li><strong>Pantry items:</strong> edit or remove them in Pantry at any time.</li>
+          </ul>
+          <p>If you can’t reach the app, email us and we’ll delete your account for you.</p>
+
+          <h2>Children</h2>
+          <p>SousLens isn’t directed at children under 13, and we don’t knowingly collect their data. If you think a child has an account, email us and we’ll delete it.</p>
+
+          <h2>Changes to this policy</h2>
+          <p>If this policy changes, we’ll update this page and its effective date. Significant changes will also be announced in the app.</p>
+
+          <h2>Contact</h2>
+          <div class="contact">
+            <p>Privacy questions and deletion requests:</p>
+            <p class="addr"><a href="mailto:jacogoby@gmail.com">jacogoby@gmail.com</a></p>
+          </div>
+        </div>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p>SousLens public beta, 2026. Questions: <a href="mailto:jacogoby@gmail.com">jacogoby@gmail.com</a></p>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href="privacy.html" aria-current="page">Privacy policy</a></li>
+          <li><a href="support.html">Support</a></li>
+        </ul>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="site.js"></script>
+</body>
+</html>

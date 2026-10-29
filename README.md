@@ -8,6 +8,7 @@ cooks with a stateful assistant on iPhone — or through Meta AI glasses camera/
 
 - Product spec: [`PRD.md`](PRD.md) · how we build: [`docs/product/README.md`](docs/product/README.md)
 - Engineering rules and invariants: [`CLAUDE.md`](CLAUDE.md)
+- Product site (static, Vercel): [`site/`](site/) · TestFlight link goes in `site/config.js`
 
 ## Run it
 
