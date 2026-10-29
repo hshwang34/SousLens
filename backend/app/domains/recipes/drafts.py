@@ -10,6 +10,11 @@ Invariants enforced here (CLAUDE.md):
 * A published draft is read-only (PATCH → 409). Editing a published recipe starts a *new* draft
   pre-filled from the latest version; there is never an in-place mutation of a version.
 * Unpublish only flips ``recipes.visibility``; versions are untouched.
+* Brief 008: a draft being filled by video extraction (``extracting``) can't be edited or
+  published until the job ends. Publishing turns ``ai_extracted`` fields into
+  ``creator_reviewed`` (the creator approved them), refuses steps whose clip is still rendering
+  or failed, attaches the used clips to the version and discards the draft's other clips.
+  Deleting a draft deletes its unpublished clips; the source video is kept (DECISIONS #20).
 """
 
 from __future__ import annotations
@@ -25,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, StateConflict, ValidationError
 from app.db.models import DraftStatus, Recipe, RecipeDraft, RecipeVersion, User, Visibility
+from app.domains.media import service as media
 from app.domains.ownership import get_owned_or_404
 from app.domains.recipes.draft_schemas import (
     CONTENT_FIELDS,
@@ -68,6 +74,9 @@ def normalise(content: DraftContent) -> dict[str, Any]:
         for index, step in enumerate(content.steps)
     ]
     ingredients = [IngredientOut.model_validate(i.model_dump()) for i in content.ingredients]
+    extra: dict[str, Any] = {}
+    if content.extraction is not None:
+        extra["extraction"] = content.extraction.model_dump(mode="json")
     return {
         "title": content.title,
         "summary": content.summary,
@@ -80,6 +89,7 @@ def normalise(content: DraftContent) -> dict[str, Any]:
         "steps": [s.model_dump(mode="json") for s in steps],
         "creator_notes": list(content.creator_notes),
         "dietary_warnings": list(content.dietary_warnings),
+        **extra,
     }
 
 
@@ -220,6 +230,7 @@ def to_summary(row: RecipeDraft) -> DraftSummary:
         validation=validate(content),
         created_at=row.created_at,
         updated_at=row.updated_at,
+        extraction=content.extraction,
     )
 
 
@@ -261,14 +272,26 @@ async def patch_draft(
             "This draft was published and is read-only; edit the recipe to start a new draft",
             extra={"details": {"recipe_id": str(row.recipe_id) if row.recipe_id else None}},
         )
+    ensure_not_extracting(row)
     row.structured_draft_json = normalise(apply_patch(read_content(row), patch))
     await session.flush()
     await session.refresh(row)
     return row
 
 
+def ensure_not_extracting(row: RecipeDraft) -> None:
+    if row.status == DraftStatus.EXTRACTING:
+        content = read_content(row)
+        job_id = content.extraction.job_id if content.extraction else None
+        raise StateConflict(
+            "This draft is still being made from your video; wait for it to finish",
+            extra={"details": {"job_id": str(job_id) if job_id else None}},
+        )
+
+
 async def delete_draft(session: AsyncSession, user: User, draft_id: uuid.UUID) -> None:
     row = await get_draft_row(session, user, draft_id)
+    await media.discard_unpublished_clips(session, row.id)
     await session.delete(row)
     await session.flush()
 
@@ -346,6 +369,46 @@ def search_text_for(title: str | None, ingredients: list[dict[str, Any]]) -> str
     return " ".join(part for part in trimmed if part).lower()
 
 
+def _reviewed(content: DraftContent) -> DraftContent:
+    """Publishing is the creator's approval: AI-extracted fields become "AI-extracted,
+    creator-verified" (PRD §13.4) in the published version."""
+    data = content.model_dump()
+    for item in data["ingredients"]:
+        if item.get("evidence_origin") == "ai_extracted":
+            item["evidence_origin"] = "creator_reviewed"
+    for step in data["steps"]:
+        if step.get("evidence_origin") == "ai_extracted":
+            step["evidence_origin"] = "creator_reviewed"
+    return DraftContent.model_validate(data)
+
+
+async def _check_clips(
+    session: AsyncSession, user: User, content: DraftContent, verdict: DraftValidation
+) -> list[uuid.UUID]:
+    """Steps that point at one of the creator's rendered clips need that clip to be ready.
+    Free-form clip ids (hand-authored drafts, seeds) are left alone."""
+    wanted = {i: media.clip_uuid(s.source_clip_id) for i, s in enumerate(content.steps)}
+    clips = await media.owned_clips(session, user.id, [c for c in wanted.values() if c])
+    used: list[uuid.UUID] = []
+    for index, clip_id in wanted.items():
+        clip = clips.get(clip_id) if clip_id else None
+        if clip is None:
+            continue
+        if clip.status == "ready":
+            used.append(clip.id)
+            continue
+        message = (
+            f"Step {index + 1}'s clip is still being made; wait a moment"
+            if clip.status == "pending"
+            else f"Step {index + 1}'s clip couldn't be made; trim it again or remove it"
+        )
+        verdict.problems.append(
+            DraftProblem(field=f"steps[{index}].source_clip_id", message=message)
+        )
+        verdict.publishable = False
+    return used
+
+
 async def publish(
     session: AsyncSession, user: User, draft_id: uuid.UUID, *, share_url_base: str
 ) -> PublishResult:
@@ -365,10 +428,12 @@ async def publish(
             "This draft was already published; edit the recipe to publish a new version",
             extra={"details": {"recipe_id": str(row.recipe_id) if row.recipe_id else None}},
         )
-    content = read_content(row)
+    ensure_not_extracting(row)
+    content = _reviewed(read_content(row))
     normalised = normalise(content)
     row.structured_draft_json = normalised
     verdict = validate(content)
+    clip_ids = await _check_clips(session, user, content, verdict)
     if not verdict.publishable:
         raise ValidationError(
             "Draft is not ready to publish",
@@ -428,6 +493,15 @@ async def publish(
     row.recipe_id = recipe.id
     row.status = DraftStatus.PUBLISHED
     await session.flush()
+    await media.attach_on_publish(
+        session,
+        owner_id=user.id,
+        draft_id=row.id,
+        recipe_id=recipe.id,
+        version_id=version.id,
+        clip_ids=clip_ids,
+        source_media_id=content.extraction.source_media_id if content.extraction else None,
+    )
     return PublishResult(
         recipe_id=recipe.id,
         recipe_version_id=version.id,

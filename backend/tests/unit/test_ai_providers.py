@@ -144,13 +144,21 @@ async def test_photo_fixture_lookup_rejects_path_tricks(provider: MockAIProvider
 # --- extraction ---------------------------------------------------------------------------
 
 
-async def test_extraction_returns_reviewable_empty_draft(provider: MockAIProvider) -> None:
+async def test_extraction_returns_labelled_demo_draft(provider: MockAIProvider) -> None:
+    """Brief 008: AI-off gives the fixed demo recipe (labelled by the pipeline), parsed through
+    the same model-facing schema as Gemini, never anything read from the video."""
     draft = await provider.extract(ExtractionRequest(media_ref="videos/kimchi-fried-rice.mp4"))
     ExtractedRecipeDraft.model_validate(draft.model_dump())
-    assert draft.title == "Kimchi Fried Rice"
-    assert draft.steps == [] and draft.ingredients == []
+    assert draft.title is not None and draft.title.startswith("Demo:")
+    assert draft.steps and draft.ingredients
+    assert all(s.evidence_origin == "ai_extracted" for s in draft.steps)
     assert draft.requires_review is True
     assert draft.unknowns
+    # "not_stated" amounts stay unknown even though the fixture carries a number for butter.
+    butter = next(i for i in draft.ingredients if i.name == "butter")
+    assert butter.quantity is None and butter.unit is None and butter.needs_review
+    hinted = await provider.extract(ExtractionRequest(media_ref="x.mp4", title_hint="My Noodles"))
+    assert hinted.title == "My Noodles"
 
 
 # --- substitutions ------------------------------------------------------------------------

@@ -19,6 +19,7 @@ from app.core.errors import install_error_handlers
 from app.core.logging import CorrelationIdMiddleware, configure_logging
 from app.core.security import DevAuthProvider
 from app.db.engine import make_engine, make_sessionmaker
+from app.media.storage import build_storage
 
 log = logging.getLogger("souslens.app")
 
@@ -58,6 +59,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ai_provider = build_provider(settings)
     # The labelled demo path used when a Gemini budget cap is reached (brief 007).
     app.state.ai_fallback = MockAIProvider(settings.fixtures_dir)
+    # Object storage for creator video and clips (brief 008). Building the client is offline.
+    app.state.storage = build_storage(settings)
     app.state.auth_provider = None
 
     install_error_handlers(app)

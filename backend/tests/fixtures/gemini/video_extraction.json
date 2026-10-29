@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"title\": \"Weeknight Kimchi Fried Rice\", \"summary\": \"Day-old rice fried with kimchi and a fried egg on top.\", \"servings\": 2, \"prep_minutes\": 5, \"cook_minutes\": 10, \"ingredients\": [{\"id\": \"ing-1\", \"name\": \"cooked rice\", \"quantity\": 2, \"unit\": \"cup\", \"quantity_source\": \"spoken\", \"preparation\": \"day-old\", \"optional\": false, \"confidence\": 0.9}, {\"id\": \"ing-2\", \"name\": \"kimchi\", \"quantity\": 1, \"unit\": \"cup\", \"quantity_source\": \"shown\", \"preparation\": \"chopped\", \"optional\": false, \"confidence\": 0.85}, {\"id\": \"ing-3\", \"name\": \"sesame oil\", \"quantity\": 1, \"unit\": \"tbsp\", \"quantity_source\": \"not_stated\", \"preparation\": null, \"optional\": false, \"confidence\": 0.6}, {\"id\": \"ing-4\", \"name\": \"egg\", \"quantity\": null, \"unit\": null, \"quantity_source\": \"not_stated\", \"preparation\": null, \"optional\": true, \"confidence\": 0.7}], \"steps\": [{\"instruction\": \"Fry the chopped kimchi in a hot pan for two minutes.\", \"start\": \"00:01\", \"end\": \"00:02\", \"ingredient_ids\": [\"ing-2\"], \"success_cues\": [\"Kimchi edges start to caramelise\"], \"warnings\": [\"Hot oil can spit.\"], \"estimated_minutes\": 2, \"evidence\": \"shown_and_spoken\", \"confidence\": 0.85}, {\"instruction\": \"Add the rice and toss until every grain is coated.\", \"start\": \"00:02\", \"end\": \"00:03\", \"ingredient_ids\": [\"ing-1\", \"ing-2\"], \"success_cues\": [\"Rice is evenly red\"], \"warnings\": [], \"estimated_minutes\": 4, \"evidence\": \"shown\", \"confidence\": 0.8}, {\"instruction\": \"Drizzle with sesame oil and top with a fried egg.\", \"start\": \"00:03\", \"end\": \"00:04\", \"ingredient_ids\": [\"ing-3\", \"ing-4\"], \"success_cues\": [], \"warnings\": [], \"estimated_minutes\": 3, \"evidence\": \"shown\", \"confidence\": 0.75}, {\"instruction\": \"Serve straight away.\", \"start\": null, \"end\": null, \"ingredient_ids\": [], \"success_cues\": [], \"warnings\": [], \"estimated_minutes\": null, \"evidence\": \"inferred\", \"confidence\": 0.5}], \"unknowns\": [\"amount of sesame oil not stated\"]}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 12000,
+      "candidatesTokenCount": 900,
+      "thoughtsTokenCount": 300,
+      "totalTokenCount": 13200
+    }
+  }
+}

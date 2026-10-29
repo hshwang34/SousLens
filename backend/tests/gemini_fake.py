@@ -9,6 +9,10 @@ hand-authored in that shape; ``GEMINI_RECORD=1 make ai-live-smoke`` writes real 
 
 A script item may also be an exception instance (raised as is) or ``"hang"`` (never answers, so
 the caller's timeout fires).
+
+The Files API (brief 008 video) is faked too: ``upload_file`` returns a ``PROCESSING`` file,
+each ``get_file`` pops the next state from ``file_states`` (``ACTIVE`` when empty), and
+``delete_file`` records the name in ``deleted``.
 """
 
 from __future__ import annotations
@@ -34,6 +38,32 @@ class FakeTransport:
     def __init__(self, *script: object) -> None:
         self.script: list[object] = list(script)
         self.calls: list[dict[str, Any]] = []
+        self.file_states: list[str] = []
+        self.uploaded: list[dict[str, str]] = []
+        self.deleted: list[str] = []
+        self.upload_error: BaseException | None = None
+
+    def _file(self, name: str, mime_type: str, state: str) -> types.File:
+        return types.File(
+            name=name,
+            uri=f"https://generativelanguage.googleapis.com/v1beta/{name}",
+            mime_type=mime_type,
+            state=state,
+        )
+
+    async def upload_file(self, *, path: str, mime_type: str) -> types.File:
+        if self.upload_error is not None:
+            raise self.upload_error
+        name = f"files/fake-{len(self.uploaded) + 1}"
+        self.uploaded.append({"name": name, "path": path, "mime_type": mime_type})
+        return self._file(name, mime_type, "PROCESSING")
+
+    async def get_file(self, *, name: str) -> types.File:
+        state = self.file_states.pop(0) if self.file_states else "ACTIVE"
+        return self._file(name, "video/mp4", state)
+
+    async def delete_file(self, *, name: str) -> None:
+        self.deleted.append(name)
 
     def queue(self, *script: object) -> None:
         self.script.extend(script)

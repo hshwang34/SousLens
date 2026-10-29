@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"title\": \"Garlic Noodles\", \"ingredients\": [{\"id\": "
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 12000,
+      "candidatesTokenCount": 900,
+      "thoughtsTokenCount": 300,
+      "totalTokenCount": 13200
+    }
+  }
+}

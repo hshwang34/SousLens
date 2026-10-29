@@ -10,6 +10,10 @@
   is false; Slice 5 reads it). A reservation that would cross a cap is refused and the caller
   falls back to the labelled mock path (``AINotice``). Nothing fails silently.
 * A row that is never settled (a crash mid-call) keeps counting at its ceiling: fail closed.
+* Video extraction (brief 008) has its own per-user cap (5 per UTC month, counted on jobs), so
+  it is left out of the $0.25 per-user *day* check and sum: one 15-minute video's ceiling is
+  above $0.25, and extracting a video must not use up the user's coach budget for the day. It
+  still counts towards both monthly caps.
 """
 
 from __future__ import annotations
@@ -119,7 +123,8 @@ async def _spent(
 ) -> Decimal:
     stmt = select(_spent_expr()).where(AIUsage.created_at >= since)
     if user_id is not None:
-        stmt = stmt.where(AIUsage.user_id == user_id)
+        # The per-user day budget is for interactive features; video has its own count cap.
+        stmt = stmt.where(AIUsage.user_id == user_id, AIUsage.capability != "video")
     return Decimal(await session.scalar(stmt) or 0)
 
 
@@ -155,7 +160,7 @@ class CostGuard:
             if capability == "video" and month + ceiling > self.month_soft_cap:
                 return Denial("monthly_cap")
             day = await _spent(session, day_start(now), user_id)
-            if day + ceiling > self.user_daily_cap:
+            if capability != "video" and day + ceiling > self.user_daily_cap:
                 log.info("ai budget: user daily cap", extra={"capability": capability})
                 return Denial("user_daily_cap")
             row = AIUsage(

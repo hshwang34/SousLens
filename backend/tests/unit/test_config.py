@@ -52,11 +52,42 @@ def test_dev_auth_allowed_in_dev_and_test(environment: str) -> None:
     assert settings.auth_mode == "dev"
 
 
+PROD_STORAGE = {
+    "storage_endpoint_url": "https://t3.storage.dev",
+    "storage_access_key_id": "tid_real_key",
+    "storage_secret_access_key": "tsec_real_secret",
+}
+
+
 def test_prod_with_apple_auth_is_allowed() -> None:
     settings = Settings(
-        _env_file=None, jwt_secret=GOOD_SECRET, environment="prod", auth_mode="apple"
+        _env_file=None,
+        jwt_secret=GOOD_SECRET,
+        environment="prod",
+        auth_mode="apple",
+        **PROD_STORAGE,
     )
     assert settings.environment == "prod"
+
+
+@pytest.mark.parametrize(
+    "override, match",
+    [
+        ({"storage_access_key_id": "souslens-dev"}, "STORAGE_ACCESS_KEY_ID"),
+        ({"storage_secret_access_key": "souslens-dev-secret"}, "STORAGE_ACCESS_KEY_ID"),
+        ({"storage_endpoint_url": "http://localhost:9000"}, "https://"),
+        ({"storage_endpoint_url": None}, "https://"),
+    ],
+)
+def test_prod_refuses_dev_storage(override: dict[str, object], match: str) -> None:
+    with pytest.raises(ValidationError, match=match):
+        Settings(
+            _env_file=None,
+            jwt_secret=GOOD_SECRET,
+            environment="prod",
+            auth_mode="apple",
+            **{**PROD_STORAGE, **override},
+        )
 
 
 @pytest.mark.parametrize("environment", ["dev", "prod"])

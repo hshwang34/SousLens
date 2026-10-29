@@ -13,6 +13,7 @@ from fastapi import APIRouter, Response, status
 from app.core.errors import NotFound
 from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
+from app.domains.extraction import jobs
 from app.domains.recipes import drafts
 from app.domains.recipes.draft_schemas import Draft, DraftList, DraftPatch, PublishResult
 
@@ -67,3 +68,16 @@ async def publish_draft(
     return await drafts.publish(
         session, user, _draft_id(draft_id), share_url_base=settings.share_url_base
     )
+
+
+@router.post(
+    "/{draft_id}/steps/{step_id}/trim",
+    response_model=jobs.JobOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def trim_step_clip(
+    draft_id: str, step_id: str, body: jobs.TrimIn, session: DbSession, user: CurrentUser
+) -> jobs.JobOut:
+    """Re-render this step's clip from the source video (brief 008)."""
+    job = await jobs.request_trim(session, user, _draft_id(draft_id), step_id, body)
+    return jobs.to_job_out(job)

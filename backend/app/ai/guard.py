@@ -36,7 +36,7 @@ from app.ai.providers.base import (
 )
 from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.mock import MockAIProvider
-from app.core.errors import AIBlocked, ProviderOutputInvalid
+from app.core.errors import AIBlocked, ProviderNotConfigured, ProviderOutputInvalid
 
 log = logging.getLogger("souslens.ai.guard")
 
@@ -108,9 +108,11 @@ class GuardedProvider:
             # Shielded: an outer timeout cancelling this call must not lose the ledger entry.
             await asyncio.shield(self._guard.settle(decision, meter, outcome))
 
-    # RecipeExtractor (brief 008 wires the video budget; refused here until then)
+    # RecipeExtractor: video extraction only runs in the worker (app.workers.extraction), which
+    # reserves the video-sized ceiling itself. Refused here so no request path can call Gemini
+    # with a video unmetered.
     async def extract(self, request: ExtractionRequest) -> ExtractedRecipeDraft:
-        return await self._real.extract(request)
+        raise ProviderNotConfigured("Video extraction runs in the background worker")
 
     async def observe(self, request: PantryObservationRequest) -> PantryObservation:
         capability: Capability = "pantry_photo" if request.mode == "photo" else "pantry_transcript"

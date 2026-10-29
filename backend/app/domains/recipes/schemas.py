@@ -13,6 +13,10 @@ SCHEMA_VERSION = "1.0"
 EvidenceOrigin = Literal["creator_authored", "creator_reviewed", "ai_extracted"]
 
 
+def _absent(value: object) -> bool:
+    return value is None
+
+
 class CreatorRef(BaseModel):
     id: uuid.UUID
     display_name: str
@@ -30,6 +34,10 @@ class IngredientOut(BaseModel):
     optional: bool = False
     preparation: str | None = None
     notes: str | None = None
+    # Brief 008: set on ingredients that came from video extraction ("ai_extracted"), or that
+    # the creator published from one ("creator_reviewed"). Omitted (not null) otherwise, so
+    # hand-authored and seeded recipes serialise exactly as before.
+    evidence_origin: EvidenceOrigin | None = Field(default=None, exclude_if=_absent)
 
 
 class StepOut(BaseModel):
