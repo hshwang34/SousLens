@@ -575,3 +575,131 @@ async def test_mock_mode_has_no_ledger_and_no_new_fields(
     assert status == {"provider": "mock", "live": False, "video_extraction_enabled": True}
     assert await ledger(db_session) == []
     assert gemini_mod.GeminiProvider is not type(client._transport.app.state.ai_provider)  # type: ignore[attr-defined]
+
+
+# --- fix round 1: every model-prose field is filtered ------------------------------------------
+
+CLAIMS = (
+    "allergen-free",
+    "safe for you",
+    "nut-free",
+    "no allergy risk",
+    "not trigger",
+    "fine for celiacs",
+    "safe to eat",
+    "cooked through",
+    "expired",
+    "hypoallergenic",
+    "raw chicken",
+)
+
+
+def assert_no_claims(payload: object) -> None:
+    text = str(payload).lower()
+    for claim in CLAIMS:
+        assert claim not in text, claim
+
+
+async def test_substitution_advisor_prose_is_filtered(
+    gclient: AsyncClient, db_session: AsyncSession, transport: FakeTransport
+) -> None:
+    from app.domains.safety.content import LABEL_CHECK
+
+    versions = await seed(db_session)
+    alice = await bearer(gclient, "alice@example.com")
+    transport.queue("substitution_adversarial")
+    r = await gclient.post(
+        "/v1/substitutions/suggest",
+        json={"recipe_version_id": versions[CUKE], "ingredient_ref": "ing-4"},
+        headers=alice,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert_no_claims(body)
+    ai = [s for s in body["suggestions"] if s["source"] == "ai"]
+    assert [s["candidate"] for s in ai] == ["apple cider vinegar"]  # the claiming one is dropped
+    (acv,) = ai
+    assert acv["rationale"] == "Similar acidity."
+    assert acv["impact_flavor"] == LABEL_CHECK
+    assert LABEL_CHECK in acv["risks"] and "Slightly fruitier." in acv["risks"]
+    # The model's adjusted_steps are never used; steps come from our own overlay.
+    assert "Ignore the recipe" not in str(acv["adjusted_steps"])
+    # The stored suggestion (used on approve) carries the filtered text too.
+    from app.db.models import SubstitutionSuggestionRecord
+
+    db_session.expire_all()
+    stored = (await db_session.execute(select(SubstitutionSuggestionRecord))).scalars().all()
+    assert_no_claims([s.payload_json for s in stored])
+
+
+async def test_substitution_advisor_decline_reason_is_filtered(
+    gclient: AsyncClient, db_session: AsyncSession, transport: FakeTransport
+) -> None:
+    from app.domains.safety.content import LABEL_CHECK
+
+    versions = await seed(db_session)
+    alice = await bearer(gclient, "alice@example.com")
+    transport.queue("substitution_adversarial_decline")
+    r = await gclient.post(
+        "/v1/substitutions/suggest",
+        json={"recipe_version_id": versions[CUKE], "ingredient_ref": "ing-4"},
+        headers=alice,
+    )
+    body = r.json()
+    assert len(transport.calls) == 1
+    assert_no_claims(body)
+    if body["cannot_substitute"]:
+        assert LABEL_CHECK in (body["reason"] or "")
+
+
+async def test_model_safety_notice_is_filtered_and_counts_as_touched(
+    gclient: AsyncClient, db_session: AsyncSession, transport: FakeTransport
+) -> None:
+    versions = await seed(db_session)
+    alice = await bearer(gclient, "alice@example.com")
+    session = await active(gclient, alice, versions[GOCHU])
+    transport.queue("coach_unsafe_notice")
+    r = await ask(gclient, alice, session, "how often should I baste?")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert_no_claims(body)
+    assert len(transport.calls) == 1  # the model answered; the filter, not a template, acted
+    assert "thermometer" in body["safety_notice"].lower()  # replaced by the fixed notice
+    assert body["uncertainty"] in {"medium", "high"}
+
+
+async def test_pantry_model_prose_is_filtered_and_provider_is_stored(
+    gclient: AsyncClient, db_session: AsyncSession, transport: FakeTransport, ingredients: None
+) -> None:
+    from app.db.models import PantryObservation as ObservationRow
+
+    alice = await bearer(gclient, "alice@example.com")
+    transport.queue("pantry_adversarial")
+    r = await gclient.post(
+        "/v1/pantry/observations",
+        files={"image": ("p.png", PNG, "image/png")},
+        data={"mode": "photo"},
+        headers=alice,
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert_no_claims(body["candidates"])
+    assert_no_claims(body["unknowns"])
+    assert body["candidates"][0]["evidence"] == "AI estimate — check it yourself"
+
+    # A budget-denied scan is stored as answered by the demo path, matching the response.
+    await spend(db_session, "21.99")
+    r = await gclient.post(
+        "/v1/pantry/observations",
+        files={"image": ("p.png", PNG, "image/png")},
+        data={"mode": "photo"},
+        headers=alice,
+    )
+    assert r.json()["provider"] == "mock"
+    db_session.expire_all()
+    rows = (
+        (await db_session.execute(select(ObservationRow).order_by(ObservationRow.created_at)))
+        .scalars()
+        .all()
+    )
+    assert [row.provider for row in rows] == ["gemini", "mock"]

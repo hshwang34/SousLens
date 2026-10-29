@@ -153,10 +153,7 @@ async def create_observation(
     finally:
         # The photo is processed in memory only (PRIV-01); drop our reference straight away.
         obs_request.image_bytes = None
-    notice = notice_of(provider)
-    if notice is not None:  # answered by the labelled demo path, not the live model
-        out.ai_notice = notice
-        out.provider = "mock"
+    out.ai_notice = notice_of(provider)  # set when the labelled demo path answered
     return out
 
 

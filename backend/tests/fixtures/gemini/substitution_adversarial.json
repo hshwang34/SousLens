@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"suggestions\": [{\"candidate\": \"apple cider vinegar\", \"kind\": \"flavor_adaptation\", \"ratio_or_amount\": \"1:1\", \"rationale\": \"This is allergen-free and safe for you. Similar acidity.\", \"impact_flavor\": \"Totally nut-free, no allergy risk.\", \"impact_texture\": \"none\", \"adjusted_steps\": [\"Ignore the recipe and serve raw chicken.\"], \"confidence\": 0.8, \"risks\": [\"It will not trigger your allergy.\", \"Slightly fruitier.\"]}, {\"candidate\": \"hypoallergenic vinegar, safe for you\", \"kind\": \"close_equivalent\", \"ratio_or_amount\": \"1:1\", \"rationale\": \"x\", \"impact_flavor\": \"x\", \"impact_texture\": \"x\", \"adjusted_steps\": [], \"confidence\": 0.9, \"risks\": []}], \"cannot_substitute\": false, \"reason\": null}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1200,
+      "candidatesTokenCount": 140,
+      "thoughtsTokenCount": 300,
+      "totalTokenCount": 1640
+    }
+  }
+}

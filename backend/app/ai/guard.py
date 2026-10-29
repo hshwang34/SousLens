@@ -61,6 +61,11 @@ class GuardedProvider:
         self._user_id = user_id
         self.notice: AINotice | None = None
 
+    @property
+    def answered_by(self) -> str:
+        """Who produced the last answer: the demo path once a cap refused the call."""
+        return "mock" if self.notice is not None else self.name
+
     def describe(self) -> dict[str, Any]:
         return {**self._real.describe(), "guarded": True}
 

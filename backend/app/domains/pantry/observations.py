@@ -38,6 +38,7 @@ from app.domains.matching.normalize import normalize
 from app.domains.matching.units import pantry_unit
 from app.domains.pantry.schemas import CandidateOut, ConfidenceBin, ObservationOut
 from app.domains.pantry.service import lock_user
+from app.domains.safety.content import makes_model_claim, strip_model_claims
 
 log = logging.getLogger("souslens.pantry.observations")
 
@@ -46,6 +47,7 @@ PROVIDER_TIMEOUT_SECONDS = 30.0
 RATE_LIMIT_PER_HOUR = 30
 HIGH_ABOVE = 0.85
 MEDIUM_FROM = 0.6
+CHECK_IT_YOURSELF = "AI estimate — check it yourself"
 
 
 def confidence_bin(confidence: float) -> ConfidenceBin:
@@ -63,7 +65,7 @@ def finalize_candidate(
     pantry_keys: dict[str, uuid.UUID],
 ) -> CandidateOut:
     canonical: str | None = None
-    if candidate.canonical_name:
+    if candidate.canonical_name and not makes_model_claim(candidate.canonical_name):
         canonical = normalize(candidate.canonical_name, dictionary).key or None
 
     quantity, unit = candidate.quantity, None
@@ -72,19 +74,27 @@ def finalize_candidate(
         if unit is None:  # "2 cans", "a bunch": not a contract unit, so the amount is unknown
             quantity = None
 
+    # Model prose never claims freshness, expiry or safety (PRD §8.3, brief 007 fix round 1).
+    evidence, dropped = strip_model_claims(candidate.evidence)
+    if dropped:
+        evidence = evidence or CHECK_IT_YOURSELF
+    raw_label = candidate.raw_label
+    if makes_model_claim(raw_label):
+        raw_label = candidate.canonical_name or "unidentified item"
+
     binned = confidence_bin(candidate.confidence)
     action = "ignore" if binned == "unknown" or canonical is None else "add"
-    label_key = normalize(candidate.raw_label, dictionary).key
+    label_key = normalize(raw_label, dictionary).key
     duplicate_of = (pantry_keys.get(canonical) if canonical else None) or pantry_keys.get(label_key)
     return CandidateOut(
-        raw_label=candidate.raw_label,
+        raw_label=raw_label,
         canonical_name=canonical,
         quantity=quantity,
         unit=unit,
         quantity_is_estimate=mode == "photo" and quantity is not None,
         confidence=candidate.confidence,
         confidence_bin=binned,
-        evidence=candidate.evidence,
+        evidence=evidence,
         action=action,
         duplicate_of=duplicate_of,
     )
@@ -92,7 +102,7 @@ def finalize_candidate(
 
 def unknowns_for(observation: PantryObservation, candidates: list[CandidateOut]) -> list[str]:
     if observation.unknowns:
-        return list(observation.unknowns)
+        return [k for k in (strip_model_claims(u)[0] for u in observation.unknowns) if k]
     return [f"{c.raw_label}: {c.evidence}" for c in candidates if c.canonical_name is None]
 
 
@@ -188,6 +198,9 @@ async def create_observation(
             "The pantry scan service is unavailable; try again or add items by hand"
         ) from exc
 
+    # Under the cost guard a budget-denied scan is answered by the demo path: record that.
+    answered_by = getattr(provider, "answered_by", None) or provider_name
+    row.provider = answered_by
     pantry_keys = await _pantry_keys(session, user)
     candidates = [
         finalize_candidate(c, request.mode, dictionary, pantry_keys) for c in observation.candidates
@@ -200,7 +213,7 @@ async def create_observation(
     return ObservationOut(
         observation_id=row.id,
         mode=request.mode,
-        provider=provider_name,
+        provider=answered_by,
         candidates=candidates,
         unknowns=unknowns,
         expires_at=row.expires_at,

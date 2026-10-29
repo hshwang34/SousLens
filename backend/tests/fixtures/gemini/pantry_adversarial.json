@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.5-flash-lite",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"candidates\": [{\"raw_label\": \"chicken thighs, fresh and safe to eat\", \"canonical_name\": \"chicken thighs\", \"quantity\": null, \"unit\": null, \"confidence\": 0.9, \"evidence\": \"Not expired. Safe to eat.\", \"quantity_is_estimate\": false}], \"notes\": [], \"unknowns\": [\"Everything else is allergen-free.\"]}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 1500,
+      "candidatesTokenCount": 80,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 1580
+    }
+  }
+}

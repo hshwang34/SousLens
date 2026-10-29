@@ -45,7 +45,7 @@ from app.domains.safety.content import (
     is_raw_tasting_request,
     is_temperature_question,
     mentions_safety_terms,
-    strip_certifications,
+    strip_model_claims,
     temperature_table,
 )
 from app.domains.sessions import service
@@ -116,7 +116,7 @@ def _postprocess(
         nonlocal dropped
         if text is None:
             return None
-        kept, n = strip_certifications(text, high_risk=high_risk)
+        kept, n = strip_model_claims(text, high_risk=high_risk)
         dropped += n
         return kept or None
 
