@@ -13,6 +13,7 @@ new capture session. Reuse what's still current; recapture only screens whose fe
 |---|---|---|
 | `01`–`40` (no prefix) | `origin/main` @ b69c5cb, iOS 17.5 sim (iPhone 15), backend `AI_PROVIDER=mock`, seeded demo data | Pre-redesign look. `r` suffix = a retake. Six frames are cropped above the keyboard. |
 | `mise-*` | Review branch `feature-brand-mise` @ 328f0b2, iOS 17.5 | Mise redesign before fix round 1 (shows the frosted fallback, not iOS 26 glass). |
+| `mise-r1/*` | `feature-brand-mise` @ acab7f7 (fix round 1), iOS 17.5 light + iOS 26.2 dark (real glass), plus AX5/XXXL text sizes | The current redesign; use these instead of `mise-*` once 006 merges. |
 | `site-desktop`, `site-mobile` | `site/` served locally, before deploy | Screenshot slots still show placeholders. |
 
 ## Feature → image map
