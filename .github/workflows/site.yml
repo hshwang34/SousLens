@@ -1,0 +1,35 @@
+name: site
+on:
+  push: { paths: ['site/**', '.github/workflows/site.yml'] }
+  pull_request: { paths: ['site/**', '.github/workflows/site.yml'] }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: AASA and vercel.json are valid JSON
+        run: |
+          python3 -m json.tool site/.well-known/apple-app-site-association >/dev/null
+          python3 -m json.tool site/vercel.json >/dev/null
+      - name: HTML validates
+        run: npx --yes html-validate@9 site/*.html
+      - name: Internal links resolve
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          root = pathlib.Path("site"); bad = []
+          for page in root.glob("*.html"):
+              html = page.read_text()
+              ids = set(re.findall(r'id="([^"]+)"', html))
+              for ref in re.findall(r'(?:href|src)="([^"#:?]*)(#[^"]*)?"', html):
+                  path, frag = ref
+                  if path.startswith(("//", "assets/screens/")):
+                      continue  # screenshots are optional; site.js falls back to placeholders
+                  target = root / path if path else page
+                  if path and not target.exists():
+                      bad.append(f"{page.name}: missing {path}")
+                  if frag and frag != "#" and not path and frag[1:] not in ids:
+                      bad.append(f"{page.name}: missing anchor {frag}")
+          print("\n".join(bad) or "all links resolve"); sys.exit(1 if bad else 0)
+          PY
