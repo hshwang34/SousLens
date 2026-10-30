@@ -4,6 +4,10 @@ import SwiftUI
 struct SousLensApp: App {
     @State private var environment = AppEnvironment.live()
 
+    init() {
+        SLFont.applyNavigationBarAppearance()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

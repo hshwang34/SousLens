@@ -8,5 +8,12 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # The image defaults to Xcode 16.4. Build with the iOS 26 SDK (Liquid Glass, brief 006)
+      # against the 17.2 deployment target; tests still run on an iPhone simulator.
+      - name: Select Xcode 26.2
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+          xcodebuild -version
+          xcrun simctl list runtimes
       - run: brew install xcodegen
       - run: make ios-check SIM="iPhone 16"

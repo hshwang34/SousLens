@@ -87,7 +87,7 @@ struct SignInView: View {
                 requestCode()
             } label: {
                 if isSubmitting {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(SLColor.onAccent)
                 } else {
                     Text("Continue")
                 }
@@ -134,7 +134,7 @@ struct SignInView: View {
                 verify(challenge)
             } label: {
                 if isSubmitting {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(SLColor.onAccent)
                 } else {
                     Text("Verify")
                 }

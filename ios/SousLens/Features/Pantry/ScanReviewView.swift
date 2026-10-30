@@ -73,7 +73,7 @@ struct ScanReviewView: View {
                     }
                 } label: {
                     if model.isConfirming {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity)
+                        ProgressView().tint(SLColor.onAccent).frame(maxWidth: .infinity)
                     } else {
                         Text(model.confirmTitle)
                     }

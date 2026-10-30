@@ -198,7 +198,7 @@ struct PantryFitView: View {
                 }
             } label: {
                 if model.isStarting {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(SLColor.onAccent)
                 } else {
                     Label("Start cooking", systemImage: "flame")
                 }
@@ -210,7 +210,9 @@ struct PantryFitView: View {
         }
         .padding(.horizontal, Spacing.screen)
         .padding(.vertical, Spacing.sm)
-        .background(.regularMaterial)
+        // Solid, not material: swap cautions live in this bar, and rows passing behind it must
+        // not be tappable through it (the List's inset lets every row scroll fully above it).
+        .bottomBarScrim()
     }
 
     private func header(_ model: PantryFitViewModel) -> some View {
@@ -220,7 +222,7 @@ struct PantryFitView: View {
                 .foregroundStyle(SLColor.textSecondary)
             if let headline = model.headline {
                 Text(headline)
-                    .font(SLFont.title)
+                    .font(SLFont.display)
                     .foregroundStyle(model.canMake ? SLColor.success : SLColor.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("fit.headline")
@@ -228,10 +230,10 @@ struct PantryFitView: View {
             if let sub = model.subheadline {
                 Text(sub).font(SLFont.title3).foregroundStyle(SLColor.textPrimary)
             }
-            if let coverage = model.coverageText {
-                Text(coverage)
-                    .font(SLFont.callout.monospacedDigit())
-                    .foregroundStyle(SLColor.textSecondary)
+            if let coverage = model.coverageText, let fit = model.fit {
+                // The count ticks up once; VoiceOver hears only the final, full sentence.
+                CountUpCoverage(summary: CardFitSummary(fit: fit))
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel(model.coverageAccessibilityLabel ?? coverage)
                     .accessibilityIdentifier("fit.coverage")
             }
@@ -333,6 +335,41 @@ private struct FitRowView: View {
         case .addToPantry: onAdd()
         case .stillHaveIt: if !isBusy { onStillHave() }
         case .fixAmount: onFixAmount()
+        }
+    }
+}
+
+/// "9 of 10 ingredients", with the first number counting up from 0 when the fit arrives
+/// (brief 006 "You can make this" reveal). Under Reduce Motion it shows the final number at once.
+private struct CountUpCoverage: View {
+    let summary: CardFitSummary
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = 0
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+            Text("\(shown)")
+                .font(SLFont.bigNumeral)
+                .foregroundStyle(summary.hasEverything ? SLColor.success : SLColor.accent)
+                .contentTransition(.numericText(value: Double(shown)))
+            Text("of \(summary.requiredCount) ingredients")
+                .font(SLFont.title3)
+                .foregroundStyle(SLColor.textSecondary)
+        }
+        .task(id: summary) {
+            let target = summary.availableCount
+            guard !reduceMotion, target > 0 else {
+                shown = target
+                return
+            }
+            shown = 0
+            // About half a second in total, however many ingredients there are.
+            let step = Duration.milliseconds(max(30, 480 / target))
+            for value in 1...target {
+                try? await Task.sleep(for: step)
+                if Task.isCancelled { shown = target; return }
+                withAnimation(.snappy(duration: 0.18)) { shown = value }
+            }
         }
     }
 }

@@ -15,11 +15,23 @@ struct SessionEndView: View {
         NavigationStack {
             Form {
                 Section {
-                    if let summary = model.stepsSummary {
-                        Text(summary).font(SLFont.body)
+                    VStack(spacing: Spacing.md) {
+                        DrawnCheck()
+                        Text("You reached the last step")
+                            .font(SLFont.title2)
+                            .foregroundStyle(SLColor.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
+                        if let summary = model.stepsSummary {
+                            Text(summary)
+                                .font(SLFont.body)
+                                .foregroundStyle(SLColor.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
                     }
-                } header: {
-                    Text("You reached the last step")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Spacing.md)
+                    .listRowBackground(Color.clear)
                 }
 
                 Section("How did it go?") {
@@ -138,6 +150,51 @@ struct SessionEndView: View {
                     .accessibilityIdentifier("end.done")
                 }
             }
+        }
+    }
+}
+
+/// A check mark that draws itself in (brief 006). Under Reduce Motion it fades in, already drawn.
+struct DrawnCheck: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 64
+    @State private var progress: CGFloat = 0
+    @State private var visible = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(SLColor.accentSoft)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(SLColor.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            CheckShape()
+                .trim(from: 0, to: progress)
+                .stroke(SLColor.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                .padding(size * 0.28)
+        }
+        .frame(width: min(size, 120), height: min(size, 120))
+        .opacity(visible ? 1 : 0)
+        .onAppear {
+            if reduceMotion {
+                progress = 1
+                withAnimation(.easeInOut(duration: 0.25)) { visible = true }
+            } else {
+                visible = true
+                withAnimation(.easeOut(duration: 0.7).delay(0.15)) { progress = 1 }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private struct CheckShape: Shape {
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.38, y: rect.maxY - rect.height * 0.1))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.12))
+            return path
         }
     }
 }

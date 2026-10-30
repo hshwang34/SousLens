@@ -171,7 +171,8 @@ extension ProposedAction {
 struct CookingLayout: Equatable {
     /// Back / Pause / Next in one row, or stacked.
     let stacksNavigation: Bool
-    /// Repeat / Slower / Ask / Look grid columns (2×2 at every size).
+    /// Repeat / Slower / Ask / Look columns: one floating row of 4 at regular sizes (brief 006),
+    /// a 2×2 grid at accessibility sizes.
     let toolColumns: Int
     /// The controls scroll with the step instead of being pinned below it.
     let controlsScrollWithContent: Bool
@@ -179,6 +180,6 @@ struct CookingLayout: Equatable {
     static func forSize(_ size: DynamicTypeSize) -> CookingLayout {
         size.isAccessibilitySize
             ? CookingLayout(stacksNavigation: true, toolColumns: 2, controlsScrollWithContent: true)
-            : CookingLayout(stacksNavigation: false, toolColumns: 2, controlsScrollWithContent: false)
+            : CookingLayout(stacksNavigation: false, toolColumns: 4, controlsScrollWithContent: false)
     }
 }
