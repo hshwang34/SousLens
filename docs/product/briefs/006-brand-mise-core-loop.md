@@ -1,6 +1,6 @@
 # 006 — Mise brand + Liquid Glass, core loop
 
-**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
+**Status:** shipped · **Owner:** PM · **PR:** #12 · **Updated:** 2026-10-28
 
 ## Problem
 The app works, but it looks like a stock SwiftUI prototype. There are bordered rectangle cards,
