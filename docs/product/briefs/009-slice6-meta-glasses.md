@@ -1,6 +1,6 @@
 # 009 — Slice 6: Meta glasses (Developer Mode, PM's device)
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
+**Status:** building · **Owner:** PM · **PR:** — · **Updated:** 2026-10-28
 
 ## Problem
 Cooking with your hands full is the reason glasses exist. The PRD's demo shows the same pantry

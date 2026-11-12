@@ -17,6 +17,9 @@ struct ProfileView: View {
                 draftsSection
                 foodSection
                 accountSection
+                if let glasses = environment.glasses {
+                    GlassesProfileSection(glasses: glasses, audioRoute: environment.audioRoute)
+                }
                 deviceSection
                 Section {
                     Button(role: .destructive) {
@@ -242,7 +245,7 @@ struct ProfileView: View {
                     .truncationMode(.middle)
             }
             LabeledContent("Camera", value: environment.camera.isAvailable ? "Available (\(environment.camera.kind.displayName))" : "Unavailable")
-            LabeledContent("Microphone", value: environment.speech.isAvailable ? "Available (\(environment.speech.kind.displayName))" : "Unavailable")
+            LabeledContent("Microphone", value: environment.speech.isAvailable ? environment.audioRoute.inputLabel : "Unavailable")
             LabeledContent("Speech output", value: environment.audio.isAvailable ? "Available" : "Unavailable")
         } header: {
             Text("Device")

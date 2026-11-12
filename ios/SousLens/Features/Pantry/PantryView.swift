@@ -283,10 +283,13 @@ struct PantryCaptureSheet: View {
         .onAppear {
             switch kind {
             case .speak where speak == nil:
-                speak = SpeakCaptureViewModel(speech: environment.speech, service: environment.api)
+                let route = environment.audioRoute
+                speak = SpeakCaptureViewModel(speech: environment.speech, service: environment.api,
+                                              micLabel: { route.inputLabel })
             case .scan where scan == nil:
                 scan = ScanCaptureViewModel(camera: environment.camera, service: environment.api,
-                                            fixture: environment.pantryPhotoFixture)
+                                            fixture: environment.pantryPhotoFixture,
+                                            glasses: environment.glasses)
             default:
                 break
             }

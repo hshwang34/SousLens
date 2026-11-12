@@ -30,7 +30,16 @@ final class PhoneSpeechInput: SpeechInput {
     private let observers = NotificationObserverBag()
     private let logger = Logger(subsystem: "com.souslens.ios", category: "speech")
 
-    init(enabled: Bool = true, locale: Locale = .current) {
+    /// Glasses build only (brief 009): lets a Bluetooth HFP input (the glasses mic) be used. The
+    /// label then comes from the verified route (`AudioRouteMonitor`), never from this flag.
+    private let allowBluetoothInput: Bool
+
+    nonisolated static func categoryOptions(allowBluetoothInput: Bool) -> AVAudioSession.CategoryOptions {
+        allowBluetoothInput ? [.duckOthers, .allowBluetoothHFP] : .duckOthers
+    }
+
+    init(enabled: Bool = true, locale: Locale = .current, allowBluetoothInput: Bool = false) {
+        self.allowBluetoothInput = allowBluetoothInput
         let recognizer = SFSpeechRecognizer(locale: locale)
         self.recognizer = recognizer
         #if targetEnvironment(simulator)
@@ -62,7 +71,7 @@ final class PhoneSpeechInput: SpeechInput {
         let (generation, stream) = relay.begin()
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setCategory(.record, mode: .measurement, options: Self.categoryOptions(allowBluetoothInput: allowBluetoothInput))
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
             let request = SFSpeechAudioBufferRecognitionRequest()

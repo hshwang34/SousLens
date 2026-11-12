@@ -9,6 +9,13 @@ options:
   generateEmptyDirectories: false
   groupSortPosition: top
 
+# Brief 009 (DECISIONS #19): DAT is linked ONLY by the SousLensGlasses target. The public
+# SousLens target must never list these products (`ios/scripts/check-no-dat.sh` enforces it).
+packages:
+  MetaWearablesDAT:
+    url: https://github.com/facebook/meta-wearables-dat-ios
+    exactVersion: 1.0.1
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -82,6 +89,117 @@ targets:
           NSAllowsLocalNetworking: true
     dependencies: []
 
+  # Brief 009: the PM-only glasses flavour (Meta Developer Mode, never the public TestFlight).
+  # Same sources as SousLens plus SousLensGlasses/ (compiled only here, behind `GLASSES`).
+  # Separate bundle id so both apps install side by side.
+  SousLensGlasses:
+    type: application
+    platform: iOS
+    sources:
+      - path: SousLens
+        excludes:
+          - "**/.DS_Store"
+          - "Resources/Info.plist"
+          - "Resources/SousLens.entitlements"
+      - path: SousLensGlasses
+        excludes:
+          - "**/.DS_Store"
+          - "Info.plist"
+          - "SousLensGlasses.entitlements"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.souslens.ios.glasses
+        PRODUCT_NAME: SousLensGlasses
+        PRODUCT_MODULE_NAME: SousLensGlasses
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: Accent
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG GLASSES
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: GLASSES
+    entitlements:
+      path: SousLensGlasses/SousLensGlasses.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.souslens.ios.glasses
+    info:
+      path: SousLensGlasses/Info.plist
+      properties:
+        CFBundleDisplayName: SousLens Glasses
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+        # Meta AI calls back into this scheme after registration / permission. Deliberately not
+        # `souslens`, so the public app keeps its share links when both are installed.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.souslens.ios.glasses.meta
+            CFBundleURLSchemes:
+              - souslensglasses
+            CFBundleTypeRole: Editor
+        # Developer Mode config. MetaAppID 0 + empty ClientToken is Meta's own CameraAccess sample
+        # setup; docs/release/glasses.md lists what changes for a Wearables Developer Center app.
+        MWDAT:
+          AppLinkURLScheme: "souslensglasses://"
+          MetaAppID: "0"
+          ClientToken: ""
+          TeamID: $(DEVELOPMENT_TEAM)
+          Analytics:
+            OptOut: true
+        # Every key below is checked at runtime by MWDATCore 1.0.1 (it logs "... must contain"
+        # and refuses the link when one is missing; MockDeviceKit applies the same check).
+        UISupportedExternalAccessoryProtocols:
+          - com.meta.ar.wearable
+        UIBackgroundModes:
+          - bluetooth-central
+          - external-accessory
+        NSBonjourServices:
+          - _bonjour._tcp
+          - _meta-datax._tcp
+        LSApplicationQueriesSchemes:
+          - fb-viewapp
+        NSBluetoothAlwaysUsageDescription: >-
+          SousLens Glasses uses Bluetooth to connect to your Meta glasses, so their camera can scan
+          your pantry when you tap to capture.
+        NSCameraUsageDescription: >-
+          SousLens uses the camera only when you tap to scan your pantry or ask the coach to look
+          at a step. Nothing is recorded in the background.
+        NSMicrophoneUsageDescription: >-
+          SousLens listens only while you hold the talk button, so you can ask about a step or
+          update your pantry hands-free.
+        NSSpeechRecognitionUsageDescription: >-
+          Speech recognition turns what you say into text so the coach can answer. Audio may be
+          processed by Apple to transcribe it and is not kept by SousLens afterwards.
+        NSLocalNetworkUsageDescription: >-
+          SousLens Glasses uses the local network to reach your Meta glasses over Wi-Fi and, during
+          development, a SousLens server on your own machine.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    dependencies:
+      - package: MetaWearablesDAT
+        product: MWDATCore
+      - package: MetaWearablesDAT
+        product: MWDATCamera
+
+  # MockDeviceKit-driven tests of the glasses flavour (`make ios-check-glasses`).
+  SousLensGlassesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SousLensGlassesTests
+    dependencies:
+      - target: SousLensGlasses
+      - package: MetaWearablesDAT
+        product: MWDATMockDevice
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.souslens.ios.glasses.tests
+        GENERATE_INFOPLIST_FILE: YES
+
   SousLensTests:
     type: bundle.unit-test
     platform: iOS
@@ -137,6 +255,27 @@ schemes:
       gatherCoverageData: false
       targets:
         - SousLensTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  SousLensGlasses:
+    build:
+      targets:
+        SousLensGlasses: all
+        SousLensGlassesTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - SousLensGlassesTests
+      environmentVariables:
+        # Optional: where the screenshot tests write JPEGs (empty → skipped).
+        SOUSLENS_GLASSES_SHOTS: $(SOUSLENS_GLASSES_SHOTS)
     profile:
       config: Release
     analyze:

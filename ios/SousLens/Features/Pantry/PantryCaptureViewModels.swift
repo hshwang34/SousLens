@@ -68,9 +68,14 @@ final class SpeakCaptureViewModel {
         fileprivate let value: Int
     }
 
-    init(speech: any SpeechInput, service: PantryService) {
+    /// Names the live microphone from the verified audio route (brief 009, `AudioRouteMonitor`).
+    private let micLabel: @MainActor () -> String
+
+    init(speech: any SpeechInput, service: PantryService,
+         micLabel: @escaping @MainActor () -> String = { AudioInputLabel.iPhone }) {
         self.speech = speech
         self.service = service
+        self.micLabel = micLabel
         mode = speech.isAvailable ? .speak : .type
         if !speech.isAvailable {
             message = "Speech isn’t available on this device. Type what you have instead."
@@ -82,12 +87,13 @@ final class SpeakCaptureViewModel {
     /// The source the next "Find items" will record.
     var transcriptSource: PantrySource { dictated ? .voice : .manual }
 
-    /// PRD §6.1: always say which input is live. Only the phone microphone is claimed here; a
-    /// glasses route is never named without a verified HFP route (CLAUDE.md "honest device state").
+    /// PRD §6.1: always say which input is live. The name comes from the current audio route; a
+    /// glasses microphone is named only for a verified Bluetooth HFP input (CLAUDE.md "honest
+    /// device state").
     var listeningIndicator: String? {
         guard isListening else { return nil }
         let base = listenStyle == .toggle ? "Listening until you tap Stop" : "Listening…"
-        return speech.kind == .phone ? "\(base) (iPhone microphone)" : base
+        return speech.kind == .phone ? "\(base) (\(micLabel()))" : base
     }
 
     var cleanTranscript: String { DraftText.multiLine(transcript, max: PantryLimits.transcript) }
@@ -250,7 +256,15 @@ final class ScanCaptureViewModel {
     private(set) var canRetry = false
     var observation: PantryObservation?
 
-    let camera: any CameraSource
+    /// The iPhone camera: always the fallback.
+    let phoneCamera: any CameraSource
+    /// Brief 009: the glasses (glasses build only; nil in the public app).
+    let glasses: (any GlassesController)?
+    /// What the user picked in the source picker. The *active* source falls back to the iPhone
+    /// whenever the glasses aren't ready (`glassesBanner` says why).
+    private(set) var selectedSource: CaptureSourceKind = .phone
+    /// The source that was started, so a preview keeps its camera even if readiness flips.
+    private var runningSource: CaptureSourceKind?
     private let service: PantryService
     private let encode: @Sendable (Data) async throws -> PantryPhotoUpload
     /// Mock-mode fixture stem (debug launch argument only); nil in normal use.
@@ -259,12 +273,68 @@ final class ScanCaptureViewModel {
     init(camera: any CameraSource,
          service: PantryService,
          fixture: String? = nil,
+         glasses: (any GlassesController)? = nil,
          encode: @escaping @Sendable (Data) async throws -> PantryPhotoUpload = { try await PantryImageEncoder.encodeDetached($0) }) {
-        self.camera = camera
+        phoneCamera = camera
+        self.glasses = glasses
         self.service = service
         self.fixture = fixture
         self.encode = encode
     }
+
+    // MARK: Source picker (brief 009)
+
+    private var glassesReady: Bool { glasses?.snapshot.isCameraReady ?? false }
+
+    /// Sources offered in the picker. The glasses appear only in the glasses build and only when
+    /// registered, permitted, connected and unblocked.
+    var availableSources: [CaptureSourceKind] {
+        glassesReady ? [.phone, .glasses] : [.phone]
+    }
+
+    /// Show the picker at all: only when there is a real choice, or the user's glasses choice
+    /// just became unavailable (so they can see the fallback).
+    var showsSourcePicker: Bool { glasses != nil && (glassesReady || selectedSource == .glasses) }
+
+    var activeSource: CaptureSourceKind {
+        selectedSource == .glasses && glassesReady ? .glasses : .phone
+    }
+
+    /// The camera every action uses. A running preview keeps its own camera.
+    var camera: any CameraSource {
+        if let runningSource, source(runningSource).activeIndicator { return source(runningSource) }
+        return source(activeSource)
+    }
+
+    /// Visible fallback: the user chose the glasses but they can't be used now. Purely derived
+    /// from device state; nothing about a cooking session is read or written.
+    var glassesBanner: String? {
+        guard selectedSource == .glasses, !glassesReady, let glasses else { return nil }
+        return (glasses.snapshot.issue ?? .disconnected).bannerText
+    }
+
+    /// Banner button: forget the last stream error so the glasses can be offered again.
+    func retryGlasses() {
+        glasses?.clearStreamIssue()
+    }
+
+    private func source(_ kind: CaptureSourceKind) -> any CameraSource {
+        if kind == .glasses, let glasses { return glasses.camera }
+        return phoneCamera
+    }
+
+    /// Picker tap. Turns any running camera off first: switching never leaves a camera on.
+    func selectSource(_ kind: CaptureSourceKind) async {
+        guard kind != selectedSource, !isCapturing else { return }
+        if cameraOn { await camera.stopPreview() }
+        runningSource = nil
+        selectedSource = kind
+        message = nil
+        permissionDenied = false
+    }
+
+    /// Visible label for the live indicator.
+    var cameraOnLabel: String { camera.kind == .glasses ? "Glasses camera on" : "Camera on" }
 
     var canUseCamera: Bool { camera.isAvailable }
     /// Drives the visible "Camera on" indicator; read from the source, never assumed.
@@ -273,8 +343,10 @@ final class ScanCaptureViewModel {
     var canFindItems: Bool { photoData != nil && !isSubmitting && !cameraOn }
 
     func startCamera() async {
-        guard camera.isAvailable, !cameraOn, !isStartingCamera else {
-            if !camera.isAvailable { message = "No camera here. Choose a photo instead." }
+        let starting = activeSource
+        let target = source(starting)
+        guard target.isAvailable, !cameraOn, !isStartingCamera else {
+            if !target.isAvailable { message = "No camera here. Choose a photo instead." }
             return
         }
         isStartingCamera = true
@@ -283,19 +355,22 @@ final class ScanCaptureViewModel {
         defer { isStartingCamera = false }
         do {
             photoData = nil
-            try await camera.startPreview()
+            runningSource = starting
+            try await target.startPreview()
         } catch let error as CaptureError {
-            await camera.stopPreview()
+            await target.stopPreview()
+            runningSource = nil
             switch error {
             case .cancelled: return
             case .permissionDenied(_, let explainer):
-                permissionDenied = true
+                permissionDenied = starting == .phone
                 message = explainer + " You can also choose a photo instead."
             default:
                 message = (error.errorDescription ?? "The camera didn’t start.") + " You can choose a photo instead."
             }
         } catch {
-            await camera.stopPreview()
+            await target.stopPreview()
+            runningSource = nil
             message = error.localizedDescription
         }
     }
@@ -305,22 +380,32 @@ final class ScanCaptureViewModel {
         guard cameraOn, !isCapturing else { return }
         isCapturing = true
         defer { isCapturing = false }
+        let capturing = camera
         do {
-            let frame = try await camera.captureFrame()
-            await camera.stopPreview()
+            let frame = try await capturing.captureFrame()
+            await capturing.stopPreview()
+            runningSource = nil
             photoData = frame.jpegData
         } catch {
-            await camera.stopPreview()
+            await capturing.stopPreview()
+            runningSource = nil
             message = "Couldn’t take the photo: \(error.pantryMessage)"
         }
     }
 
     func cancelCamera() async {
-        await camera.stopPreview()
+        await stopAllCameras()
+    }
+
+    /// Both sources off (only one can be running; stopping an idle one is a no-op).
+    private func stopAllCameras() async {
+        runningSource = nil
+        await phoneCamera.stopPreview()
+        if let glasses { await glasses.camera.stopPreview() }
     }
 
     func usePickedPhoto(_ data: Data) async {
-        await camera.stopPreview()
+        await stopAllCameras()
         message = nil
         photoData = data
     }
@@ -362,6 +447,6 @@ final class ScanCaptureViewModel {
     /// Sheet closing: camera off, photo gone.
     func tearDown() async {
         photoData = nil
-        await camera.stopPreview()
+        await stopAllCameras()
     }
 }
