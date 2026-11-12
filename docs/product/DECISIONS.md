@@ -178,3 +178,39 @@ because the account's payment failed or its spending limit was hit. The PM chose
 public (Actions are free for public repos) over fixing billing. The full history was scanned
 first: it holds only placeholder secrets and only personal commit identities. Side effect: iOS
 CI (macOS) is now free, so it can run on every iOS PR instead of manual dispatch only.
+
+#22 · 2026-11-12 · **Voice mode is the headline experience, with Free and Paid tiers.**
+**Screen and conversation**
+- **Screen:** the agent picks from our fixed set of animated cards and fills them with checked
+  data. The model never draws layouts. Every voice action updates the screen live, and taps work
+  the same as speech.
+- **Landscape:** the full-screen voice, cooking and recipe-picking screens only. Browsing, Profile
+  and the creator editor stay portrait.
+- **Pantry by voice:** it reads back the count plus anything unsure ("Got eight. What kind of
+  cheese?"). The full list is always on screen. Nothing is saved without a yes.
+- **Barge-in:** real, smart barge-in, so you can talk over the coach.
+- **Personality:** warm and friendly.
+- **Discovery:** pantry fit plus open search ("Korean, under 30 min"), over our published recipes
+  only, ranked by pantry fit.
+
+**Tiers**
+- **Free:** the voice pipeline runs on the iPhone (Apple speech recognition and voice). Commands,
+  typed Q&A from the recipe, matching and vetted swaps. No server AI.
+- **Paid:** the voice pipeline runs on our server by default (streamed speech recognition with
+  batching, server turn detection and barge-in, a natural server voice). It also includes all
+  server AI: coach answers, Look, pantry photo scan and creator video extraction. A Paid user can
+  switch voice to on-device in Settings.
+- **Echo cancellation stays on the phone,** so the coach's own voice can't trigger barge-in. The
+  phone sends audio only while someone is speaking.
+- **Price:** $4.99/month or $39.99/year. Nothing is charged before the App Store launch. Real
+  payments still need the PM's explicit go.
+- **Beta:** every TestFlight tester gets Paid free, inside the $25/month AI cap and the
+  per-person daily limit.
+
+**Consequences**
+- This partly **reverses #19**: on Paid, voice audio leaves the phone.
+- The site's "voice stays on your phone" copy, the privacy policy and the App Privacy answers
+  must change to describe both tiers.
+- Brief 007's hold-to-talk iOS voice is superseded by brief 012.
+
+*Lives in:* `docs/product/briefs/012-voice-mode.md`, `docs/product/design/voice-options.html`.
