@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SousLens Voice Mode Choices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap">
+<style>
+/* Layout: one decision per band; each band shows the options side by side as phone mockups, with a recommendation chip. Mise brand tokens from brand-board.html. */
+:root{
+  --paper:#FBF6EE; --card:#FFFDF8; --ink:#231F1A; --muted:#6B6257; --line:#E6DCCB;
+  --herb:#2F6B3A; --herb-soft:#E3EEE1; --tomato:#B3401E; --tomato-soft:#F8E4DC;
+  --warn:#8A5A00; --warn-soft:#FFF4D6; --glass:rgba(255,253,248,.72); --on-accent:#FFFFFF;
+  --serif:"Newsreader","New York",ui-serif,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  --round:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#16130F; --card:#211D18; --ink:#F3ECE1; --muted:#B4A898; --line:#3A332B;
+  --herb:#7CC88A; --herb-soft:#1F3323; --tomato:#F08A68; --tomato-soft:#3A221A;
+  --warn:#F2C35B; --warn-soft:#3A2F14; --glass:rgba(40,35,29,.72); --on-accent:#10210F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#16130F; --card:#211D18; --ink:#F3ECE1; --muted:#B4A898; --line:#3A332B;
+  --herb:#7CC88A; --herb-soft:#1F3323; --tomato:#F08A68; --tomato-soft:#3A221A;
+  --warn:#F2C35B; --warn-soft:#3A2F14; --glass:rgba(40,35,29,.72); --on-accent:#10210F; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans)}
+.wrap{max-width:1180px;margin:0 auto;padding-block:48px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--serif);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.2rem,5vw,3.4rem);line-height:1.05;letter-spacing:-.01em}
+h2{font-size:clamp(1.5rem,3vw,2rem);line-height:1.15}
+h3{font-size:1.15rem}
+.lede{max-width:62ch;color:var(--muted);font-size:1.1rem;margin:14px 0 0}
+.eyebrow{font:600 .75rem/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--herb)}
+section.q{border-top:1px solid var(--line);margin-top:56px;padding-top:40px;display:grid;gap:24px}
+.qhead{display:grid;gap:8px;max-width:70ch}
+.qhead p{margin:0;color:var(--muted)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:28px;align-items:start}
+.opt{display:grid;gap:14px;justify-items:center;min-width:0}
+.opt .cap{width:100%;max-width:340px;display:grid;gap:6px}
+.opt .cap p{margin:0;font-size:.94rem;color:var(--muted)}
+.tag{display:inline-flex;gap:6px;align-items:center;font:600 .78rem/1 var(--sans);padding:6px 10px;border-radius:999px;width:max-content}
+.tag.rec{background:var(--herb);color:var(--on-accent)}
+.tag.alt{background:var(--line);color:var(--ink)}
+.tag.risk{background:var(--tomato-soft);color:var(--tomato)}
+ul.pc{margin:0;padding-left:18px;font-size:.92rem;color:var(--muted)}
+ul.pc li::marker{color:var(--herb)}
+ul.pc li.con::marker{color:var(--tomato)}
+
+/* phone */
+.phone{width:280px;max-width:100%;aspect-ratio:9/19.5;background:var(--paper);border:10px solid #111;border-radius:42px;position:relative;overflow:hidden;box-shadow:0 18px 40px -20px rgba(0,0,0,.45);display:flex;flex-direction:column}
+.phone.land{width:560px;aspect-ratio:19.5/9}
+.status{height:26px;flex:none;display:flex;justify-content:space-between;align-items:end;padding:0 22px 2px;font:600 .66rem/1 var(--sans)}
+.vbar{margin:6px 10px 0;padding:8px 10px;border-radius:16px;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;font-size:.68rem}
+.dot{width:26px;height:26px;border-radius:50%;background:var(--herb);display:grid;place-items:center}
+.wave{display:flex;gap:2px;align-items:center;height:12px}
+.wave i{width:2px;background:var(--on-accent);border-radius:2px;animation:w 1s ease-in-out infinite}
+.wave i:nth-child(2){animation-delay:.15s}.wave i:nth-child(3){animation-delay:.3s}.wave i:nth-child(4){animation-delay:.45s}
+@keyframes w{0%,100%{height:3px}50%{height:12px}}
+.said{color:var(--muted)}.said b{color:var(--ink);font-weight:600}
+.screen{flex:1;padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:hidden}
+.prog{display:flex;gap:3px}.prog i{flex:1;height:3px;border-radius:2px;background:var(--line)}.prog i.on{background:var(--herb)}
+.stepno{font:600 .7rem/1 var(--round);color:var(--muted)}
+.steptext{font-family:var(--serif);font-size:1.12rem;line-height:1.25;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;font-size:.72rem;display:grid;gap:6px}
+.card h4{margin:0;font:600 .8rem/1.2 var(--serif)}
+.btns{display:flex;gap:6px}.btn{flex:1;text-align:center;padding:7px 4px;border-radius:999px;font:600 .68rem/1 var(--sans);background:var(--herb-soft);color:var(--herb)}
+.btn.pri{background:var(--herb);color:var(--on-accent)}
+.safety{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:8px;font-size:.66rem;font-weight:600}
+.tools{margin-top:auto;display:flex;gap:6px}.tools span{flex:1;text-align:center;font-size:.6rem;padding:7px 0;border-radius:12px;background:var(--glass);border:1px solid var(--line)}
+.swap{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;text-align:center}
+.swap s{color:var(--muted)}.swap b{color:var(--herb)}
+.chip{font:600 .6rem/1 var(--round);padding:4px 7px;border-radius:999px;background:var(--herb-soft);color:var(--herb);width:max-content}
+.chip.miss{background:var(--tomato-soft);color:var(--tomato)}
+.item{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:10px;border:1px dashed var(--line);font-size:.7rem}
+.item.ok{border-style:solid;background:var(--card)}
+.item.q{border-color:var(--warn);background:var(--warn-soft)}
+.rcard{border-radius:14px;overflow:hidden;background:var(--card);border:1px solid var(--line);font-size:.68rem}
+.rcard .img{height:54px}
+.rcard div.t{padding:6px 8px;display:grid;gap:4px}
+.img.a{background:linear-gradient(135deg,#8E3A1A,#D17A3C)}.img.b{background:linear-gradient(135deg,#2F6B3A,#7DA35A)}.img.c{background:linear-gradient(135deg,#B78A2A,#E8C46A)}
+/* chaotic model-drawn */
+.chaos .blob{border-radius:4px;padding:8px;font-size:.7rem}
+.anno{position:absolute;right:6px;background:var(--tomato);color:#fff;font:600 .58rem/1.2 var(--sans);padding:4px 6px;border-radius:6px;max-width:120px}
+/* landscape */
+.lgrid{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:10px;padding:8px 12px 10px;min-height:0}
+.lside{display:grid;gap:6px;align-content:start}
+.ring{width:54px;height:54px;border-radius:50%;background:conic-gradient(var(--herb) 0 65%,var(--line) 0);display:grid;place-items:center;margin:auto}
+.ring span{width:42px;height:42px;border-radius:50%;background:var(--card);display:grid;place-items:center;font:600 .7rem var(--round)}
+/* transcript */
+.tx{width:100%;max-width:340px;display:grid;gap:6px;font-size:.86rem}
+.tx .u,.tx .a{padding:8px 11px;border-radius:14px;max-width:88%}
+.tx .u{justify-self:end;background:var(--herb);color:var(--on-accent);border-bottom-right-radius:4px}
+.tx .a{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px}
+.tx .meta{font:600 .7rem var(--sans);color:var(--muted)}
+/* timeline */
+.tl{width:100%;max-width:360px;display:grid;gap:8px;font-size:.78rem}
+.lane{display:grid;grid-template-columns:54px 1fr;align-items:center;gap:8px}
+.track{position:relative;height:26px;border-radius:8px;background:var(--line)}
+.seg{position:absolute;top:3px;bottom:3px;border-radius:6px;display:grid;place-items:center;font:600 .62rem var(--sans);color:var(--on-accent);white-space:nowrap;overflow:hidden}
+.seg.ai{background:var(--herb)}.seg.me{background:var(--tomato)}.seg.cut{background:repeating-linear-gradient(45deg,var(--herb) 0 4px,transparent 4px 8px);color:var(--ink)}
+/* demo */
+.demo{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:32px;align-items:center}
+@media (max-width:760px){.demo{grid-template-columns:1fr;justify-items:center}}
+.stage{position:relative;flex:1;overflow:hidden}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;gap:8px;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s}
+.slide.out{transform:translateX(-105%);opacity:0}.slide.in{transform:translateX(105%);opacity:0}
+.say{display:flex;flex-wrap:wrap;gap:10px}
+.say button{font:600 .95rem var(--sans);padding:12px 18px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.say button:hover{border-color:var(--herb)}
+.say button:focus-visible{outline:3px solid var(--herb);outline-offset:2px}
+.pulse{animation:p .6s ease}
+@keyframes p{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
+.decide{margin-top:56px;border:1px solid var(--line);border-radius:18px;padding:24px;background:var(--card);display:grid;gap:12px}
+.decide ol{margin:0;padding-left:20px;display:grid;gap:6px}
+@media (prefers-reduced-motion:reduce){.wave i{animation:none;height:8px}.slide{transition:opacity .3s}.slide.out,.slide.in{transform:none}.pulse{animation:none}}
+@media (max-width:620px){.phone.land{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">Brief 012 · decisions for the PM</span>
+  <h1>Voice mode, drawn out</h1>
+  <p class="lede">You talk and the phone follows along. Each band below is one decision, with the options drawn as screens. The green chip marks my recommendation. Try the live demo first: it shows what "say next" feels like.</p>
+
+  <!-- DEMO -->
+  <section class="q" aria-labelledby="d0">
+    <div class="qhead"><span class="eyebrow">Live demo</span><h2 id="d0">What saying “next” looks like</h2>
+      <p>Tap a phrase as if you said it. The voice bar shows what it heard, the step card slides, the progress fills. With Reduce Motion on, it crossfades instead.</p></div>
+    <div class="demo">
+      <div class="phone" aria-label="Phone showing cooking in voice mode">
+        <div class="status"><span>9:41</span><span>●●●</span></div>
+        <div class="vbar"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said" id="heard">Listening… say <b>next</b>, <b>back</b> or <b>repeat</b></div></div>
+        <div class="screen">
+          <div class="prog" id="prog"></div>
+          <div class="stage" id="stage"></div>
+          <div class="tools"><span>Repeat</span><span>Slower</span><span>Ask</span><span>Look</span></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:16px;min-width:0">
+        <div class="say" role="group" aria-label="Say a command">
+          <button type="button" id="b-next">“Next”</button>
+          <button type="button" id="b-back">“Back”</button>
+          <button type="button" id="b-rep">“Repeat”</button>
+          <button type="button" id="b-lemon">“I’m out of lemons”</button>
+          <button type="button" id="b-done">“Is the chicken done?”</button>
+        </div>
+        <p style="margin:0;color:var(--muted);max-width:52ch">Next, back and repeat are understood on the phone, so the screen moves instantly, even with AI off. “Out of lemons” goes to the agent and comes back as a swap card you approve. “Is it done?” always gets the fixed thermometer notice, never the AI's own words.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Q1 -->
+  <section class="q" aria-labelledby="q1">
+    <div class="qhead"><span class="eyebrow">Decision 1</span><h2 id="q1">How the screen is generated</h2><p>Both feel “generative”: the screen changes with every sentence. The difference is who designs what you see.</p></div>
+    <div class="opts">
+      <div class="opt">
+        <div class="phone">
+          <div class="status"><span>9:41</span><span>●●●</span></div>
+          <div class="vbar"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said">You: <b>“I’m out of lemons”</b></div></div>
+          <div class="screen">
+            <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+            <span class="stepno">STEP 3 OF 6</span>
+            <div class="steptext">Squeeze the lemon over the chicken and rest 5 minutes.</div>
+            <div class="card"><span class="chip">Common swap</span>
+              <div class="swap"><s>1 lemon</s><span>→</span><b>1 tbsp rice vinegar</b></div>
+              <span style="color:var(--muted)">Slightly milder. Say “yes” or tap.</span>
+              <div class="btns"><span class="btn">Keep lemon</span><span class="btn pri">Use swap</span></div></div>
+            <div class="tools"><span>Repeat</span><span>Slower</span><span>Ask</span><span>Look</span></div>
+          </div>
+        </div>
+        <div class="cap"><span class="tag rec">Recommended · A</span><h3>The agent picks from our cards</h3>
+          <p>We design about 8 cards: pantry list, recipe options, step, swap, timer, answer, safety, “did you mean”. The agent chooses the card and fills it with checked data. Motion makes it feel alive.</p>
+          <ul class="pc"><li>Every screen is designed and tested, in light/dark and at large text sizes</li><li>Safety notices are always the fixed, solid style</li><li class="con">The agent can't invent a brand-new kind of screen</li></ul></div>
+      </div>
+      <div class="opt">
+        <div class="phone chaos">
+          <div class="status"><span>9:41</span><span>●●●</span></div>
+          <div class="vbar"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said">You: <b>“I’m out of lemons”</b></div></div>
+          <div class="screen" style="position:relative">
+            <div class="blob" style="background:var(--tomato);color:#fff;font-size:.9rem;font-weight:700">NO LEMONS? NO PROBLEM! 🍋</div>
+            <div class="blob" style="border:2px solid var(--herb)">Try lime, vinegar, or sumac! Lime is safe for everyone and tastes almost identical.</div>
+            <div class="blob" style="background:var(--line);font-size:.6rem">Note: chicken should be cooked thoroughly.</div>
+            <div class="blob" style="display:flex;gap:4px"><span class="btn pri">LIME</span><span class="btn pri">VINEGAR</span><span class="btn pri">SUMAC</span><span class="btn pri">MORE…</span></div>
+            <span class="anno" style="top:96px">“safe for everyone” is a claim we forbid</span>
+            <span class="anno" style="top:176px">safety note shrunk to grey small print</span>
+            <span class="anno" style="bottom:20px">layout breaks at big text</span>
+          </div>
+        </div>
+        <div class="cap"><span class="tag risk">Option B · risky</span><h3>The model draws the screen</h3>
+          <p>The AI writes the layout and copy each time. It can produce something new for any request, and it demos well.</p>
+          <ul class="pc"><li>Most flexible and surprising</li><li class="con">It can restyle or drop safety notices, and make claims we filter elsewhere</li><li class="con">Can't be tested; it looks different every time</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Q2 -->
+  <section class="q" aria-labelledby="q2">
+    <div class="qhead"><span class="eyebrow">Decision 2</span><h2 id="q2">Landscape</h2><p>A phone propped on a stand by the stove is usually sideways. Today the app is portrait only.</p></div>
+    <div class="opts">
+      <div class="opt" style="grid-column:1/-1">
+        <div class="phone land" aria-label="Landscape cooking screen">
+          <div class="status"><span>9:41</span><span>●●●</span></div>
+          <div class="lgrid">
+            <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+              <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+              <span class="stepno">STEP 3 OF 6</span>
+              <div class="steptext" style="font-size:1.3rem">Sear the thighs skin-side down until deeply golden, about 6 minutes. Don’t move them.</div>
+              <div class="tools"><span>Back</span><span>Repeat</span><span>Ask</span><span style="background:var(--herb);color:var(--on-accent)">Next</span></div>
+            </div>
+            <div class="lside">
+              <div class="vbar" style="margin:0"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said">Listening</div></div>
+              <div class="card" style="justify-items:center"><div class="ring"><span>4:12</span></div><span>Sear timer</span></div>
+              <div class="card"><h4>This step uses</h4><span>4 chicken thighs · 1 tbsp oil</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cap" style="max-width:720px"><span class="tag rec">Recommended · voice screens only</span>
+          <p>Landscape for the screens you use with your hands busy: voice session, pantry-by-voice, recipe picking, cooking. Browsing, Profile and the creator editor stay portrait for now. <b>Whole app</b> means every screen gets a sideways layout, which roughly doubles the layout and test work before the beta.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Q3 -->
+  <section class="q" aria-labelledby="q3">
+    <div class="qhead"><span class="eyebrow">Decision 3</span><h2 id="q3">Confirming pantry items by voice</h2><p>Nothing is saved without a yes. The question is how much it reads back.</p></div>
+    <div class="opts">
+      <div class="opt">
+        <div class="tx"><span class="meta">Option A · read everything back</span>
+          <div class="u">I’ve got eggs, half a bag of rice, spinach, soy sauce, some cheese, garlic, two onions and butter.</div>
+          <div class="a">Eight things: eggs, rice — about half a bag, spinach, soy sauce, cheese, garlic, two onions, butter. Add them all?</div>
+          <div class="u">Yes.</div></div>
+        <div class="cap"><span class="tag alt">Option A</span><p>Thorough, but slow and tiring past five items.</p></div>
+      </div>
+      <div class="opt">
+        <div class="tx"><span class="meta">Option B · count plus anything unsure</span>
+          <div class="u">I’ve got eggs, half a bag of rice, spinach, soy sauce, some cheese, garlic, two onions and butter.</div>
+          <div class="a">Got eight. One question: what kind of cheese?</div>
+          <div class="u">Cheddar. Add them.</div></div>
+        <div class="phone" style="width:240px">
+          <div class="status"><span>9:41</span><span>●●●</span></div>
+          <div class="screen">
+            <h4 style="font:600 .95rem var(--serif);margin:0">Adding to pantry</h4>
+            <div class="item ok"><span>Eggs</span><span>✓</span></div>
+            <div class="item ok"><span>Rice · ~½ bag</span><span>✓</span></div>
+            <div class="item ok"><span>Spinach</span><span>✓</span></div>
+            <div class="item ok"><span>Soy sauce</span><span>✓</span></div>
+            <div class="item q"><span>Cheese · which kind?</span><span>?</span></div>
+            <div class="item"><span>Garlic</span><span>…</span></div>
+            <div class="btns" style="margin-top:auto"><span class="btn">Edit</span><span class="btn pri">Add 8</span></div>
+          </div>
+        </div>
+        <div class="cap"><span class="tag rec">Recommended · B</span><p>The full list is always on screen, so the voice only asks about what's unclear. Items drop in dashed and turn solid on “yes”.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Q4 -->
+  <section class="q" aria-labelledby="q4">
+    <div class="qhead"><span class="eyebrow">Decision 4</span><h2 id="q4">Talking over it</h2><p>It's reading a long step and you say “next”.</p></div>
+    <div class="opts">
+      <div class="opt"><div class="tl">
+        <div class="lane"><span>Coach</span><div class="track"><span class="seg ai" style="left:2%;width:94%">Sear the thighs skin-side down until…</span></div></div>
+        <div class="lane"><span>You</span><div class="track"><span class="seg me" style="left:40%;width:14%">next</span></div></div>
+        <span style="color:var(--muted)">Ignored until it finishes. You repeat yourself.</span></div>
+        <div class="cap"><span class="tag alt">No interrupting</span><p>Simplest. Frustrating with long steps.</p></div></div>
+      <div class="opt"><div class="tl">
+        <div class="lane"><span>Coach</span><div class="track"><span class="seg ai" style="left:2%;width:38%">Sear the thighs…</span><span class="seg cut" style="left:40%;width:56%"></span></div></div>
+        <div class="lane"><span>You</span><div class="track"><span class="seg me" style="left:40%;width:14%">next</span><span class="seg ai" style="left:58%;width:38%">Step 4…</span></div></div>
+        <span style="color:var(--muted)">Short commands cut it off at once. Chatter and kitchen noise don't.</span></div>
+        <div class="cap"><span class="tag rec">Recommended · short commands only</span><p>Next, back, stop, repeat and pause can interrupt. Longer speech waits for a pause.</p></div></div>
+      <div class="opt"><div class="tl">
+        <div class="lane"><span>Coach</span><div class="track"><span class="seg ai" style="left:2%;width:20%">Sear…</span><span class="seg cut" style="left:22%;width:74%"></span></div></div>
+        <div class="lane"><span>Kitchen</span><div class="track"><span class="seg me" style="left:22%;width:20%">clatter</span></div></div>
+        <span style="color:var(--muted)">Any sound stops it, including a pan lid.</span></div>
+        <div class="cap"><span class="tag alt">Anything interrupts</span><p>Most natural in a quiet room. Cuts out a lot while cooking.</p></div></div>
+    </div>
+  </section>
+
+  <!-- Q5 -->
+  <section class="q" aria-labelledby="q5">
+    <div class="qhead"><span class="eyebrow">Decision 5</span><h2 id="q5">How it talks</h2></div>
+    <div class="opts">
+      <div class="opt"><div class="tx"><span class="meta">Minimal</span>
+        <div class="u">Next.</div><div class="a">Step 4. Flip the thighs. Cook 5 more minutes.</div>
+        <div class="u">I’m out of lemons.</div><div class="a">Rice vinegar works, 1 tablespoon. Use it?</div></div>
+        <div class="cap"><span class="tag rec">Recommended · minimal</span><p>Arm's-length, hands busy. Fewer words between you and the next action.</p></div></div>
+      <div class="opt"><div class="tx"><span class="meta">Warm</span>
+        <div class="u">Next.</div><div class="a">Nice work! Step 4: give those thighs a flip. They should look gorgeous and golden. About 5 more minutes.</div>
+        <div class="u">I’m out of lemons.</div><div class="a">No worries, happens to everyone! A tablespoon of rice vinegar gives a similar brightness. Want me to swap it in?</div></div>
+        <div class="cap"><span class="tag alt">Warm</span><p>Friendlier on the first cook. Long-winded by the fifth.</p></div></div>
+    </div>
+  </section>
+
+  <!-- Q6 -->
+  <section class="q" aria-labelledby="q6">
+    <div class="qhead"><span class="eyebrow">Decision 6</span><h2 id="q6">Finding something to cook</h2></div>
+    <div class="opts">
+      <div class="opt"><div class="phone">
+        <div class="status"><span>9:41</span><span>●●●</span></div>
+        <div class="vbar"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said">You: <b>“What can I make?”</b></div></div>
+        <div class="screen">
+          <div class="rcard"><div class="img b"></div><div class="t"><b>Spinach omelette</b><span class="chip">You have everything</span></div></div>
+          <div class="rcard"><div class="img a"></div><div class="t"><b>Kimchi fried rice</b><span class="chip">You have 9 of 10</span></div></div>
+          <div class="rcard"><div class="img c"></div><div class="t"><b>Gochujang chicken</b><span class="chip miss">Missing gochujang</span></div></div>
+        </div></div>
+        <div class="cap"><span class="tag alt">Pantry fit only</span><p>Ranks recipes by what you have. Simple and predictable, and answers “what can I make?” well.</p></div></div>
+      <div class="opt"><div class="phone">
+        <div class="status"><span>9:41</span><span>●●●</span></div>
+        <div class="vbar"><div class="dot"><div class="wave"><i></i><i></i><i></i><i></i></div></div><div class="said">You: <b>“Korean, under 30 minutes”</b></div></div>
+        <div class="screen">
+          <div style="display:flex;gap:4px;flex-wrap:wrap"><span class="chip">Korean</span><span class="chip">≤ 30 min</span><span class="chip">Fits your pantry first</span></div>
+          <div class="rcard"><div class="img a"></div><div class="t"><b>Kimchi fried rice</b><span>20 min · You have 9 of 10</span></div></div>
+          <div class="rcard"><div class="img c"></div><div class="t"><b>Gochujang chicken</b><span>35 min · just over</span></div></div>
+          <div class="card"><span style="color:var(--muted)">Say “something else”, “the first one”, or “quicker”.</span></div>
+        </div></div>
+        <div class="cap"><span class="tag rec">Recommended · fit + open search</span><p>Understands cuisine, time, “something lighter”. Turns what you say into visible filter chips you can tap off. It still ranks by your pantry and searches only our published recipes.</p></div></div>
+    </div>
+  </section>
+
+  <div class="decide"><h3>Reply in one line, e.g. “A · voice screens · B · short · minimal · open”</h3>
+    <ol><li>Screen: agent picks our cards (A), or the model draws it (B)</li><li>Landscape: voice screens only, or whole app</li><li>Pantry confirm: read everything (A), or count + unsure (B)</li><li>Interrupting: none, short commands only, or anything</li><li>Personality: minimal or warm</li><li>Discovery: pantry fit only, or fit + open search</li></ol></div>
+</div>
+<script>
+(function(){
+  var steps=[
+    "Pat the chicken thighs dry and season with salt.",
+    "Whisk gochujang, soy, honey and garlic into a glaze.",
+    "Squeeze the lemon over the chicken and rest 5 minutes.",
+    "Sear skin-side down until deeply golden, about 6 minutes.",
+    "Flip, brush with glaze, cook 5 more minutes.",
+    "Rest 5 minutes, then slice and serve."];
+  var i=2, stage=document.getElementById('stage'), prog=document.getElementById('prog'), heard=document.getElementById('heard');
+  var extra='';
+  function progHtml(){var h='';for(var k=0;k<steps.length;k++)h+='<i class="'+(k<=i?'on':'')+'"></i>';prog.innerHTML=h}
+  function slideHtml(){return '<span class="stepno">STEP '+(i+1)+' OF '+steps.length+'</span><div class="steptext">'+steps[i]+'</div>'+extra}
+  function render(dir){
+    progHtml();
+    var old=stage.querySelector('.slide');
+    var s=document.createElement('div');s.className='slide'+(dir?(dir>0?' in':' out'):'');s.innerHTML=slideHtml();
+    stage.appendChild(s);
+    if(old&&dir){old.classList.add(dir>0?'out':'in');setTimeout(function(){old.remove()},460)}else if(old){old.remove()}
+    requestAnimationFrame(function(){requestAnimationFrame(function(){s.classList.remove('in','out')})});
+  }
+  function say(t){heard.innerHTML='You: <b>“'+t+'”</b>'}
+  document.getElementById('b-next').onclick=function(){say('Next');if(i<steps.length-1){i++;extra='';render(1)}else{heard.innerHTML='That was the last step. <b>Say “done”</b> to finish.'}};
+  document.getElementById('b-back').onclick=function(){say('Back');if(i>0){i--;extra='';render(-1)}};
+  document.getElementById('b-rep').onclick=function(){say('Repeat');var s=stage.querySelector('.slide');if(s){s.classList.remove('pulse');void s.offsetWidth;s.classList.add('pulse')}};
+  document.getElementById('b-lemon').onclick=function(){say('I’m out of lemons');extra='<div class="card"><span class="chip">Common swap</span><div class="swap"><s>1 lemon</s><span>→</span><b>1 tbsp rice vinegar</b></div><div class="btns"><span class="btn">Keep</span><span class="btn pri">Use swap</span></div></div>';render(0)};
+  document.getElementById('b-done').onclick=function(){say('Is the chicken done?');extra='<div class="safety">I can’t tell from a description or photo whether food is cooked. Check the thickest part with a thermometer: chicken is safe at 165 °F (74 °C).</div>';render(0)};
+  render(0);
+})();
+</script>
+</body>
+</html>
