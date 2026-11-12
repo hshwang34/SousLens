@@ -198,6 +198,16 @@ struct ScanCaptureView: View {
                         .foregroundStyle(SLColor.textSecondary)
                 }
 
+                if model.showsSourcePicker {
+                    CameraSourcePicker(model: model)
+                }
+
+                if let banner = model.glassesBanner {
+                    MessageBlock(text: banner, isWarning: true, retry: { model.retryGlasses() },
+                                 retryTitle: "Try glasses again")
+                        .accessibilityIdentifier("scan.glassesBanner")
+                }
+
                 viewfinder
 
                 if let message = model.message {
@@ -252,6 +262,16 @@ struct ScanCaptureView: View {
             } else if model.cameraOn, let provider = model.camera as? CameraPreviewProviding {
                 CameraPreviewView(provider: provider)
                     .accessibilityLabel("Camera viewfinder")
+            } else if model.cameraOn, let frames = model.camera as? FramePreviewProviding, let frame = frames.previewFrame {
+                Color.clear
+                    .overlay {
+                        Image(uiImage: frame)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipped()
+                    .accessibilityElement()
+                    .accessibilityLabel("Glasses camera view")
             } else {
                 VStack(spacing: Spacing.sm) {
                     Image(systemName: "camera.viewfinder")
@@ -264,7 +284,7 @@ struct ScanCaptureView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if model.cameraOn {
-                Label("Camera on", systemImage: "circle.fill")
+                Label(model.cameraOnLabel, systemImage: "circle.fill")
                     .font(SLFont.caption)
                     .foregroundStyle(SLColor.onDanger)
                     .padding(.horizontal, Spacing.sm)
@@ -336,6 +356,43 @@ struct ScanCaptureView: View {
     }
 }
 
+/// "iPhone camera" / "Glasses camera" (brief 009). Shown only in the glasses build, and the
+/// glasses option only while the glasses are ready; picking one never starts a camera by itself.
+struct CameraSourcePicker: View {
+    @Bindable var model: ScanCaptureViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("Camera")
+                .font(SLFont.footnote.weight(.semibold))
+                .foregroundStyle(SLColor.textSecondary)
+            Picker("Camera", selection: Binding(
+                get: { model.selectedSource },
+                set: { kind in Task { await model.selectSource(kind) } }
+            )) {
+                ForEach(pickerSources, id: \.self) { kind in
+                    Label(Self.title(kind), systemImage: kind == .glasses ? "eyeglasses" : "iphone")
+                        .tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(model.isCapturing || model.isStartingCamera)
+            .accessibilityIdentifier("scan.sourcePicker")
+        }
+    }
+
+    /// The selected source stays listed (so a fallback is visible) even when it isn't ready.
+    private var pickerSources: [CaptureSourceKind] {
+        var sources = model.availableSources
+        if !sources.contains(model.selectedSource) { sources.append(model.selectedSource) }
+        return sources
+    }
+
+    static func title(_ kind: CaptureSourceKind) -> String {
+        kind == .glasses ? "Glasses camera" : "iPhone camera"
+    }
+}
+
 /// Live viewfinder for the phone camera (device only; the simulator has no camera).
 struct CameraPreviewView: UIViewRepresentable {
     let provider: any CameraPreviewProviding
@@ -368,6 +425,7 @@ struct MessageBlock: View {
     var isWarning = false
     var showsSettings = false
     var retry: (() -> Void)? = nil
+    var retryTitle = "Retry"
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -384,7 +442,7 @@ struct MessageBlock: View {
                     .frame(minHeight: Metrics.minTapTarget)
             }
             if let retry {
-                Button("Retry", action: retry)
+                Button(retryTitle, action: retry)
                     .font(SLFont.callout.weight(.semibold))
                     .frame(minHeight: Metrics.minTapTarget)
                     .accessibilityIdentifier("capture.retry")

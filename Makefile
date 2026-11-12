@@ -5,7 +5,7 @@ SIM ?= iPhone 15
 # which fails whenever the newest runtime lacks that model (e.g. iPhone 15 only ships with iOS 17.x).
 SIM_OS ?= $(shell ios/scripts/sim-os.sh "$(SIM)")
 
-.PHONY: check backend-check ai-live-smoke ios-check ios-smoke env db-up db-down backend-dev backend-worker seed ios-project
+.PHONY: check backend-check ai-live-smoke ios-check ios-check-no-dat ios-check-glasses ios-smoke env db-up db-down backend-dev backend-worker seed ios-project
 
 check: backend-check ios-check
 
@@ -42,6 +42,24 @@ ios-check: ios-project
 	cd ios && xcodebuild test -project SousLens.xcodeproj -scheme SousLens \
 		-destination 'platform=iOS Simulator,name=$(SIM),OS=$(SIM_OS)' \
 		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -quiet
+	$(MAKE) ios-check-no-dat
+
+# Brief 009 / DECISIONS #19: the public app (Release, what TestFlight ships) must not link DAT or
+# ExternalAccessory. Fails on any MWDAT framework, load command, symbol or Info.plist key.
+ios-check-no-dat: ios-project
+	cd ios && xcodebuild build -project SousLens.xcodeproj -scheme SousLens -configuration Release \
+		-destination 'generic/platform=iOS Simulator' -derivedDataPath build/no-dat \
+		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -quiet
+	ios/scripts/check-no-dat.sh ios/build/no-dat/Build/Products/Release-iphonesimulator/SousLens.app
+
+# The PM-only glasses flavour: builds SousLensGlasses (DAT 1.0.1) and runs its MockDeviceKit tests.
+# GLASSES_SHOTS=<folder> also writes the Settings → Glasses / source picker screenshots there.
+GLASSES_SHOTS ?=
+ios-check-glasses: ios-project
+	cd ios && xcodebuild test -project SousLens.xcodeproj -scheme SousLensGlasses \
+		-destination 'platform=iOS Simulator,name=$(SIM),OS=$(SIM_OS)' \
+		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
+		SOUSLENS_GLASSES_SHOTS="$(GLASSES_SHOTS)" -quiet
 
 # Live smoke: fresh install → two-step dev sign-in (code read from the backend log) → seeded
 # recipe. Needs `make backend-dev` running with its log at SMOKE_LOG (default below).

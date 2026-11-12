@@ -22,7 +22,11 @@ struct RootView: View {
             await environment.auth.restore()
         }
         .onOpenURL { url in
-            environment.open(url: url)
+            if environment.glasses == nil {
+                environment.open(url: url)
+            } else {
+                Task { await environment.handleIncomingURL(url) }
+            }
         }
     }
 }

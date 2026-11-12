@@ -16,4 +16,12 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
       - run: brew install xcodegen
+      # Public app: unit tests + the no-DAT link check (DECISIONS #19).
       - run: make ios-check SIM="iPhone 16"
+      # Brief 009: the PM-only glasses flavour (DAT 1.0.1) + its MockDeviceKit tests. Runs on an
+      # iOS 26 simulator: MWDATCore's metadata crashes the XCTest host on iOS 17 runtimes.
+      - name: Glasses flavour
+        run: |
+          SIM_OS=$(ios/scripts/sim-os.sh "iPhone 16")
+          case "$SIM_OS" in 26.*) ;; *) echo "::warning::iPhone 16 runtime is $SIM_OS; glasses tests expect iOS 26" ;; esac
+          make ios-check-glasses SIM="iPhone 16"

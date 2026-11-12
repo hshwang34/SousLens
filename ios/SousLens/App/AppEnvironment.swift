@@ -25,6 +25,11 @@ final class AppEnvironment {
     let camera: any CameraSource
     let speech: any SpeechInput
     let audio: any AudioOutput
+    /// Brief 009: the Meta glasses, glasses build only (nil in the public app, which doesn't link
+    /// DAT). Deliberately has no reference to `cooking`: a glasses event can't touch a session.
+    let glasses: (any GlassesController)?
+    /// Names the live microphone from `AVAudioSession.currentRoute`.
+    let audioRoute: AudioRouteMonitor
     /// Brief 005: open cooking session (resume banner, floating pill, full-screen cooking view).
     let cooking: CookingSessionStore
 
@@ -63,6 +68,8 @@ final class AppEnvironment {
          camera: any CameraSource,
          speech: any SpeechInput,
          audio: any AudioOutput,
+         glasses: (any GlassesController)? = nil,
+         audioRoute: AudioRouteMonitor? = nil,
          sessionCache: SessionCaching = InMemorySessionCache()) {
         self.serverSettings = serverSettings
         self.api = api
@@ -72,6 +79,8 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
+        self.glasses = glasses
+        self.audioRoute = audioRoute ?? AudioRouteMonitor(glassesBuild: glasses != nil)
         cooking = CookingSessionStore(service: api, cache: sessionCache, owner: { [weak auth, weak serverSettings] in
             guard let user = auth?.user, let server = serverSettings?.effectiveBaseURLString, !server.isEmpty else { return nil }
             return SessionOwner(userId: user.id, server: server)
@@ -126,6 +135,13 @@ final class AppEnvironment {
         }
     }
 
+    /// `onOpenURL`: a Meta AI callback (glasses build) goes to DAT first, everything else is a
+    /// SousLens deep link.
+    func handleIncomingURL(_ url: URL) async {
+        if let glasses, await glasses.handleOpenURL(url) { return }
+        open(url: url)
+    }
+
     /// Called when the signed-in UI appears.
     func applyPendingDeepLink() {
         guard let link = pendingDeepLink else { return }
@@ -154,6 +170,14 @@ final class AppEnvironment {
         let settings = ServerSettings(defaults: defaults)
         bind(api: api, auth: auth, settings: settings, recipeCache: recipeCache)
         let flags = CaptureFeatureFlags.load(from: defaults)
+        #if GLASSES
+        // Configures DAT once, at launch (brief 009). Glasses build only.
+        let glasses: (any GlassesController)? = GlassesBootstrap.makeController()
+        let allowBluetoothInput = true
+        #else
+        let glasses: (any GlassesController)? = nil
+        let allowBluetoothInput = false
+        #endif
         return AppEnvironment(
             serverSettings: settings,
             api: api,
@@ -161,8 +185,9 @@ final class AppEnvironment {
             recipeCache: recipeCache,
             captureFlags: flags,
             camera: flags.phoneCamera ? PhoneCameraSource() : FakeCameraSource(isAvailable: false),
-            speech: flags.phoneSpeech ? PhoneSpeechInput() : FakeSpeechInput(isAvailable: false),
+            speech: flags.phoneSpeech ? PhoneSpeechInput(allowBluetoothInput: allowBluetoothInput) : FakeSpeechInput(isAvailable: false),
             audio: flags.systemAudio ? SystemAudioOutput() : FakeAudioOutput(isAvailable: false),
+            glasses: glasses,
             sessionCache: SessionCache()
         )
     }
