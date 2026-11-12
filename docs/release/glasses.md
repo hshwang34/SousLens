@@ -179,8 +179,11 @@ this order. Each step that ships to people outside the PM needs a fresh PM go.
   `NSLocalNetworkUsageDescription`, `NSBonjourServices` incl. `_meta-datax._tcp`, `UIBackgroundModes`
   `bluetooth-central` + `external-accessory`, `UISupportedExternalAccessoryProtocols`
   `com.meta.ar.wearable`); MockDeviceKit enforces the same check.
-- Tests: `make ios-check-glasses SIM="iPhone 16e"` (MockDeviceKit). Add
-  `GLASSES_SHOTS=<folder>` to regenerate the screenshots.
+- Tests: `make ios-check-glasses SIM="<an iOS 26 iPhone simulator>"` (MockDeviceKit; ~4 min).
+  Add `GLASSES_SHOTS=<folder>` to regenerate the screenshots. Use a simulator no other session is
+  driving: a busy or wedged simulator shows up as "failed preflight checks" / a launch hang.
+- MockDeviceKit 1.0.1 reports a fold either as hinges closed or as the device ending the session;
+  the code treats both as "glasses camera unavailable" and clears the stream issue on unfold.
 
 ## Risks
 
