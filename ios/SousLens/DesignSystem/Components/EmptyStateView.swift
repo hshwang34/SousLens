@@ -26,9 +26,9 @@ struct EmptyStateView: View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: systemImage)
                 .font(SLFont.glyph)
-                .foregroundStyle(SLColor.accent)
+                .foregroundStyle(SLColor.brand)
                 .padding(Spacing.xl)
-                .background(SLColor.accentSoft, in: Circle())
+                .background(SLColor.brandSoft, in: Circle())
                 .accessibilityHidden(true)
             VStack(spacing: Spacing.sm) {
                 Text(title)
@@ -66,6 +66,8 @@ struct EmptyStateView: View {
 }
 
 /// Primary / secondary button: a solid capsule (content layer, never glass). Always ≥44pt tall.
+/// Primary is the Persimmon fill with a Seed label (white on Persimmon fails AA); secondary is a
+/// Leaf label on a soft Leaf wash.
 struct SLButtonStyle: ButtonStyle {
     var prominent = true
 
@@ -74,8 +76,8 @@ struct SLButtonStyle: ButtonStyle {
             .font(SLFont.bodyEmphasis)
             .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget)
             .padding(.horizontal, Spacing.lg)
-            .foregroundStyle(prominent ? SLColor.onAccent : SLColor.accent)
-            .background(prominent ? SLColor.accent : SLColor.accentSoft, in: Capsule())
+            .foregroundStyle(prominent ? SLColor.onBrand : SLColor.accent)
+            .background(prominent ? SLColor.brand : SLColor.accentSoft, in: Capsule())
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .opacity(configuration.isPressed ? 0.85 : 1)
     }

@@ -2,9 +2,9 @@ import UIKit
 import XCTest
 @testable import SousLens
 
-/// Brief 006: the Mise token table is AA in every appearance, and the asset catalog matches it.
+/// Brief 006 / 013: the Umma token table is AA in every appearance, and the asset catalog matches it.
 final class BrandTokenTests: XCTestCase {
-    private let traits: [MisePalette.Appearance: UITraitCollection] = [
+    private let traits: [BrandPalette.Appearance: UITraitCollection] = [
         .light: UITraitCollection(userInterfaceStyle: .light),
         .dark: UITraitCollection(userInterfaceStyle: .dark),
         .lightHighContrast: UITraitCollection(userInterfaceStyle: .light).modifyingTraits { $0.accessibilityContrast = .high },
@@ -12,45 +12,92 @@ final class BrandTokenTests: XCTestCase {
     ]
 
     func testEveryTextPairIsAAInEveryAppearance() throws {
-        XCTAssertFalse(MisePalette.textPairs.isEmpty)
-        for (foreground, background) in MisePalette.textPairs {
-            let fg = try XCTUnwrap(MisePalette.token(foreground), "unknown token \(foreground)")
-            let bg = try XCTUnwrap(MisePalette.token(background), "unknown token \(background)")
-            for appearance in MisePalette.Appearance.allCases {
-                let ratio = MisePalette.contrastRatio(MisePalette.hex(fg, appearance), MisePalette.hex(bg, appearance))
+        XCTAssertFalse(BrandPalette.textPairs.isEmpty)
+        for (foreground, background) in BrandPalette.textPairs {
+            let fg = try XCTUnwrap(BrandPalette.token(foreground), "unknown token \(foreground)")
+            let bg = try XCTUnwrap(BrandPalette.token(background), "unknown token \(background)")
+            for appearance in BrandPalette.Appearance.allCases {
+                let ratio = BrandPalette.contrastRatio(BrandPalette.hex(fg, appearance), BrandPalette.hex(bg, appearance))
                 XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(foreground) on \(background), \(appearance): \(String(format: "%.2f", ratio)):1")
             }
         }
     }
 
     func testIncreaseContrastIsAtLeastAAA() throws {
-        for (foreground, background) in MisePalette.textPairs {
-            let fg = try XCTUnwrap(MisePalette.token(foreground))
-            let bg = try XCTUnwrap(MisePalette.token(background))
-            for appearance in [MisePalette.Appearance.lightHighContrast, .darkHighContrast] {
-                let ratio = MisePalette.contrastRatio(MisePalette.hex(fg, appearance), MisePalette.hex(bg, appearance))
+        for (foreground, background) in BrandPalette.textPairs {
+            let fg = try XCTUnwrap(BrandPalette.token(foreground))
+            let bg = try XCTUnwrap(BrandPalette.token(background))
+            for appearance in [BrandPalette.Appearance.lightHighContrast, .darkHighContrast] {
+                let ratio = BrandPalette.contrastRatio(BrandPalette.hex(fg, appearance), BrandPalette.hex(bg, appearance))
                 XCTAssertGreaterThanOrEqual(ratio, 7, "\(foreground) on \(background), \(appearance)")
             }
         }
     }
 
     func testContrastFormulaMatchesWCAGReferences() {
-        XCTAssertEqual(MisePalette.contrastRatio(0x000000, 0xFFFFFF), 21, accuracy: 0.01)
-        XCTAssertEqual(MisePalette.contrastRatio(0xFFFFFF, 0xFFFFFF), 1, accuracy: 0.001)
-        // Brief 006 engineering note: white on herb green is 6.4:1.
-        XCTAssertEqual(MisePalette.contrastRatio(0xFFFFFF, 0x2F6B3A), 6.4, accuracy: 0.05)
+        XCTAssertEqual(BrandPalette.contrastRatio(0x000000, 0xFFFFFF), 21, accuracy: 0.01)
+        XCTAssertEqual(BrandPalette.contrastRatio(0xFFFFFF, 0xFFFFFF), 1, accuracy: 0.001)
+        // Brief 006 engineering note: white on Leaf is 6.4:1.
+        XCTAssertEqual(BrandPalette.contrastRatio(0xFFFFFF, 0x2F6B3A), 6.4, accuracy: 0.05)
+    }
+
+    func testBrandTokensUseTheApprovedPalette() throws {
+        // DECISIONS #23, direction C: Persimmon, Leaf, Flesh, Seed.
+        XCTAssertEqual(try XCTUnwrap(BrandPalette.token("Brand")).light, BrandPalette.persimmon)
+        XCTAssertEqual(try XCTUnwrap(BrandPalette.token("Accent")).light, BrandPalette.leaf)
+        XCTAssertEqual(try XCTUnwrap(BrandPalette.token("Background")).light, BrandPalette.flesh)
+        XCTAssertEqual(try XCTUnwrap(BrandPalette.token("TextPrimary")).light, BrandPalette.seed)
+        XCTAssertEqual(try XCTUnwrap(BrandPalette.token("OnBrand")).light, BrandPalette.seed)
+    }
+
+    func testPersimmonIsNeverATextColour() throws {
+        // Brief 013: Persimmon fails 4.5:1 on light backgrounds, so it may only be a fill.
+        for (foreground, _) in BrandPalette.textPairs {
+            XCTAssertFalse(BrandPalette.fillOnly.contains(foreground), "\(foreground) is fill-only")
+        }
+        let persimmon = BrandPalette.persimmon
+        XCTAssertLessThan(BrandPalette.contrastRatio(persimmon, BrandPalette.flesh), 4.5)
+        XCTAssertLessThan(BrandPalette.contrastRatio(persimmon, 0xFFFFFF), 4.5)
+        // And why its button label is Seed, not white.
+        XCTAssertLessThan(BrandPalette.contrastRatio(0xFFFFFF, persimmon), 4.5)
+        XCTAssertGreaterThanOrEqual(BrandPalette.contrastRatio(BrandPalette.seed, persimmon), 4.5)
+    }
+
+    func testSemanticColoursStayDistinctFromTheBrand() throws {
+        // A safety notice must never read as brand decoration, and "done" never as a tappable accent.
+        let pairs = [("Danger", "Brand"), ("Warning", "Brand"), ("Success", "Accent")]
+        for (semantic, brand) in pairs {
+            let a = try XCTUnwrap(BrandPalette.token(semantic))
+            let b = try XCTUnwrap(BrandPalette.token(brand))
+            for appearance in BrandPalette.Appearance.allCases {
+                let distance = Self.hueDistance(BrandPalette.hex(a, appearance), BrandPalette.hex(b, appearance))
+                XCTAssertGreaterThanOrEqual(distance, 20, "\(semantic) vs \(brand), \(appearance): \(Int(distance))°")
+            }
+        }
     }
 
     func testAssetCatalogMatchesTokenTable() throws {
-        for token in MisePalette.tokens {
-            for appearance in MisePalette.Appearance.allCases {
+        for token in BrandPalette.tokens {
+            for appearance in BrandPalette.Appearance.allCases {
                 let trait = try XCTUnwrap(traits[appearance])
                 let color = try XCTUnwrap(UIColor(named: token.name, in: .main, compatibleWith: trait),
                                           "asset \(token.name) missing")
-                XCTAssertEqual(Self.hex(color.resolvedColor(with: trait)), MisePalette.hex(token, appearance),
-                               "\(token.name) \(appearance) drifted from MisePalette")
+                XCTAssertEqual(Self.hex(color.resolvedColor(with: trait)), BrandPalette.hex(token, appearance),
+                               "\(token.name) \(appearance) drifted from BrandPalette")
             }
         }
+    }
+
+    /// Shortest distance between two colours' hues, in degrees.
+    private static func hueDistance(_ a: UInt32, _ b: UInt32) -> Double {
+        func hue(_ value: UInt32) -> Double {
+            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, alpha: CGFloat = 0
+            UIColor(red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
+                    blue: CGFloat(value & 0xFF) / 255, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &alpha)
+            return Double(h) * 360
+        }
+        let d = abs(hue(a) - hue(b)).truncatingRemainder(dividingBy: 360)
+        return min(d, 360 - d)
     }
 
     private static func hex(_ color: UIColor) -> UInt32 {

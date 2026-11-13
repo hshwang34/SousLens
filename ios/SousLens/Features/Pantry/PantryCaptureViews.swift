@@ -44,7 +44,7 @@ struct SpeakCaptureView: View {
                     Task { await model.findItems() }
                 } label: {
                     if model.isSubmitting {
-                        ProgressView().tint(SLColor.onAccent).frame(maxWidth: .infinity)
+                        ProgressView().tint(SLColor.onBrand).frame(maxWidth: .infinity)
                     } else {
                         Text("Find items")
                     }
@@ -299,7 +299,7 @@ struct ScanCaptureView: View {
                     Task { await model.findItems() }
                 } label: {
                     if model.isSubmitting {
-                        ProgressView().tint(SLColor.onAccent).frame(maxWidth: .infinity)
+                        ProgressView().tint(SLColor.onBrand).frame(maxWidth: .infinity)
                     } else {
                         Text("Find items")
                     }

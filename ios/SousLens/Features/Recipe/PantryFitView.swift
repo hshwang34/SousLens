@@ -198,7 +198,7 @@ struct PantryFitView: View {
                 }
             } label: {
                 if model.isStarting {
-                    ProgressView().tint(SLColor.onAccent)
+                    ProgressView().tint(SLColor.onBrand)
                 } else {
                     Label("Start cooking", systemImage: "flame")
                 }

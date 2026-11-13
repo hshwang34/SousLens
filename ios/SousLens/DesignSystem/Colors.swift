@@ -1,28 +1,44 @@
 import SwiftUI
 
-/// Color tokens (Mise, brief 006). Values live in `Resources/Assets.xcassets` with light, dark and
-/// Increase Contrast variants; `MisePalette` mirrors them so a unit test can check every text /
-/// background pair for WCAG AA and that the asset catalog hasn't drifted. This file is the only
-/// place that knows the asset names, so screens never reference raw colors or asset strings.
+/// Color tokens (Umma "Persimmon", brief 013 / DECISIONS #23). Values live in
+/// `Resources/Assets.xcassets` with light, dark and Increase Contrast variants; `BrandPalette`
+/// mirrors them so a unit test can check every text / background pair for WCAG AA and that the
+/// asset catalog hasn't drifted. This file is the only place that knows the asset names, so
+/// screens never reference raw colors or asset strings.
+///
+/// Roles, in one line each:
+/// - `brand` (Persimmon) is a **fill** colour: the primary button, icons, illustration. It is
+///   2.5:1 on Flesh, so it is never text on a light background. Label it with `onBrand` (Seed).
+/// - `accent` (Leaf) is the colour for **text and interactive tint**: links, chips, toggles.
+/// - `success`, `warning`, `danger` are semantic and deliberately not brand hues, so a safety or
+///   allergy notice never reads as decoration.
 enum SLColor {
-    /// Warm paper.
+    /// Flesh: the persimmon's inside.
     static let background = Color("Background")
     static let surface = Color("Surface")
     static let surfaceRaised = Color("SurfaceRaised")
+    /// Seed.
     static let textPrimary = Color("TextPrimary")
     static let textSecondary = Color("TextSecondary")
-    /// Herb green.
+    /// Leaf: text-safe brand colour, the app tint, chips, links.
     static let accent = Color("Accent")
     static let accentSoft = Color("AccentSoft")
     /// Text and icons on a solid `accent` fill.
     static let onAccent = Color("OnAccent")
-    /// Tomato: the secondary brand colour, for emphasis that isn't a warning.
+    /// Persimmon: fills only (primary button, icons, illustration). Never body text on light.
+    static let brand = Color("Brand")
+    /// A pale persimmon wash behind brand icons and empty-state glyphs.
+    static let brandSoft = Color("BrandSoft")
+    /// Text and icons on a solid `brand` fill (Seed, because white on Persimmon is 2.8:1).
+    static let onBrand = Color("OnBrand")
+    /// Deep persimmon: small emphasis text that isn't a warning (AA on Background and Surface).
     static let tomato = Color("Tomato")
+    /// A teal green, kept apart from Leaf so "done" never looks like a tappable accent.
     static let success = Color("Success")
     static let warning = Color("Warning")
     /// Solid backing for warning / food-safety notices (never glass).
     static let warningSurface = Color("WarningSurface")
-    /// Allergy and destructive.
+    /// Allergy and destructive: a crimson kept clearly redder than Persimmon.
     static let danger = Color("Danger")
     /// Solid backing for allergy notices (never glass).
     static let dangerSurface = Color("DangerSurface")
@@ -31,10 +47,14 @@ enum SLColor {
     static let separator = Color("Separator")
 }
 
-/// The Mise token table: the same hex values as the asset catalog, per appearance.
-/// `SousLensTests/BrandTokenTests` checks every pair in `textPairs` is ≥ 4.5:1 in all four
-/// appearances, and that each asset resolves to the value here.
-enum MisePalette {
+/// The Umma token table: the same hex values as the asset catalog, per appearance.
+/// `SousLensTests/BrandTokenTests` checks every pair in `textPairs` is ≥ 4.5:1 (≥ 7:1 under
+/// Increase Contrast), and that each asset resolves to the value here.
+///
+/// Dark mode is designed, not inverted: the backgrounds are warm Seed browns rather than grey,
+/// Persimmon brightens slightly so the fill keeps its glow, and Leaf lifts to a soft sage so it
+/// still reads as the same green at text sizes.
+enum BrandPalette {
     struct Token: Sendable {
         let name: String
         let light: UInt32
@@ -55,30 +75,43 @@ enum MisePalette {
         case light, dark, lightHighContrast, darkHighContrast
     }
 
+    /// The four brand colours, as named in `docs/brand/README.md`.
+    static let persimmon: UInt32 = 0xF2782A
+    static let leaf: UInt32 = 0x2F6B3A
+    static let flesh: UInt32 = 0xFFF1E6
+    static let seed: UInt32 = 0x2A1C14
+
     static let tokens: [Token] = [
-        Token("Background", light: 0xFBF6EE, dark: 0x16130F, lightHighContrast: 0xFBF6EE, darkHighContrast: 0x0D0B08),
-        Token("Surface", light: 0xFFFFFF, dark: 0x221E19, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x1A1713),
-        Token("SurfaceRaised", light: 0xF3ECE1, dark: 0x2D2822, lightHighContrast: 0xEFE6D8, darkHighContrast: 0x26211B),
-        Token("TextPrimary", light: 0x2A2118, dark: 0xF5EEE3, lightHighContrast: 0x1A140E, darkHighContrast: 0xFFFFFF),
-        Token("TextSecondary", light: 0x6A5D4F, dark: 0xB8AD9E, lightHighContrast: 0x4A3F33, darkHighContrast: 0xDDD3C4),
-        Token("Accent", light: 0x2F6B3A, dark: 0x7FCB8C, lightHighContrast: 0x1F5229, darkHighContrast: 0xA6E3B0),
-        Token("AccentSoft", light: 0xE4EEE2, dark: 0x22382A, lightHighContrast: 0xD6E6D3, darkHighContrast: 0x1C3323),
-        Token("OnAccent", light: 0xFFFFFF, dark: 0x10230F, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x06140A),
-        Token("Tomato", light: 0xB3401E, dark: 0xFF8F6B, lightHighContrast: 0x8E2F13, darkHighContrast: 0xFFB096),
-        Token("Success", light: 0x2F6B3A, dark: 0x7FCB8C, lightHighContrast: 0x1F5229, darkHighContrast: 0xA6E3B0),
-        Token("Warning", light: 0x8A5300, dark: 0xF2B24B, lightHighContrast: 0x6A3F00, darkHighContrast: 0xFFCB73),
-        Token("WarningSurface", light: 0xFFF4D6, dark: 0x3A2A0E, lightHighContrast: 0xFFF0C7, darkHighContrast: 0x33240A),
-        Token("Danger", light: 0xA4161A, dark: 0xFF7B72, lightHighContrast: 0x7F0F12, darkHighContrast: 0xFFA39C),
-        Token("DangerSurface", light: 0xFCE9E6, dark: 0x3D1C19, lightHighContrast: 0xFADBD6, darkHighContrast: 0x3A1715),
-        Token("OnDanger", light: 0xFFFFFF, dark: 0x2A0A08, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x1E0605),
-        Token("Separator", light: 0xE6DCCD, dark: 0x3A332B, lightHighContrast: 0x8C7D6A, darkHighContrast: 0x8A7F70),
+        Token("Background", light: 0xFFF1E6, dark: 0x1B130E, lightHighContrast: 0xFFF1E6, darkHighContrast: 0x0F0A07),
+        Token("Surface", light: 0xFFFFFF, dark: 0x261B14, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x1C140F),
+        Token("SurfaceRaised", light: 0xFFE4D0, dark: 0x33251C, lightHighContrast: 0xFFDFC7, darkHighContrast: 0x2B1F17),
+        Token("TextPrimary", light: 0x2A1C14, dark: 0xFBEDE2, lightHighContrast: 0x1A100A, darkHighContrast: 0xFFFFFF),
+        Token("TextSecondary", light: 0x6B5244, dark: 0xC9AE9C, lightHighContrast: 0x4A372C, darkHighContrast: 0xE8D6C8),
+        Token("Accent", light: 0x2F6B3A, dark: 0x8ED39A, lightHighContrast: 0x1F5229, darkHighContrast: 0xB3E8BB),
+        Token("AccentSoft", light: 0xE3EFDF, dark: 0x203626, lightHighContrast: 0xD4E7CF, darkHighContrast: 0x1A3021),
+        Token("OnAccent", light: 0xFFFFFF, dark: 0x0E2413, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x06140A),
+        Token("Brand", light: 0xF2782A, dark: 0xFF8A3D, lightHighContrast: 0xF2782A, darkHighContrast: 0xFF9C57),
+        Token("BrandSoft", light: 0xFFDCC2, dark: 0x4A2814, lightHighContrast: 0xFFD3B3, darkHighContrast: 0x4A2814),
+        Token("OnBrand", light: 0x2A1C14, dark: 0x2A1C14, lightHighContrast: 0x000000, darkHighContrast: 0x000000),
+        Token("Tomato", light: 0xB04A12, dark: 0xFF9A5C, lightHighContrast: 0x8A3708, darkHighContrast: 0xFFB989),
+        Token("Success", light: 0x00695C, dark: 0x5ED3C0, lightHighContrast: 0x004D43, darkHighContrast: 0x8FE6D8),
+        Token("Warning", light: 0x6B5500, dark: 0xF0D04E, lightHighContrast: 0x4F3F00, darkHighContrast: 0xFFE07A),
+        Token("WarningSurface", light: 0xFFF2B8, dark: 0x3A2F0A, lightHighContrast: 0xFFEEA6, darkHighContrast: 0x332908),
+        Token("Danger", light: 0xB0122E, dark: 0xFF7A85, lightHighContrast: 0x86091F, darkHighContrast: 0xFFA3AA),
+        Token("DangerSurface", light: 0xFFE0E3, dark: 0x42161D, lightHighContrast: 0xFFD5DA, darkHighContrast: 0x3D1219),
+        Token("OnDanger", light: 0xFFFFFF, dark: 0x2A0A0F, lightHighContrast: 0xFFFFFF, darkHighContrast: 0x1E0509),
+        Token("Separator", light: 0xF0CDB4, dark: 0x45342A, lightHighContrast: 0x9A7A66, darkHighContrast: 0x9A8475),
     ]
+
+    /// Fill colours that must never carry text on a light background (they fail 4.5:1).
+    static let fillOnly: Set<String> = ["Brand", "BrandSoft"]
 
     /// Every foreground / background combination a screen may draw text in.
     static let textPairs: [(foreground: String, background: String)] = {
         var pairs: [(String, String)] = []
         for text in ["TextPrimary", "TextSecondary"] {
-            for surface in ["Background", "Surface", "SurfaceRaised", "WarningSurface", "DangerSurface", "AccentSoft"] {
+            for surface in ["Background", "Surface", "SurfaceRaised", "WarningSurface", "DangerSurface", "AccentSoft",
+                            "BrandSoft"] {
                 pairs.append((text, surface))
             }
         }
@@ -91,6 +124,7 @@ enum MisePalette {
         for surface in ["Background", "Surface"] { pairs.append(("Tomato", surface)) }
         pairs.append(("OnAccent", "Accent"))
         pairs.append(("OnDanger", "Danger"))
+        pairs.append(("OnBrand", "Brand"))
         return pairs
     }()
 

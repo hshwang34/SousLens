@@ -191,7 +191,7 @@ struct RecipeDetailView: View {
             Task { await startCooking() }
         } label: {
             if starter?.isStarting == true {
-                ProgressView().tint(SLColor.onAccent)
+                ProgressView().tint(SLColor.onBrand)
             } else {
                 Label("Start cooking", systemImage: "flame")
                     .lineLimit(1)
