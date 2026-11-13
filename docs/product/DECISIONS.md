@@ -229,3 +229,8 @@ CI (macOS) is now free, so it can run on every iOS PR instead of manual dispatch
   step. The creator tip and "not an exact match" fold into a notes chip. Adapted/Show original
   moves into the ⋯ menu. The step text comes first and never sits under the controls.
 *Lives in:* `docs/product/briefs/013-umma-rebrand.md`.
+
+#24 · 2026-11-12 · **Glasses PR #13 is parked; the Umma rename no longer waits for it.** The session
+driving #13 closed partway through fixing a glasses test that hangs on iOS CI. Its unfinished fix is
+left uncommitted in the `feature-slice6-glasses` worktree. When the glasses work resumes, the branch
+must be rebased onto the renamed (Umma) tree first.

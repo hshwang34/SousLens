@@ -107,7 +107,7 @@ Landscape already looks clean. A cooking screen should feel calm.
    → *Answer:* A.
 
 ## Sequencing
-PR #13 (glasses, in another session) merges first. Then Part A → Part B → Part C, one writer
+PR #13 (glasses) is parked (DECISIONS #24) and no longer blocks. Then Part A → Part B → Part C, one writer
 at a time, one worktree branch each. Part C can start in parallel with B, because they touch
 different files.
 
