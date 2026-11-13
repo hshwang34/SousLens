@@ -131,16 +131,24 @@ final class CookingViewModel: CookingSessionClient {
         return matched.isEmpty ? [] : matched
     }
 
-    /// "Adapted · Common swap" / "Adapted · AI suggested adaptation" (AI wins when mixed), plus
-    /// "· Check the label: …" when a swap on this step carried an allergy warning.
-    var adaptedBadgeText: String? {
+    /// "Common swap" / "AI suggested adaptation" for an adapted step (AI wins when mixed), else nil.
+    var adaptedSourceLabel: String? {
         guard let step = currentStep, step.adapted else { return nil }
         let sources = Set(currentAdaptations.map(\.source))
-        let label = sources.isEmpty || sources.contains(.ai) ? SwapSource.ai.label : SwapSource.rule.label
-        if let warning = currentCautions.compactMap(\.allergyWarning).first {
-            return "Adapted · \(label) · Check the label: \(warning)"
-        }
-        return "Adapted · \(label)"
+        return sources.isEmpty || sources.contains(.ai) ? SwapSource.ai.label : SwapSource.rule.label
+    }
+
+    /// The calm screen's notices: safety/allergy inline under the step, the rest folded into the
+    /// notes chip (brief 013 Part C, DECISIONS #23).
+    var notices: CookingNotices {
+        let step = currentRecipeStep
+        return CookingNotices.make(stepWarnings: step?.warnings ?? [], cautions: currentCautions,
+                                   creatorNote: step?.creatorNote, successCues: step?.successCues ?? [])
+    }
+
+    /// The small header indicator that the step text is adapted (or showing the original).
+    var adaptedIndicator: AdaptedIndicator? {
+        AdaptedIndicator.make(sourceLabel: adaptedSourceLabel, showingOriginal: showOriginal)
     }
 
     /// The Session's own cautions (survive relaunch, other devices), plus the sheet's notice
@@ -158,13 +166,6 @@ final class CookingViewModel: CookingSessionClient {
     /// Swaps on this step that now overlap the user's allergies (an allergy added mid-cook).
     var conflictingAdaptations: [SessionAdaptation] {
         currentAdaptations.filter(\.conflictsWithAllergies)
-    }
-
-    /// Risks and safety notices of the swaps on this step, shown under the badge.
-    var adaptedCautionLines: [String] {
-        var seen = Set<String>()
-        return currentCautions.flatMap { $0.risks + [$0.safetyNotice].compactMap { $0 } }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     var status: SessionStatus? { session?.status }

@@ -12,6 +12,8 @@ struct CookingView: View {
     @State private var assistant: AssistantViewModel?
     @State private var showAssistant = false
     @State private var showSessionEnd = false
+    @State private var showNotes = false
+    private static let stepTop = "cooking.stepTop"
     @State private var confirmAbandon = false
     @State private var swapToRevert: SessionAdaptation?
     @State private var timerToCancel: TimerRow?
@@ -97,53 +99,59 @@ struct CookingView: View {
         }
     }
 
+    /// One layout language in portrait and landscape (brief 013 Part C): a slim header, the step
+    /// as the first content with its safety line right under it, and a pinned control bar. The
+    /// scroll view ends above the bar, so step text never runs underneath the controls.
     private func ready(_ model: CookingViewModel) -> some View {
         let layout = CookingLayout.forSize(dynamicTypeSize)
+        let notices = model.notices
         return VStack(spacing: 0) {
             topBar(model)
-            if model.isOffline || model.isProvisional {
-                OfflineBanner(model: model)
-            }
-            // Regular sizes: the step owns the screen and the controls float over it on glass.
-            // Accessibility sizes: everything, controls included, scrolls together so nothing is
-            // pushed off screen.
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.xl) {
-                    SessionNotices(model: model, onRevert: { swapToRevert = $0 })
-                    StepPager(model: model)
-                    if let suggestion = model.timerSuggestion, model.canSendCommands {
-                        TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
-                                            onStart: { Task { await model.startSuggestedTimer() } },
-                                            onSkip: { model.skipSuggestedTimer() })
+                .dynamicTypeSize(...CookingLayout.chromeSizeLimit)
+                .accessibilitySortPriority(1)
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        StepPager(model: model)
+                            .id(Self.stepTop)
+                        SafetyNotices(model: model, notices: notices, onRevert: { swapToRevert = $0 })
+                        if notices.notesChipText != nil || model.adaptedIndicator != nil {
+                            NotesChip(notices: notices, adapted: model.adaptedIndicator != nil) { showNotes = true }
+                        }
+                        if let suggestion = model.timerSuggestion, model.canSendCommands {
+                            TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
+                                                onStart: { Task { await model.startSuggestedTimer() } },
+                                                onSkip: { model.skipSuggestedTimer() })
+                        }
+                        TimersList(model: model, onCancel: { timerToCancel = $0 })
+                        if let error = model.errorMessage, !model.isOffline {
+                            Label(error, systemImage: "exclamationmark.circle")
+                                .font(SLFont.callout)
+                                .foregroundStyle(SLColor.danger)
+                                .padding(Spacing.md)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                                .accessibilityIdentifier("cooking.error")
+                        }
                     }
-                    TimersList(model: model, onCancel: { timerToCancel = $0 })
-                    if let error = model.errorMessage, !model.isOffline {
-                        Label(error, systemImage: "exclamationmark.circle")
-                            .font(SLFont.callout)
-                            .foregroundStyle(SLColor.danger)
-                            .padding(Spacing.md)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                            .accessibilityIdentifier("cooking.error")
-                    }
-                    Text("Look is coming with camera help")
-                        .font(SLFont.caption)
-                        .foregroundStyle(SLColor.textSecondary)
-                        .accessibilityHidden(true)
+                    .frame(maxWidth: CookingLayout.readableWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Spacing.screen)
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, Spacing.lg)
                 }
-                .padding(.horizontal, Spacing.screen)
-                .padding(.vertical, Spacing.lg)
-                if layout.controlsScrollWithContent {
-                    controls(model)
-                }
+                .scrollBounceBehavior(.basedOnSize)
+                // A new step always starts at its first line, even if the last one was scrolled.
+                .onChange(of: model.session?.stepIndex) { _, _ in scroller.scrollTo(Self.stepTop, anchor: .top) }
             }
+            .accessibilitySortPriority(3)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !layout.controlsScrollWithContent {
-                    // The inset is the controls' measured height, so the step's last line can always
-                    // scroll fully above them; the scrim keeps text from reading through the glass.
-                    controls(model)
-                        .bottomBarScrim()
-                }
+                // The inset is the bar's measured height, so the step's last line always scrolls
+                // fully above it; the scrim keeps text from reading through the glass.
+                controls(model, layout: layout)
+                    .dynamicTypeSize(...CookingLayout.chromeSizeLimit)
+                    .bottomBarScrim()
+                    .accessibilitySortPriority(2)
             }
         }
         // A light tap only once the server has confirmed the new step (the index is the server's).
@@ -175,6 +183,11 @@ struct CookingView: View {
                     .onAppear { assistant.drawerDidAppear() }
                     .onDisappear { assistant.drawerDidDisappear() }
             }
+        }
+        .sheet(isPresented: $showNotes) {
+            CookingNotesSheet(model: model) { showNotes = false }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showSessionEnd) {
             SessionEndView(cooking: model) {
@@ -227,17 +240,32 @@ struct CookingView: View {
                     Text(model.session?.recipe.title ?? "Cooking")
                         .font(SLFont.headline)
                         .lineLimit(1)
-                    if let counter = model.stepCounterText {
-                        Text(counter)
-                            .font(SLFont.stepCounter)
-                            .foregroundStyle(SLColor.textSecondary)
-                            .contentTransition(.numericText())
-                            .accessibilityIdentifier("cooking.stepCounter")
+                    // The step count never truncates: at large sizes the pill drops its word,
+                    // then moves under the count.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Spacing.sm) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted) }
+                        }
+                        HStack(spacing: Spacing.sm) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted, iconOnly: true) }
+                        }
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted, iconOnly: true) }
+                        }
                     }
                 }
                 Spacer()
                 Menu {
                     Toggle("Read steps aloud", isOn: Binding(get: { model.readAloudEnabled }, set: { model.readAloudEnabled = $0 }))
+                    if let adapted = model.adaptedIndicator {
+                        Button(adapted.menuToggleTitle, systemImage: "arrow.triangle.swap") {
+                            model.showOriginal.toggle()
+                        }
+                        .accessibilityIdentifier("cooking.showOriginal")
+                    }
                     if let adaptations = model.session?.adaptations, !adaptations.isEmpty {
                         Section("Your swaps") {
                             ForEach(adaptations) { swap in
@@ -266,62 +294,64 @@ struct CookingView: View {
         .foregroundStyle(SLColor.textPrimary)
     }
 
+    @ViewBuilder
+    private func stepCounter(_ model: CookingViewModel) -> some View {
+        if let counter = model.stepCounterText {
+            Text(counter)
+                .font(SLFont.stepCounter)
+                .foregroundStyle(SLColor.textSecondary)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.numericText())
+                .accessibilityIdentifier("cooking.stepCounter")
+        }
+    }
+
     // MARK: Controls
 
-    private func controls(_ model: CookingViewModel) -> some View {
-        let layout = CookingLayout.forSize(dynamicTypeSize)
-        return VStack(spacing: Spacing.sm) {
-            if model.isNotStarted {
-                Button {
-                    Task { await model.start() }
-                } label: {
-                    Label("Start", systemImage: "play.fill")
-                }
-                .buttonStyle(CookingButtonStyle(kind: .primary))
-                .disabled(!model.canSendCommands)
-                .accessibilityIdentifier("cooking.start")
-            } else if model.isPaused {
-                Button {
-                    Task { await model.resume() }
-                } label: {
-                    Label("Resume", systemImage: "play.fill")
-                }
-                .buttonStyle(CookingButtonStyle(kind: .primary))
-                .disabled(!model.canSendCommands)
-                .accessibilityIdentifier("cooking.resume")
+    /// The pinned bar: an optional status line (offline, paused, not started), then one row of
+    /// Tools, Back, Pause and Next. Start / Resume take Back, Pause and Next's place while the
+    /// session is not running. Only this layer is glass; the status line is solid.
+    private func controls(_ model: CookingViewModel, layout: CookingLayout) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            if model.isOffline || model.isProvisional {
+                OfflineBanner(model: model, showsDetail: layout.showsOfflineDetail)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            }
+            if model.isPaused {
+                Label("Paused — your step and timers are kept", systemImage: "pause.circle.fill")
+                    .font(SLFont.subheadline.weight(.semibold))
+                    .foregroundStyle(SLColor.warning)
+                    .accessibilityIdentifier("cooking.pausedBanner")
+            } else if model.isNotStarted {
+                Text("Ready when you are. Tap Start to begin with step 1.")
+                    .font(SLFont.subheadline)
+                    .foregroundStyle(SLColor.textSecondary)
             }
             AdaptiveGlassContainer(spacing: Spacing.sm) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.sm), count: layout.toolColumns),
-                          spacing: Spacing.sm) {
-                    GlassTool(title: "Repeat", systemImage: "arrow.counterclockwise", identifier: "cooking.repeat") {
-                        Task { await model.repeatStep() }
-                    }
-                    .disabled(model.currentStep == nil || model.isNotStarted)
-                    GlassTool(title: "Slower", systemImage: "tortoise", identifier: "cooking.slower") {
-                        Task { await model.slower() }
-                    }
-                    .disabled(model.currentStep == nil || model.isNotStarted)
-                    GlassTool(title: "Ask", systemImage: "bubble.left.and.text.bubble.right", identifier: "cooking.ask") {
-                        showAssistant = true
-                    }
-                    .disabled(model.session == nil)
-                    GlassTool(title: "Look", systemImage: "camera.viewfinder", identifier: "cooking.look") {}
-                        .disabled(true)
-                        .accessibilityHint("Coming with camera help")
-                }
-            }
-            AdaptiveGlassContainer(spacing: Spacing.sm) {
-                if layout.stacksNavigation {
-                    VStack(spacing: Spacing.sm) {
-                        nextButton(model)
-                        HStack(spacing: Spacing.sm) {
-                            backButton(model)
-                            pauseButton(model)
+                HStack(spacing: Spacing.sm) {
+                    toolsButton(model)
+                    if model.isNotStarted {
+                        Button {
+                            Task { await model.start() }
+                        } label: {
+                            Label("Start", systemImage: "play.fill")
                         }
-                    }
-                } else {
-                    HStack(spacing: Spacing.sm) {
-                        backButton(model).frame(maxWidth: 120)
+                        .buttonStyle(CookingButtonStyle(kind: .primary))
+                        .disabled(!model.canSendCommands)
+                        .accessibilityIdentifier("cooking.start")
+                    } else if model.isPaused {
+                        Button {
+                            Task { await model.resume() }
+                        } label: {
+                            Label("Resume", systemImage: "play.fill")
+                        }
+                        .buttonStyle(CookingButtonStyle(kind: .primary))
+                        .disabled(!model.canSendCommands)
+                        .accessibilityIdentifier("cooking.resume")
+                    } else {
+                        backButton(model, iconOnly: layout.backIsIconOnly)
+                            .frame(maxWidth: layout.backIsIconOnly ? Metrics.cookingControl : 116)
                         pauseButton(model).frame(maxWidth: Metrics.cookingControl)
                         nextButton(model)
                     }
@@ -329,18 +359,71 @@ struct CookingView: View {
             }
         }
         .padding(.horizontal, Spacing.screen)
-        .padding(.top, Spacing.md)
+        .padding(.top, Spacing.sm)
         .padding(.bottom, Spacing.sm)
+        .frame(maxWidth: CookingLayout.readableWidth)
+        .frame(maxWidth: .infinity)
     }
 
-    private func backButton(_ model: CookingViewModel) -> some View {
+    /// Repeat, Slower, Ask and Look in one glass menu: one tap to open, one to choose.
+    private func toolsButton(_ model: CookingViewModel) -> some View {
+        let stepToolsOff = model.currentStep == nil || model.isNotStarted
+        return Menu {
+            Button {
+                Task { await model.repeatStep() }
+            } label: {
+                Label("Repeat", systemImage: "arrow.counterclockwise")
+            }
+            .disabled(stepToolsOff)
+            .accessibilityIdentifier("cooking.repeat")
+            Button {
+                Task { await model.slower() }
+            } label: {
+                Label("Slower", systemImage: "tortoise")
+            }
+            .disabled(stepToolsOff)
+            .accessibilityIdentifier("cooking.slower")
+            Button {
+                showAssistant = true
+            } label: {
+                Label("Ask", systemImage: "bubble.left.and.text.bubble.right")
+            }
+            .disabled(model.session == nil)
+            .accessibilityIdentifier("cooking.ask")
+            Button {} label: {
+                Text("Look")
+                Text("Coming with camera help")
+                Image(systemName: "camera.viewfinder")
+            }
+            .disabled(true)
+            .accessibilityIdentifier("cooking.look")
+        } label: {
+            Image(systemName: "square.grid.2x2")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(SLColor.accent)
+                .frame(width: Metrics.cookingControl, height: Metrics.cookingControl)
+                .contentShape(Circle())
+                .adaptiveGlass(in: Circle(), interactive: true)
+        }
+        .menuOrder(.fixed)
+        .accessibilityLabel("Step tools")
+        .accessibilityHint("Repeat, Slower, Ask or Look")
+        .accessibilityIdentifier("cooking.tools")
+    }
+
+    private func backButton(_ model: CookingViewModel, iconOnly: Bool) -> some View {
         Button {
             Task { await model.back() }
         } label: {
-            Label("Back", systemImage: "chevron.left")
+            if iconOnly {
+                Image(systemName: "chevron.left")
+            } else {
+                Label("Back", systemImage: "chevron.left")
+            }
         }
         .buttonStyle(CookingButtonStyle(kind: .glass))
         .disabled(!model.canGoBack)
+        .accessibilityLabel("Back")
         .accessibilityIdentifier("cooking.back")
     }
 
@@ -369,7 +452,7 @@ struct CookingView: View {
             }
         } label: {
             if model.isSending {
-                ProgressView().tint(SLColor.onAccent)
+                ProgressView().tint(SLColor.onBrand)
             } else {
                 Label(model.nextTitle, systemImage: model.isLastStep ? "flag.checkered" : "chevron.right")
                     .labelStyle(TrailingIconLabelStyle())
@@ -384,191 +467,266 @@ struct CookingView: View {
 
 // MARK: - Step
 
-/// Session-wide notices above the step. They never move with the step transition, so an
-/// allergy conflict is never slid away or hidden by an animation. Always solid.
-private struct SessionNotices: View {
-    let model: CookingViewModel
-    let onRevert: (SessionAdaptation) -> Void
-
-    var body: some View {
-        if model.isPaused {
-            Label("Paused — your step and timers are kept", systemImage: "pause.circle.fill")
-                .font(SLFont.headline)
-                .foregroundStyle(SLColor.warning)
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                .accessibilityIdentifier("cooking.pausedBanner")
-        }
-        if model.isNotStarted {
-            Text("Ready when you are. Tap Start to begin with step 1.")
-                .font(SLFont.title3)
-                .foregroundStyle(SLColor.textSecondary)
-        }
-        ForEach(model.conflictingAdaptations) { swap in
-            Button {
-                onRevert(swap)
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: Spacing.xxs) {
-                        Text("Conflicts with your allergies — revert?")
-                            .font(SLFont.headline)
-                        Text("\(swap.replacement) is on your allergy list. Undo it before you go on.")
-                            .font(SLFont.callout)
-                    }
-                } icon: {
-                    Image(systemName: "exclamationmark.octagon.fill")
-                }
-                .foregroundStyle(SLColor.onDanger)
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget, alignment: .leading)
-                .background(SLColor.danger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.canSendCommands)
-            .accessibilityLabel("\(swap.replacement) conflicts with your allergies. Revert to \(swap.original)?")
-            .accessibilityIdentifier("cooking.allergyConflict")
-        }
-    }
-}
-
 /// The step, keyed by the server's index: Next pushes the new step in from the trailing edge,
 /// Back from the leading edge. Under Reduce Motion it crossfades. The index only ever changes
-/// when the server says so, so nothing is shown as done before it is.
+/// when the server says so, so nothing is shown as done before it is. Only the step text moves:
+/// the safety line under it is outside the transition, so it is never slid away.
 private struct StepPager: View {
     let model: CookingViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The index from the previous render: tells Next from Back.
     @State private var shownIndex: Int?
-    @State private var lastMoveWasForward = false
 
     var body: some View {
         let index = model.session?.stepIndex ?? 0
         let forward = index >= (shownIndex ?? index)
         ZStack(alignment: .topLeading) {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                if lastMoveWasForward, index > 0, !model.isNotStarted {
-                    Label("Step \(index) done. Nice and steady.", systemImage: "checkmark")
-                        .font(SLFont.subheadline.weight(.semibold))
-                        .foregroundStyle(SLColor.success)
-                        .accessibilityIdentifier("cooking.stepDone")
-                }
-                StepContent(model: model)
+            if let text = model.instructionText {
+                Text(text)
+                    .font(SLFont.stepText)
+                    .foregroundStyle(SLColor.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("cooking.instruction")
+                    .id(index)
+                    .transition(.misePush(from: forward ? .trailing : .leading, reduceMotion: reduceMotion))
             }
-            .id(index)
-            .transition(.misePush(from: forward ? .trailing : .leading, reduceMotion: reduceMotion))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipped()
         .animation(.mise(reduceMotion: reduceMotion), value: index)
         .onAppear { shownIndex = index }
         .onChange(of: index) { old, new in
-            lastMoveWasForward = new > old
             shownIndex = new
+            // The step-done line no longer sits above the step; VoiceOver still hears it.
+            if new > old, !model.isNotStarted {
+                AccessibilityNotification.Announcement("Step \(new) done. Nice and steady.").post()
+            }
         }
     }
 }
 
-/// What the current step says. Step text and its warnings are content: always solid.
-private struct StepContent: View {
+/// Safety and allergy notices for this step, directly under the step text: always visible,
+/// always solid (never glass), never auto-dismissed. An allergy conflict keeps its own row with
+/// its revert action; every other notice shares one compact row that shows the most important
+/// notice in full and expands to the rest. The row lives outside the step transition.
+private struct SafetyNotices: View {
     let model: CookingViewModel
+    let notices: CookingNotices
+    let onRevert: (SessionAdaptation) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            if let badge = model.adaptedBadgeText {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Spacing.sm) { badgeView(badge); Spacer(); originalToggle }
-                    VStack(alignment: .leading, spacing: Spacing.sm) { badgeView(badge); originalToggle }
-                }
-                ForEach(model.adaptedCautionLines, id: \.self) { line in
-                    Label(line, systemImage: "exclamationmark.circle")
-                        .font(SLFont.callout)
-                        .foregroundStyle(SLColor.warning)
-                        .padding(Spacing.md)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                }
-                if model.showOriginal {
-                    Text("Original recipe text")
-                        .font(SLFont.caption)
-                        .foregroundStyle(SLColor.textSecondary)
-                }
-            }
-            if let text = model.instructionText {
-                Text(text)
-                    .font(SLFont.stepText)
-                    .foregroundStyle(SLColor.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("cooking.instruction")
-            }
-            if let recipeStep = model.currentRecipeStep {
-                ForEach(recipeStep.warnings, id: \.self) { warning in
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            ForEach(model.conflictingAdaptations) { swap in
+                Button {
+                    onRevert(swap)
+                } label: {
                     Label {
-                        Text(warning).font(SLFont.headline)
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            Text("Conflicts with your allergies — revert?")
+                                .font(SLFont.headline)
+                            Text("\(swap.replacement) is on your allergy list. Undo it before you go on.")
+                                .font(SLFont.callout)
+                        }
                     } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                        Image(systemName: "exclamationmark.octagon.fill")
                     }
-                    .foregroundStyle(SLColor.warning)
+                    .foregroundStyle(SLColor.onDanger)
                     .padding(Spacing.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(SLColor.warningSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Safety warning: \(warning)")
+                    .frame(maxWidth: .infinity, minHeight: Metrics.minTapTarget, alignment: .leading)
+                    .background(SLColor.danger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 }
-                ForEach(recipeStep.successCues, id: \.self) { cue in
-                    // A cue is something to look for, not a verdict: neutral icon, not a green check.
-                    Label {
-                        Text(cue).font(SLFont.body)
-                    } icon: {
-                        Image(systemName: "eye")
-                    }
-                    .foregroundStyle(SLColor.textPrimary)
-                    .accessibilityLabel("Look for: \(cue)")
-                }
-                if let note = recipeStep.creatorNote, !note.isEmpty {
-                    Label {
-                        Text(note).font(SLFont.callout).italic()
-                    } icon: {
-                        Image(systemName: "person.text.rectangle")
-                    }
-                    .foregroundStyle(SLColor.textSecondary)
-                    .accessibilityLabel("Creator note: \(note)")
-                }
-                // Clips arrive with Slice 5; say so instead of showing an empty player.
-                HStack(spacing: Spacing.sm) {
-                    Image(systemName: "film")
-                        .accessibilityHidden(true)
-                    Text(recipeStep.sourceClipId == nil ? "No clip for this step" : "Clip playback is coming soon")
-                }
-                .font(SLFont.footnote)
-                .foregroundStyle(SLColor.textSecondary)
-                .padding(Spacing.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(SLColor.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                .accessibilityElement(children: .combine)
+                .buttonStyle(.plain)
+                .disabled(!model.canSendCommands)
+                .accessibilityLabel("\(swap.replacement) conflicts with your allergies. Revert to \(swap.original)?")
+                .accessibilityIdentifier("cooking.allergyConflict")
+            }
+            if let lead = notices.leadNotice {
+                noticeRow(lead: lead)
             }
         }
+        .onChange(of: model.session?.stepIndex) { _, _ in expanded = false }
     }
 
-    private func badgeView(_ badge: String) -> some View {
-        Label(badge, systemImage: "arrow.triangle.swap")
+    private func noticeRow(lead: CookingNotices.Notice) -> some View {
+        let tint = notices.leadsWithAllergy ? SLColor.danger : SLColor.warning
+        let surface = notices.leadsWithAllergy ? SLColor.dangerSurface : SLColor.warningSurface
+        let shown = expanded ? notices.inline : notices.leadNotices
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ForEach(shown) { notice in
+                    Label {
+                        Text(notice.text)
+                            .font(SLFont.headline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: notice.kind == .allergy ? "allergens" : "exclamationmark.triangle.fill")
+                    }
+                    .foregroundStyle(tint)
+                }
+            }
+            // VoiceOver hears every notice whether or not the row is expanded (DECISIONS #15
+            // "Safety warning:" prefix), and can expand it from here too.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(notices.accessibilityLabel ?? "Safety warning: \(lead.text)")
+            .accessibilityIdentifier("cooking.safetyNotice")
+            .modifier(ExpandAction(enabled: notices.moreText != nil, expanded: expanded) { toggle() })
+            if let more = notices.moreText {
+                // A real button, so Voice Control ("Tap 2 more") and Switch Control reach it.
+                Button {
+                    toggle()
+                } label: {
+                    Text(expanded ? "Show less" : more)
+                        .font(SLFont.subheadline.weight(.semibold))
+                        .foregroundStyle(tint)
+                        .frame(minHeight: Metrics.minTapTarget, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Show fewer safety notes" : "Show all safety notes")
+                .accessibilityInputLabels(expanded ? ["Show less", "Show fewer safety notes"]
+                                                   : [more, "\(notices.collapsedCount) more", "Show all safety notes"])
+                .accessibilityIdentifier("cooking.safetyMore")
+            }
+        }
+        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func toggle() {
+        withAnimation(.mise(reduceMotion: reduceMotion)) { expanded.toggle() }
+    }
+}
+
+/// "Show all safety notes" as a named action on the safety row itself.
+private struct ExpandAction: ViewModifier {
+    let enabled: Bool
+    let expanded: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.accessibilityAction(named: expanded ? "Show fewer safety notes" : "Show all safety notes", action)
+        } else {
+            content
+        }
+    }
+}
+
+/// "2 notes": the swap tips, the creator's note and what to look for, one tap away.
+private struct NotesChip: View {
+    let notices: CookingNotices
+    let adapted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(notices.notesChipText ?? "About this swap", systemImage: "note.text")
+                .font(SLFont.subheadline.weight(.semibold))
+                .foregroundStyle(SLColor.textSecondary)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.xs + 2)
+                .frame(minHeight: Metrics.minTapTarget)
+                .background(SLColor.surface, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Swap tips, the creator's note and what to look for")
+        .accessibilityIdentifier("cooking.notes")
+    }
+}
+
+/// The small "Adapted" pill in the header. The full source ("Common swap") is in its VoiceOver
+/// label and in the notes sheet; the label check, if any, is in the safety row.
+private struct AdaptedPill: View {
+    let indicator: AdaptedIndicator
+    var iconOnly = false
+
+    var body: some View {
+        Label(indicator.text, systemImage: "arrow.triangle.swap")
+            .labelStyle(PillLabelStyle(iconOnly: iconOnly))
             .font(SLFont.caption)
-            .padding(.horizontal, Spacing.sm + 2)
-            .padding(.vertical, Spacing.xs + 1)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xxs)
             .foregroundStyle(SLColor.accent)
             .background(SLColor.accentSoft, in: Capsule())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(badge)
+            .accessibilityLabel(indicator.accessibilityLabel)
             .accessibilityIdentifier("cooking.adaptedBadge")
     }
+}
 
-    private var originalToggle: some View {
-        Button(model.showOriginal ? "Show adapted" : "Show original") {
-            model.showOriginal.toggle()
+/// Everything folded out of the step, plus the step's safety notices again so the sheet is
+/// complete on its own. Content only: solid surfaces, no glass.
+private struct CookingNotesSheet: View {
+    let model: CookingViewModel
+    let onDone: () -> Void
+
+    var body: some View {
+        let notices = model.notices
+        NavigationStack {
+            List {
+                if !notices.inline.isEmpty {
+                    Section("Safety") {
+                        ForEach(notices.inline) { notice in
+                            Label(notice.text, systemImage: notice.kind == .allergy ? "allergens" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(notice.kind == .allergy ? SLColor.danger : SLColor.warning)
+                        }
+                    }
+                }
+                if !model.currentAdaptations.isEmpty {
+                    Section("Your swap on this step") {
+                        ForEach(model.currentAdaptations) { swap in
+                            VStack(alignment: .leading, spacing: Spacing.xxs) {
+                                Text("\(swap.original) → \(swap.replacement)").font(SLFont.bodyEmphasis)
+                                if let amount = swap.ratioOrAmount { Text(amount).font(SLFont.callout) }
+                                Text(swap.displayLabel).font(SLFont.caption).foregroundStyle(SLColor.textSecondary)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+                section("Swap notes", kind: .swapTip, icon: "info.circle", notices: notices)
+                section("From the creator", kind: .creatorNote, icon: "person.text.rectangle", notices: notices)
+                section("Look for", kind: .lookFor, icon: "eye", notices: notices)
+                if let step = model.currentRecipeStep {
+                    Section {
+                        // Clips arrive with Slice 5; say so instead of showing an empty player.
+                        Label(step.sourceClipId == nil ? "No clip for this step" : "Clip playback is coming soon", systemImage: "film")
+                            .font(SLFont.footnote)
+                            .foregroundStyle(SLColor.textSecondary)
+                    }
+                }
+            }
+            .navigationTitle(model.stepCounterText ?? "Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onDone).accessibilityIdentifier("cooking.notes.done")
+                }
+            }
         }
-        .font(SLFont.callout.weight(.semibold))
-        .frame(minHeight: Metrics.minTapTarget)
-        .accessibilityIdentifier("cooking.showOriginal")
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, kind: CookingNotices.Note.Kind, icon: String, notices: CookingNotices) -> some View {
+        let notes = notices.notes.filter { $0.kind == kind }
+        if !notes.isEmpty {
+            Section(title) {
+                ForEach(notes) { note in
+                    Label(note.text, systemImage: icon)
+                        .foregroundStyle(SLColor.textPrimary)
+                        .accessibilityLabel(kind == .lookFor ? "Look for: \(note.text)" : note.text)
+                }
+            }
+        }
     }
 }
 
@@ -730,6 +888,7 @@ private struct StepProgress: View {
 
 private struct OfflineBanner: View {
     let model: CookingViewModel
+    var showsDetail = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -741,8 +900,10 @@ private struct OfflineBanner: View {
                         Text(pending).font(SLFont.footnote.weight(.semibold))
                             .accessibilityIdentifier("cooking.pendingTap")
                     }
-                    Text("Showing your last saved step. Nothing moves until the server answers.")
-                        .font(SLFont.footnote)
+                    if showsDetail {
+                        Text("Showing your last saved step. Nothing moves until the server answers.")
+                            .font(SLFont.footnote)
+                    }
                 }
                 Spacer()
                 if model.isOffline, !model.asksToResendStaleTap {
@@ -794,34 +955,8 @@ struct ToastView: View {
     }
 }
 
-/// Repeat / Slower / Ask / Look: one glass tile each, grouped in the floating tool cluster.
-private struct GlassTool: View {
-    let title: String
-    let systemImage: String
-    let identifier: String
-    let action: () -> Void
-    @Environment(\.isEnabled) private var isEnabled
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: Spacing.xxs) {
-                Image(systemName: systemImage).font(.title3.weight(.semibold))
-                Text(title).font(SLFont.caption)
-            }
-            .frame(maxWidth: .infinity, minHeight: 56)
-            .foregroundStyle(SLColor.accent)
-            .opacity(isEnabled ? 1 : 0.45)
-            .contentShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-            .adaptiveGlass(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), interactive: true)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier(identifier)
-    }
-}
-
 /// Oversized cooking controls (PRD §6.1: the phone may be propped at a distance).
-/// `.primary` is a solid herb-green capsule (Next, Start, Resume); `.glass` sits on glass.
+/// `.primary` is a solid brand capsule (Next, Start, Resume), matching the app primary button; `.glass` sits on glass.
 struct CookingButtonStyle: ButtonStyle {
     enum Kind { case primary, glass }
     let kind: Kind
@@ -840,9 +975,9 @@ struct CookingButtonStyle: ButtonStyle {
             switch kind {
             case .primary:
                 label
-                    .foregroundStyle(SLColor.onAccent)
-                    .background(SLColor.accent, in: Capsule())
-                    .shadow(color: SLColor.accent.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
+                    .foregroundStyle(SLColor.onBrand)
+                    .background(SLColor.brand, in: Capsule())
+                    .shadow(color: SLColor.brand.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
             case .glass:
                 label
                     .foregroundStyle(SLColor.accent)
@@ -859,6 +994,18 @@ private struct TrailingIconLabelStyle: LabelStyle {
         HStack(spacing: Spacing.sm) {
             configuration.title
             configuration.icon
+        }
+    }
+}
+
+/// The Adapted pill's label: icon and word, or the icon alone when the header is tight.
+private struct PillLabelStyle: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: Spacing.xs) {
+            configuration.icon
+            if !iconOnly { configuration.title }
         }
     }
 }

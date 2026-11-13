@@ -82,10 +82,11 @@ final class Slice3FixRoundTests: XCTestCase {
         let caution = SwapCaution(allergyWarning: "contains sulfites", risks: ["A little sharper."], safetyNotice: "Recipe contains sesame.")
         let model = makeModel(cautions: ["ing-8": caution])
         await model.load()
-        XCTAssertEqual(model.adaptedBadgeText, "Adapted · Common swap · Check the label: contains sulfites")
-        XCTAssertEqual(model.adaptedCautionLines, ["A little sharper.", "Recipe contains sesame."])
+        XCTAssertEqual(model.notices.inline.map(\.text), ["Check the label: contains sulfites", "Recipe contains sesame."])
+        XCTAssertEqual(model.notices.notes.first?.text, "A little sharper.", "a culinary-only tip folds")
         await model.next()
-        XCTAssertTrue(model.adaptedCautionLines.isEmpty, "only on the adapted step")
+        XCTAssertTrue(model.notices.inline.allSatisfy { !$0.text.contains("sulfites") && !$0.text.contains("sesame") },
+                      "only on the adapted step")
     }
 
     func testApprovedSwapCarriesWarningsFromTheSheet() async throws {
@@ -119,11 +120,14 @@ final class Slice3FixRoundTests: XCTestCase {
     // MARK: 5 — Dynamic Type layout
 
     func testLayoutStacksAtAccessibilitySizes() {
-        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(stacksNavigation: false, toolColumns: 4, controlsScrollWithContent: false))
-        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(stacksNavigation: false, toolColumns: 4, controlsScrollWithContent: false))
+        // Brief 013 Part C: the control bar is pinned at every size (the step scrolls above it);
+        // at accessibility sizes Back drops its word so the bar stays one row.
+        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(backIsIconOnly: false, showsOfflineDetail: true))
+        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(backIsIconOnly: false, showsOfflineDetail: true))
         for size in [DynamicTypeSize.accessibility1, .accessibility3, .accessibility5] {
-            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(stacksNavigation: true, toolColumns: 2, controlsScrollWithContent: true), "\(size)")
+            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(backIsIconOnly: true, showsOfflineDetail: false), "\(size)")
         }
+        XCTAssertTrue(CookingLayout.chromeSizeLimit.isAccessibilitySize, "chrome still grows into AX sizes, then stops")
     }
 
     // MARK: 6 — no speech after close
