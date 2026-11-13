@@ -309,6 +309,64 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         attach(app, "24-resumed-step3")
     }
 
+    // MARK: - Website screenshots (brief 013 Part B)
+
+    /// Captures the real screens the product site shows: Explore, the pantry review and list, the
+    /// seeded recipe and its pantry fit. Skipped unless `UMMA_SITE_CAPTURE=1` reaches the runner
+    /// (`TEST_RUNNER_UMMA_SITE_CAPTURE=1` on the xcodebuild line), so `make ios-smoke` never runs
+    /// it. Run it once per appearance (`xcrun simctl ui <udid> appearance light|dark`) and export
+    /// the `site-*` attachments from the .xcresult.
+    func testCaptureSiteScreens() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["UMMA_SITE_CAPTURE"] == "1",
+                          "set UMMA_SITE_CAPTURE=1 to capture website screenshots")
+        let app = try launchSignedIn(email: "site-\(Int(Date().timeIntervalSince1970))@umma.dev")
+
+        let byline = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'Umma Kitchen'")).firstMatch
+        XCTAssertTrue(byline.waitForExistence(timeout: 15), "Explore did not list the seeded recipes")
+        Thread.sleep(forTimeInterval: 1.5)
+        attach(app, "site-explore")
+
+        app.tabBars.buttons["Pantry"].tap()
+        let speak = app.buttons["pantry.speak"]
+        XCTAssertTrue(speak.waitForExistence(timeout: 10), "Pantry has no Speak button")
+        speak.tap()
+        let typeInstead = app.buttons["speak.typeInstead"]
+        if typeInstead.waitForExistence(timeout: 3) { typeInstead.tap() }
+        let transcript = app.descendants(matching: .any)["speak.transcript"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "no transcript field")
+        type("2 lb chicken thighs, 3 tbsp gochujang, soy sauce, honey, garlic and two onions", into: transcript, in: app)
+        let findItems = app.buttons["speak.findItems"]
+        XCTAssertTrue(wait(for: findItems, enabled: true, timeout: 5))
+        findItems.tap()
+        // A six-item list pushes Confirm below the fold, where the lazy list hasn't built it yet,
+        // so wait for the screen title instead.
+        XCTAssertTrue(app.staticTexts["Review items"].firstMatch.waitForExistence(timeout: 15), "Scan review did not open")
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, "site-pantry-review")
+        let confirm = app.buttons["review.confirm"]
+        scrollUntilHittable(confirm, in: app)
+        XCTAssertTrue(wait(for: confirm, enabled: true, timeout: 5), "Confirm stayed disabled")
+        confirm.tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "pantry.row").firstMatch.waitForExistence(timeout: 15),
+                      "pantry did not list the added items")
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, "site-pantry")
+
+        openSeededRecipe(app)
+        XCTAssertTrue(app.staticTexts["by Umma Kitchen"].firstMatch.waitForExistence(timeout: 10))
+        if app.keyboards.firstMatch.exists { app.swipeDown() }
+        Thread.sleep(forTimeInterval: 1.5)
+        attach(app, "site-recipe")
+
+        let check = app.buttons["recipe.checkPantry"]
+        scrollUntilHittable(check, in: app)
+        XCTAssertTrue(wait(for: check, enabled: true, timeout: 10))
+        check.tap()
+        XCTAssertTrue(app.staticTexts["fit.headline"].waitForExistence(timeout: 15), "Pantry fit did not load")
+        Thread.sleep(forTimeInterval: 1)
+        attach(app, "site-fit")
+    }
+
     /// Cooking screen → Ask → "what does this step mean?" → an answer with a step badge → Done.
     private func askCoach(_ app: XCUIApplication) {
         app.buttons["cooking.ask"].tap()
