@@ -553,30 +553,41 @@ private struct SafetyNotices: View {
     private func noticeRow(lead: CookingNotices.Notice) -> some View {
         let tint = notices.leadsWithAllergy ? SLColor.danger : SLColor.warning
         let surface = notices.leadsWithAllergy ? SLColor.dangerSurface : SLColor.warningSurface
-        let shown = expanded ? notices.inline : [lead]
+        let shown = expanded ? notices.inline : notices.leadNotices
         return VStack(alignment: .leading, spacing: Spacing.xs) {
-            ForEach(shown) { notice in
-                Label {
-                    Text(notice.text)
-                        .font(SLFont.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: notice.kind == .allergy ? "allergens" : "exclamationmark.triangle.fill")
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ForEach(shown) { notice in
+                    Label {
+                        Text(notice.text)
+                            .font(SLFont.headline)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: notice.kind == .allergy ? "allergens" : "exclamationmark.triangle.fill")
+                    }
+                    .foregroundStyle(tint)
                 }
-                .foregroundStyle(tint)
             }
+            // VoiceOver hears every notice whether or not the row is expanded (DECISIONS #15
+            // "Safety warning:" prefix), and can expand it from here too.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(notices.accessibilityLabel ?? "Safety warning: \(lead.text)")
+            .accessibilityIdentifier("cooking.safetyNotice")
+            .modifier(ExpandAction(enabled: notices.moreText != nil, expanded: expanded) { toggle() })
             if let more = notices.moreText {
+                // A real button, so Voice Control ("Tap 2 more") and Switch Control reach it.
                 Button {
-                    withAnimation(.mise(reduceMotion: reduceMotion)) { expanded.toggle() }
+                    toggle()
                 } label: {
                     Text(expanded ? "Show less" : more)
-                        .font(SLFont.footnote.weight(.semibold))
+                        .font(SLFont.subheadline.weight(.semibold))
                         .foregroundStyle(tint)
-                        .frame(minHeight: Metrics.minTapTarget / 1.5, alignment: .leading)
+                        .frame(minHeight: Metrics.minTapTarget, alignment: .leading)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityHidden(true)
+                .accessibilityLabel(expanded ? "Show fewer safety notes" : "Show all safety notes")
+                .accessibilityInputLabels(expanded ? ["Show less", "Show fewer safety notes"]
+                                                   : [more, "\(notices.collapsedCount) more", "Show all safety notes"])
                 .accessibilityIdentifier("cooking.safetyMore")
             }
         }
@@ -584,10 +595,26 @@ private struct SafetyNotices: View {
         .padding(.vertical, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-        // VoiceOver hears every notice whether or not the row is expanded.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(notices.accessibilityLabel ?? lead.text)
-        .accessibilityIdentifier("cooking.safetyNotice")
+        .accessibilityElement(children: .contain)
+    }
+
+    private func toggle() {
+        withAnimation(.mise(reduceMotion: reduceMotion)) { expanded.toggle() }
+    }
+}
+
+/// "Show all safety notes" as a named action on the safety row itself.
+private struct ExpandAction: ViewModifier {
+    let enabled: Bool
+    let expanded: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.accessibilityAction(named: expanded ? "Show fewer safety notes" : "Show all safety notes", action)
+        } else {
+            content
+        }
     }
 }
 

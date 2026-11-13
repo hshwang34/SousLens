@@ -216,18 +216,26 @@ struct CookingNotices: Equatable {
 
     static let empty = CookingNotices(inline: [], notes: [])
 
-    /// The notice the collapsed row always shows in full.
-    var leadNotice: Notice? { inline.first }
+    /// The notices the collapsed row always shows in full: up to two. When both kinds exist, the
+    /// first allergy line AND the first food-safety line, so a food-safety line is never hidden
+    /// only because allergy lines sort first. Shown in their original order.
+    var leadNotices: [Notice] {
+        var picked: [Notice] = []
+        if let allergy = inline.first(where: { $0.kind == .allergy }) { picked.append(allergy) }
+        if let safety = inline.first(where: { $0.kind == .safety }) { picked.append(safety) }
+        for notice in inline where picked.count < 2 && !picked.contains(notice) { picked.append(notice) }
+        return inline.filter { picked.contains($0) }
+    }
+    var leadNotice: Notice? { leadNotices.first }
     /// How many more notices the collapsed row holds ("+2 more").
-    var collapsedCount: Int { max(inline.count - 1, 0) }
+    var collapsedCount: Int { max(inline.count - leadNotices.count, 0) }
     var moreText: String? { collapsedCount > 0 ? "+\(collapsedCount) more" : nil }
     /// The row is an allergy row (danger colours) when any notice in it is about an allergy.
     var leadsWithAllergy: Bool { inline.contains { $0.kind == .allergy } }
-    /// VoiceOver always hears every notice, collapsed or not.
+    /// VoiceOver always hears every notice, collapsed or not, with the DECISIONS #15 prefix.
     var accessibilityLabel: String? {
         guard !inline.isEmpty else { return nil }
-        let lines = inline.map { ($0.kind == .allergy ? "Allergy: " : "Safety: ") + $0.text }
-        return lines.joined(separator: " ")
+        return inline.map { "Safety warning: \($0.text)" }.joined(separator: " ")
     }
 
     var notesChipText: String? {
@@ -264,10 +272,10 @@ struct CookingNotices: Equatable {
             if let notice = caution.safetyNotice { add(Notice(kind: .safety, text: notice)) }
         }
         for risk in cautions.flatMap(\.risks) {
-            if isSafetyLine(risk) {
-                add(Notice(kind: mentionsAllergen(risk) ? .allergy : .safety, text: risk))
-            } else {
+            if isFoldableTip(risk) {
                 add(Note(kind: .swapTip, text: risk))
+            } else {
+                add(Notice(kind: mentionsAllergen(risk) ? .allergy : .safety, text: risk))
             }
         }
         if let creatorNote { add(Note(kind: .creatorNote, text: creatorNote)) }
@@ -277,41 +285,76 @@ struct CookingNotices: Equatable {
         return CookingNotices(inline: inline, notes: notes)
     }
 
-    /// Swap risks are free text (vetted rules or the advisor), so they are sorted by what they
-    /// say. A line that names an allergen, a food-safety hazard or a "do not" stays inline; only
-    /// cooking tips ("Not an exact match.", "Add a pinch of sugar…") fold away. When in doubt the
-    /// patterns err towards inline, which is the safe side.
-    static func isSafetyLine(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        return safetyTerms.contains { lower.contains($0) } || mentionsAllergen(text)
+    /// Swap risks are free text (vetted rules or the advisor) with no category, so the safe
+    /// default is inline. A risk folds into the notes chip ONLY when it matches the short
+    /// culinary-tip allow-list AND carries no safety signal at all. Anything unknown stays
+    /// inline under the step.
+    static func isFoldableTip(_ text: String) -> Bool {
+        let lower = normalized(text)
+        guard matchesTip(lower) else { return false }
+        return !hasSafetySignal(lower)
     }
 
+    /// The inverse, kept for callers and tests that ask the safety question directly.
+    static func isSafetyLine(_ text: String) -> Bool { !isFoldableTip(text) }
+
+    static func hasSafetySignal(_ text: String) -> Bool {
+        let lower = normalized(text)
+        if safetySignals.contains(where: { lower.contains($0) }) { return true }
+        return safetyPatterns.contains { lower.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    private static func matchesTip(_ lower: String) -> Bool {
+        if lower == "not an exact match." || lower == "not an exact match" { return true }
+        return tipPatterns.contains { lower.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    /// Lowercased, curly apostrophes straightened.
+    private static func normalized(_ text: String) -> String {
+        text.lowercased()
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Clearly culinary-only tips: taste, texture, colour/appearance, a pinch, burning, sweeter /
+    /// saltier, "a little …".
+    private static let tipPatterns = [
+        #"\btast"#, #"\btextur"#, #"\bcolou?r"#, #"\bappearance\b"#, #"^add a pinch\b"#,
+        #"^burns\b"#, #"\bslightly (sweeter|saltier)\b"#, #"\ba little\b"#,
+    ]
+
+    private static let safetySignals = [
+        "contain", "contamin", "cross-", "allerg", "peanut", "shellfish", "fish", "sesame", "gluten",
+        "wheat", "dairy", "milk", "cheese", "cream", "sulph", "sulfit", "anchov", "hour", "refriger",
+        "reheat", "steaming", "pink", "wash hands", "wash your hands", "pickl", "preserv", "infant",
+        "pregnan", "don't", "do not", "avoid", "never", "not suitable", "unsafe", "toxic", "danger",
+    ]
+
+    private static let safetyPatterns = [
+        #"\braw\b"#, #"\beggs?\b"#, #"\bnuts?\b"#, #"\bsoy"#, #"\boats?\b"#,
+        #"\bcan(s|ned|ning)?\b"#, #"\d+\s*(°|degrees?)?\s*[fc]\b"#,
+    ]
+
     /// An allergen named together with a cue that it is about the allergen ("Contains soy.",
-    /// "Still soy.", "check the label"). "Less salty than soy sauce" alone is a tip, not a notice.
+    /// "Still soy.", "check the label"): such notices use the allergy styling.
     static func mentionsAllergen(_ text: String) -> Bool {
-        let lower = text.lowercased()
+        let lower = normalized(text)
         if lower.contains("allerg") || lower.contains("check the label") { return true }
         let words = Set(lower.split { !$0.isLetter }.map(String.init))
         guard !words.isDisjoint(with: allergenWords) else { return false }
         return allergenCues.contains { lower.contains($0) }
     }
 
-    private static let safetyTerms = [
-        "allerg", "check the label", "do not", "must not", "never", "not for ", "not safe", "unsafe",
-        "safety", "safe to", "°f", "°c", "thermometer", "internal temp", "room temperature",
-        "preserv", "pickl", "canning", "curing", "undercook", "babies", "baby", "infant", "pregnan",
-        "toxic", "botulism", "salmonella", "listeria", "contains alcohol", "contains honey",
-    ]
-
     private static let allergenCues = ["contain", "still", "-free", " free", "trace", "same allergen", "may have"]
 
     private static let allergenWords: Set<String> = [
         "peanut", "peanuts", "nut", "nuts", "almond", "almonds", "cashew", "cashews", "walnut",
         "walnuts", "pecan", "pecans", "hazelnut", "hazelnuts", "pistachio", "pistachios", "milk",
-        "dairy", "lactose", "egg", "eggs", "soy", "soya", "wheat", "gluten", "barley", "rye",
-        "sesame", "fish", "shellfish", "shrimp", "prawn", "prawns", "crab", "lobster", "mollusc",
-        "molluscs", "celery", "mustard", "lupin", "sulfite", "sulfites", "sulphite", "sulphites",
-        "coconut",
+        "dairy", "lactose", "cheese", "cream", "egg", "eggs", "soy", "soya", "wheat", "gluten",
+        "barley", "rye", "oat", "oats", "sesame", "fish", "shellfish", "shrimp", "prawn", "prawns",
+        "crab", "lobster", "mollusc", "molluscs", "anchovy", "anchovies", "celery", "mustard",
+        "lupin", "sulfite", "sulfites", "sulphite", "sulphites", "coconut",
     ]
 }
 

@@ -62,13 +62,18 @@ final class CalmCookingTests: XCTestCase {
         ])
         XCTAssertEqual(notices.leadNotice?.kind, .allergy)
         XCTAssertTrue(notices.leadsWithAllergy)
-        XCTAssertEqual(notices.collapsedCount, 4)
-        XCTAssertEqual(notices.moreText, "+4 more")
+        // Collapsed, the row shows the first allergy line AND the first food-safety line: a
+        // food-safety line is never hidden only because allergy lines sort first.
+        XCTAssertEqual(notices.leadNotices.map(\.text), ["Check the label: May contain sulfites.", "Raw poultry: wash your hands."])
+        XCTAssertEqual(notices.collapsedCount, 3)
+        XCTAssertEqual(notices.moreText, "+3 more")
         XCTAssertEqual(notices.notes.map(\.kind), [.creatorNote, .lookFor])
         XCTAssertEqual(notices.notesChipText, "2 notes")
         // VoiceOver hears every notice even while the row is collapsed.
         let spoken = try? XCTUnwrap(notices.accessibilityLabel)
-        for notice in notices.inline { XCTAssertTrue(spoken?.contains(notice.text) == true, notice.text) }
+        for notice in notices.inline {
+            XCTAssertTrue(spoken?.contains("Safety warning: \(notice.text)") == true, notice.text)
+        }
     }
 
     func testEveryVettedRiskIsSortedSafely() throws {
@@ -87,19 +92,68 @@ final class CalmCookingTests: XCTestCase {
             "Some gluten-free pasta contains corn, soy or egg; check the label.",
             "Still soy. Most tamari is wheat-free but not all; check the label.",
         ]
+        // Only clearly culinary tips with no safety signal fold.
         let mayFold = [
             "Add a pinch of sugar to soften the edge.", "Burns faster in the pan.",
             "Burns quickly in hot oil; add it with liquid, not to a dry hot pan.",
+            "Not an exact match.", "Start tasting 2 minutes early.", "The dish will taste plainer.",
+            "Not a true equivalent; the dish will taste noticeably different.",
+            "Where garlic is the star (garlic pasta) the dish will taste very different.",
+        ]
+        // Not on the tip allow-list (or a tip that names an allergen): inline, the safe default.
+        let unknownStaysInline = [
             "Canned tomatoes are often salted; reduce added salt.", "Drain it; sauerkraut is milder and saltier.",
             "Fresh rice clumps; break it up well and don't crowd the pan.", "Fry in an extra 1 tsp oil.",
             "Not a true equivalent: gochujang is a fermented chili-rice paste and nothing replicates it exactly.",
-            "Not an exact match.", "Start tasting 2 minutes early.",
-            "Taste and add salt; it is far less salty than soy sauce.", "The dish will taste plainer.",
+            "Taste and add salt; it is far less salty than soy sauce.", "Much hotter; start with half.",
         ]
-        for line in mustBeInline { XCTAssertTrue(CookingNotices.isSafetyLine(line), line) }
+        for line in mustBeInline + unknownStaysInline { XCTAssertTrue(CookingNotices.isSafetyLine(line), line) }
         for line in mayFold { XCTAssertFalse(CookingNotices.isSafetyLine(line), line) }
         XCTAssertTrue(CookingNotices.mentionsAllergen("Contains soy."))
         XCTAssertFalse(CookingNotices.mentionsAllergen("Contains alcohol."), "alcohol is safety, not an allergen")
+    }
+
+    func testReviewerSafetyPhrasesStayInline() {
+        let phrases = [
+            "Contains anchovies.", "Raw egg in this swap.", "Risk of cross-contamination.",
+            "Reheat until steaming hot.", "Refrigerate within 2 hours.", "Cook to 165 F", "74 C",
+            "Don\u{2019}t use for canning.", "Don't use for canning.", "Avoid for infants.",
+            "Not suitable for pregnant people.",
+        ]
+        for phrase in phrases {
+            XCTAssertTrue(CookingNotices.hasSafetySignal(phrase), phrase)
+            XCTAssertTrue(CookingNotices.isSafetyLine(phrase), phrase)
+            let notices = CookingNotices.make(stepWarnings: [], cautions: [SwapCaution(risks: [phrase])],
+                                              creatorNote: nil, successCues: [])
+            XCTAssertEqual(notices.inline.map(\.text), [phrase], phrase)
+            XCTAssertTrue(notices.notes.isEmpty, phrase)
+        }
+    }
+
+    func testUnknownPhraseStaysInline() {
+        let notices = CookingNotices.make(stepWarnings: [], cautions: [SwapCaution(risks: ["Behaves differently under pressure."])],
+                                          creatorNote: nil, successCues: [])
+        XCTAssertEqual(notices.inline.map(\.text), ["Behaves differently under pressure."])
+        XCTAssertNil(notices.notesChipText)
+    }
+
+    func testATipThatAlsoCarriesASafetySignalStaysInline() {
+        for line in ["A little sweeter; contains egg.", "Slightly saltier, and keep raw chicken apart.",
+                     "Tastes sharper; never use for canning.", "Colour goes pink at 63 C."] {
+            XCTAssertFalse(CookingNotices.isFoldableTip(line), line)
+        }
+        XCTAssertTrue(CookingNotices.isFoldableTip("A little sharper."))
+        XCTAssertTrue(CookingNotices.isFoldableTip("Slightly sweeter."))
+    }
+
+    func testTwoAllergyLinesDoNotHideTheFoodSafetyLine() {
+        let notices = CookingNotices.make(
+            stepWarnings: ["Cook chicken to 74 C."],
+            cautions: [SwapCaution(allergyWarning: "contains sesame", risks: ["Contains soy."])],
+            creatorNote: nil, successCues: [])
+        XCTAssertEqual(notices.inline.map(\.kind), [.allergy, .allergy, .safety])
+        XCTAssertEqual(notices.leadNotices.map(\.text), ["Check the label: contains sesame", "Cook chicken to 74 C."])
+        XCTAssertEqual(notices.moreText, "+1 more")
     }
 
     func testDuplicatesCollapseAndANoticeOutranksANote() {

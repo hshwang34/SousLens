@@ -261,13 +261,14 @@ final class Slice3FixRound2Tests: XCTestCase {
         service.sessionHandler = { _ in session }
         let model = makeModel()   // no in-memory sheet cautions (fresh launch)
         await model.load()
-        XCTAssertEqual(model.adaptedBadgeText, "Adapted · Common swap · Check the label: May contain sulfites.")
-        XCTAssertEqual(model.adaptedCautionLines, ["Sharper."])
+        XCTAssertEqual(model.notices.inline.map(\.text), ["Check the label: May contain sulfites.", "Sharper."],
+                       "the Session's allergy warning and its unknown risk both stay inline")
 
         let withSheet = CookingViewModel(sessionId: CookingFixtures.sessionUUID, service: service, audio: audio,
                                          swapCautions: ["ing-8": SwapCaution(risks: ["Sharper.", "Add sugar."], safetyNotice: "Recipe has sesame.")])
         await withSheet.load()
-        XCTAssertEqual(withSheet.adaptedCautionLines, ["Sharper.", "Add sugar.", "Recipe has sesame."], "sheet notice is an addition")
+        XCTAssertTrue(Set(["Sharper.", "Add sugar.", "Recipe has sesame."]).isSubset(of: Set(withSheet.notices.inline.map(\.text))),
+                      "sheet notice is an addition")
     }
 
     // MARK: M5 — unchecked allergies in the swap sheet

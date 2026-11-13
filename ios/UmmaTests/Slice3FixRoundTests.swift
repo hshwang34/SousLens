@@ -82,10 +82,11 @@ final class Slice3FixRoundTests: XCTestCase {
         let caution = SwapCaution(allergyWarning: "contains sulfites", risks: ["A little sharper."], safetyNotice: "Recipe contains sesame.")
         let model = makeModel(cautions: ["ing-8": caution])
         await model.load()
-        XCTAssertEqual(model.adaptedBadgeText, "Adapted · Common swap · Check the label: contains sulfites")
-        XCTAssertEqual(model.adaptedCautionLines, ["A little sharper.", "Recipe contains sesame."])
+        XCTAssertEqual(model.notices.inline.map(\.text), ["Check the label: contains sulfites", "Recipe contains sesame."])
+        XCTAssertEqual(model.notices.notes.first?.text, "A little sharper.", "a culinary-only tip folds")
         await model.next()
-        XCTAssertTrue(model.adaptedCautionLines.isEmpty, "only on the adapted step")
+        XCTAssertTrue(model.notices.inline.allSatisfy { !$0.text.contains("sulfites") && !$0.text.contains("sesame") },
+                      "only on the adapted step")
     }
 
     func testApprovedSwapCarriesWarningsFromTheSheet() async throws {

@@ -203,14 +203,14 @@ final class CookingViewModelTests: XCTestCase {
     func testAdaptedBadgeAndShowOriginal() async throws {
         let model = makeModel()
         await model.load()
-        XCTAssertEqual(model.adaptedBadgeText, "Adapted · Common swap")
+        XCTAssertEqual(model.adaptedIndicator?.accessibilityLabel, "Adapted · Common swap")
         let adapted = try XCTUnwrap(model.instructionText)
         model.showOriginal = true
         XCTAssertEqual(model.instructionText, try oracle.current().steps[0].originalInstruction)
         XCTAssertNotEqual(model.instructionText, adapted)
         await model.next()
         XCTAssertFalse(model.showOriginal, "resets on step change")
-        XCTAssertNil(model.adaptedBadgeText, "step 2 is not adapted")
+        XCTAssertNil(model.adaptedIndicator, "step 2 is not adapted")
     }
 
     func testAiAdaptationBadge() async throws {
@@ -218,7 +218,7 @@ final class CookingViewModelTests: XCTestCase {
         service.sessionHandler = { _ in session }
         let model = makeModel()
         await model.load()
-        XCTAssertEqual(model.adaptedBadgeText, "Adapted · AI suggested adaptation")
+        XCTAssertEqual(model.adaptedIndicator?.accessibilityLabel, "Adapted · AI suggested adaptation")
     }
 
     func testRevertAdaptationIsACommand() async throws {
@@ -227,7 +227,7 @@ final class CookingViewModelTests: XCTestCase {
         await model.revertAdaptation(id: try XCTUnwrap(UUID(uuidString: CookingFixtures.adaptationId)))
         XCTAssertEqual(service.commands.last?.0.command, .revertAdaptation)
         XCTAssertEqual(service.commands.last?.0.adaptationId, UUID(uuidString: CookingFixtures.adaptationId))
-        XCTAssertNil(model.adaptedBadgeText, "the server restored the original text")
+        XCTAssertNil(model.adaptedIndicator, "the server restored the original text")
     }
 
     func testLastStepNextBecomesFinishAndCompleteSendsOutcome() async throws {
