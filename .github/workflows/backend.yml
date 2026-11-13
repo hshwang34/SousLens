@@ -9,10 +9,10 @@ jobs:
     services:
       postgres:
         image: postgres:16
-        env: { POSTGRES_USER: souslens, POSTGRES_PASSWORD: souslens, POSTGRES_DB: souslens_test }
+        env: { POSTGRES_USER: umma, POSTGRES_PASSWORD: umma, POSTGRES_DB: umma_test }
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U souslens" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U umma" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -24,9 +24,9 @@ jobs:
           ffmpeg-version: release
       - working-directory: backend
         env:
-          TEST_DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
-          DATABASE_URL: postgresql+asyncpg://souslens:souslens@localhost:5432/souslens_test
+          TEST_DATABASE_URL: postgresql+asyncpg://umma:umma@localhost:5432/umma_test
+          DATABASE_URL: postgresql+asyncpg://umma:umma@localhost:5432/umma_test
           JWT_SECRET: ci-only-not-a-secret-0123456789abcdef
           AUTH_MODE: dev
-          SOUSLENS_REQUIRE_FFMPEG: "1"   # ffmpeg tests fail instead of skipping in CI
+          UMMA_REQUIRE_FFMPEG: "1"   # ffmpeg tests fail instead of skipping in CI
         run: make check
