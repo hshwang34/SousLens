@@ -13,6 +13,7 @@ struct CookingView: View {
     @State private var showAssistant = false
     @State private var showSessionEnd = false
     @State private var showNotes = false
+    private static let stepTop = "cooking.stepTop"
     @State private var confirmAbandon = false
     @State private var swapToRevert: SessionAdaptation?
     @State private var timerToCancel: TimerRow?
@@ -108,36 +109,41 @@ struct CookingView: View {
             topBar(model)
                 .dynamicTypeSize(...CookingLayout.chromeSizeLimit)
                 .accessibilitySortPriority(1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.lg) {
-                    StepPager(model: model)
-                    SafetyNotices(model: model, notices: notices, onRevert: { swapToRevert = $0 })
-                    if notices.notesChipText != nil || model.adaptedIndicator != nil {
-                        NotesChip(notices: notices, adapted: model.adaptedIndicator != nil) { showNotes = true }
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.lg) {
+                        StepPager(model: model)
+                            .id(Self.stepTop)
+                        SafetyNotices(model: model, notices: notices, onRevert: { swapToRevert = $0 })
+                        if notices.notesChipText != nil || model.adaptedIndicator != nil {
+                            NotesChip(notices: notices, adapted: model.adaptedIndicator != nil) { showNotes = true }
+                        }
+                        if let suggestion = model.timerSuggestion, model.canSendCommands {
+                            TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
+                                                onStart: { Task { await model.startSuggestedTimer() } },
+                                                onSkip: { model.skipSuggestedTimer() })
+                        }
+                        TimersList(model: model, onCancel: { timerToCancel = $0 })
+                        if let error = model.errorMessage, !model.isOffline {
+                            Label(error, systemImage: "exclamationmark.circle")
+                                .font(SLFont.callout)
+                                .foregroundStyle(SLColor.danger)
+                                .padding(Spacing.md)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                                .accessibilityIdentifier("cooking.error")
+                        }
                     }
-                    if let suggestion = model.timerSuggestion, model.canSendCommands {
-                        TimerSuggestionCard(prompt: CookingFormatting.timerPrompt(suggestion),
-                                            onStart: { Task { await model.startSuggestedTimer() } },
-                                            onSkip: { model.skipSuggestedTimer() })
-                    }
-                    TimersList(model: model, onCancel: { timerToCancel = $0 })
-                    if let error = model.errorMessage, !model.isOffline {
-                        Label(error, systemImage: "exclamationmark.circle")
-                            .font(SLFont.callout)
-                            .foregroundStyle(SLColor.danger)
-                            .padding(Spacing.md)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(SLColor.dangerSurface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                            .accessibilityIdentifier("cooking.error")
-                    }
+                    .frame(maxWidth: CookingLayout.readableWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Spacing.screen)
+                    .padding(.top, Spacing.md)
+                    .padding(.bottom, Spacing.lg)
                 }
-                .frame(maxWidth: CookingLayout.readableWidth, alignment: .leading)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Spacing.screen)
-                .padding(.top, Spacing.md)
-                .padding(.bottom, Spacing.lg)
+                .scrollBounceBehavior(.basedOnSize)
+                // A new step always starts at its first line, even if the last one was scrolled.
+                .onChange(of: model.session?.stepIndex) { _, _ in scroller.scrollTo(Self.stepTop, anchor: .top) }
             }
-            .scrollBounceBehavior(.basedOnSize)
             .accessibilitySortPriority(3)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // The inset is the bar's measured height, so the step's last line always scrolls
@@ -234,17 +240,20 @@ struct CookingView: View {
                     Text(model.session?.recipe.title ?? "Cooking")
                         .font(SLFont.headline)
                         .lineLimit(1)
-                    HStack(spacing: Spacing.sm) {
-                        if let counter = model.stepCounterText {
-                            Text(counter)
-                                .font(SLFont.stepCounter)
-                                .foregroundStyle(SLColor.textSecondary)
-                                .lineLimit(1)
-                                .contentTransition(.numericText())
-                                .accessibilityIdentifier("cooking.stepCounter")
+                    // The step count never truncates: at large sizes the pill drops its word,
+                    // then moves under the count.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Spacing.sm) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted) }
                         }
-                        if let adapted = model.adaptedIndicator {
-                            AdaptedPill(indicator: adapted)
+                        HStack(spacing: Spacing.sm) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted, iconOnly: true) }
+                        }
+                        VStack(alignment: .leading, spacing: Spacing.xxs) {
+                            stepCounter(model)
+                            if let adapted = model.adaptedIndicator { AdaptedPill(indicator: adapted, iconOnly: true) }
                         }
                     }
                 }
@@ -283,6 +292,19 @@ struct CookingView: View {
         .padding(.horizontal, Spacing.md)
         .padding(.vertical, Spacing.xs)
         .foregroundStyle(SLColor.textPrimary)
+    }
+
+    @ViewBuilder
+    private func stepCounter(_ model: CookingViewModel) -> some View {
+        if let counter = model.stepCounterText {
+            Text(counter)
+                .font(SLFont.stepCounter)
+                .foregroundStyle(SLColor.textSecondary)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.numericText())
+                .accessibilityIdentifier("cooking.stepCounter")
+        }
     }
 
     // MARK: Controls
@@ -596,11 +618,14 @@ private struct NotesChip: View {
 /// label and in the notes sheet; the label check, if any, is in the safety row.
 private struct AdaptedPill: View {
     let indicator: AdaptedIndicator
+    var iconOnly = false
 
     var body: some View {
         Label(indicator.text, systemImage: "arrow.triangle.swap")
+            .labelStyle(PillLabelStyle(iconOnly: iconOnly))
             .font(SLFont.caption)
             .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, Spacing.sm)
             .padding(.vertical, Spacing.xxs)
             .foregroundStyle(SLColor.accent)
@@ -942,6 +967,18 @@ private struct TrailingIconLabelStyle: LabelStyle {
         HStack(spacing: Spacing.sm) {
             configuration.title
             configuration.icon
+        }
+    }
+}
+
+/// The Adapted pill's label: icon and word, or the icon alone when the header is tight.
+private struct PillLabelStyle: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: Spacing.xs) {
+            configuration.icon
+            if !iconOnly { configuration.title }
         }
     }
 }
