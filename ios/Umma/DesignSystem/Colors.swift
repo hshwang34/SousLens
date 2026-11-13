@@ -7,7 +7,7 @@ import SwiftUI
 /// screens never reference raw colors or asset strings.
 ///
 /// Roles, in one line each:
-/// - `brand` (Persimmon) is a **fill** colour: the primary button, icons, illustration. It is
+/// - `brand` (Persimmon) is a **fill** colour: the primary button, illustration. It is
 ///   2.5:1 on Flesh, so it is never text on a light background. Label it with `onBrand` (Seed).
 /// - `accent` (Leaf) is the colour for **text and interactive tint**: links, chips, toggles.
 /// - `success`, `warning`, `danger` are semantic and deliberately not brand hues, so a safety or
@@ -25,13 +25,14 @@ enum SLColor {
     static let accentSoft = Color("AccentSoft")
     /// Text and icons on a solid `accent` fill.
     static let onAccent = Color("OnAccent")
-    /// Persimmon: fills only (primary button, icons, illustration). Never body text on light.
+    /// Persimmon: fills only (primary button, illustration). Not text, and not standalone icons
+    /// on light backgrounds (2.5:1 fails the 3:1 graphics bar); use `tomato` for those.
     static let brand = Color("Brand")
     /// A pale persimmon wash behind brand icons and empty-state glyphs.
     static let brandSoft = Color("BrandSoft")
     /// Text and icons on a solid `brand` fill (Seed, because white on Persimmon is 2.8:1).
     static let onBrand = Color("OnBrand")
-    /// Deep persimmon: small emphasis text that isn't a warning (AA on Background and Surface).
+    /// Deep persimmon: small emphasis text that isn't a warning, and brand-coloured icons/glyphs.
     static let tomato = Color("Tomato")
     /// A teal green, kept apart from Leaf so "done" never looks like a tappable accent.
     static let success = Color("Success")
@@ -127,6 +128,13 @@ enum BrandPalette {
         pairs.append(("OnBrand", "Brand"))
         return pairs
     }()
+
+    /// Non-text graphics a screen draws (icons, glyphs) and what they sit on. WCAG 1.4.11 asks
+    /// for 3:1. The empty-state glyph sits on a BrandSoft disc on the page Background.
+    static let graphicPairs: [(foreground: String, background: String)] = [
+        ("Tomato", "BrandSoft"),
+        ("Tomato", "Background"),
+    ]
 
     static func token(_ name: String) -> Token? { tokens.first { $0.name == name } }
 

@@ -58,7 +58,7 @@ font from `ios/Umma/Resources/Fonts/BagelFatOne-Regular.ttf`.
 
 | Name | Hex | Role |
 | --- | --- | --- |
-| **Persimmon** | `#F2782A` | The fruit. Fills, icons, the primary button, illustration |
+| **Persimmon** | `#F2782A` | The fruit. Fills: the primary button, illustration. Icons on light backgrounds use the deep persimmon token (`#B04A12`), since Persimmon is only 2.5:1 |
 | **Leaf** | `#2F6B3A` | The calyx and wordmark. Links, tint, chips, accent **text** |
 | **Flesh** | `#FFF1E6` | The app's light background |
 | **Seed** | `#2A1C14` | Body text, and text on a Persimmon fill |

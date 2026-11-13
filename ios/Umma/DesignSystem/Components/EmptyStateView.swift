@@ -26,7 +26,9 @@ struct EmptyStateView: View {
         VStack(spacing: Spacing.lg) {
             Image(systemName: systemImage)
                 .font(SLFont.glyph)
-                .foregroundStyle(SLColor.brand)
+                // Deep persimmon, not `brand`: the glyph is a graphic and needs 3:1 against both
+                // its disc and the page (BrandPalette.graphicPairs).
+                .foregroundStyle(SLColor.tomato)
                 .padding(Spacing.xl)
                 .background(SLColor.brandSoft, in: Circle())
                 .accessibilityHidden(true)

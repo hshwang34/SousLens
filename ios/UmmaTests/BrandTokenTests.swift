@@ -24,6 +24,18 @@ final class BrandTokenTests: XCTestCase {
         }
     }
 
+    func testGraphicsAreAtLeastThreeToOneInEveryAppearance() throws {
+        XCTAssertFalse(BrandPalette.graphicPairs.isEmpty)
+        for (foreground, background) in BrandPalette.graphicPairs {
+            let fg = try XCTUnwrap(BrandPalette.token(foreground), "unknown token \(foreground)")
+            let bg = try XCTUnwrap(BrandPalette.token(background), "unknown token \(background)")
+            for appearance in BrandPalette.Appearance.allCases {
+                let ratio = BrandPalette.contrastRatio(BrandPalette.hex(fg, appearance), BrandPalette.hex(bg, appearance))
+                XCTAssertGreaterThanOrEqual(ratio, 3, "\(foreground) graphic on \(background), \(appearance): \(String(format: "%.2f", ratio)):1")
+            }
+        }
+    }
+
     func testIncreaseContrastIsAtLeastAAA() throws {
         for (foreground, background) in BrandPalette.textPairs {
             let fg = try XCTUnwrap(BrandPalette.token(foreground))
