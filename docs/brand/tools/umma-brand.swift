@@ -350,9 +350,10 @@ struct IconVariant {
 }
 
 let icons = [
-    // Light: the approved direction C tile — flesh-coloured fruit, leaf calyx, on persimmon.
-    IconVariant(file: "AppIcon-light.png", tile: (0xF68A3E, 0xEC6A1C), fruit: cg(Brand.flesh), crown: cg(Brand.leaf),
-                highlight: cg(0xFFFFFF, alpha: 0.55)),
+    // Light (PM decision, 2026-11-12): the colour mark itself — Persimmon fruit, Leaf calyx — on a
+    // pale Flesh tile, so the home-screen icon reads literally as a persimmon.
+    IconVariant(file: "AppIcon-light.png", tile: (0xFFF7F0, 0xFFE4CF), fruit: cg(Brand.persimmon), crown: cg(Brand.leaf),
+                highlight: cg(Brand.persimmonLight)),
     // Dark: transparent so iOS draws its dark backdrop; the fruit itself carries the colour.
     IconVariant(file: "AppIcon-dark.png", tile: nil, fruit: cg(Brand.persimmonDark), crown: cg(Brand.leafDark),
                 highlight: cg(0xFFAE73)),

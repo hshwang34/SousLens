@@ -86,8 +86,9 @@ The app's full token table (light, dark and Increase Contrast) lives in
 
 Built from the mark, 1024 px, in the three iOS 18 appearances:
 
-- **Light:** a Flesh-coloured persimmon with a Leaf calyx on a Persimmon tile. This is the
-  approved direction C tile, and it stands out on a home screen.
+- **Light:** the colour mark (Persimmon fruit, Leaf calyx) on a pale Flesh tile with a soft
+  vertical gradient. The PM chose this over direction C's cream-fruit-on-orange tile because it
+  reads literally as a persimmon.
 - **Dark:** transparent background (iOS draws its dark backdrop), with the fruit itself in
   Persimmon and a light Leaf calyx.
 - **Tinted:** grayscale on transparent, per Apple's guidance. The fruit is near-white and the
