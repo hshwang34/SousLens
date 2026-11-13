@@ -32,7 +32,7 @@ struct EmptyStateView: View {
                 .accessibilityHidden(true)
             VStack(spacing: Spacing.sm) {
                 Text(title)
-                    .font(SLFont.title2)
+                    .font(SLFont.brandHeadline)
                     .foregroundStyle(SLColor.textPrimary)
                 Text(message)
                     .font(SLFont.body)

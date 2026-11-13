@@ -53,9 +53,19 @@ struct SignInView: View {
 
     private var brand: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("SousLens")
-                .font(SLFont.display)
-                .foregroundStyle(SLColor.textPrimary)
+            // The logo lockup: the persimmon mark beside the "umma" wordmark in Leaf (brief 013).
+            HStack(alignment: .center, spacing: Spacing.md) {
+                Image("BrandMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 64, height: 64)
+                Text(verbatim: "umma")
+                    .font(SLFont.wordmark)
+                    .foregroundStyle(SLColor.accent)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: "Umma"))
+            .accessibilityAddTraits(.isHeader)
             Text("Record a recipe once. Teach anyone to cook it, with the ingredients they actually have.")
                 .font(SLFont.body)
                 .foregroundStyle(SLColor.textSecondary)
@@ -87,7 +97,7 @@ struct SignInView: View {
                 requestCode()
             } label: {
                 if isSubmitting {
-                    ProgressView().tint(SLColor.onAccent)
+                    ProgressView().tint(SLColor.onBrand)
                 } else {
                     Text("Continue")
                 }
@@ -134,7 +144,7 @@ struct SignInView: View {
                 verify(challenge)
             } label: {
                 if isSubmitting {
-                    ProgressView().tint(SLColor.onAccent)
+                    ProgressView().tint(SLColor.onBrand)
                 } else {
                     Text("Verify")
                 }

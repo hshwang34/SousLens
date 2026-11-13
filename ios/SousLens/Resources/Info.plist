@@ -48,8 +48,17 @@
 	<string>SousLens listens only while you hold the talk button, so you can ask about a step or update your pantry hands-free.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Speech recognition turns what you say into text so the coach can answer. Audio may be processed by Apple to transcribe it and is not kept by SousLens afterwards.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>BagelFatOne-Regular.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>Background</string>
+		<key>UIImageName</key>
+		<string>BrandMark</string>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

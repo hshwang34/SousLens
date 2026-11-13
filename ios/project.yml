@@ -56,7 +56,13 @@ targets:
         CFBundleDisplayName: SousLens
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
-        UILaunchScreen: {}
+        # Launch: the persimmon mark on Flesh (brief 013). Names are asset-catalog entries.
+        UILaunchScreen:
+          UIColorName: Background
+          UIImageName: BrandMark
+        # Bagel Fat One (OFL 1.1): wordmark and large display titles only (DECISIONS #23).
+        UIAppFonts:
+          - BagelFatOne-Regular.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false

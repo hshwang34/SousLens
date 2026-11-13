@@ -1,3 +1,4 @@
+import CoreText
 import UIKit
 import XCTest
 @testable import SousLens
@@ -105,6 +106,32 @@ final class BrandTokenTests: XCTestCase {
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         func byte(_ value: CGFloat) -> UInt32 { UInt32((min(max(value, 0), 1) * 255).rounded()) }
         return byte(r) << 16 | byte(g) << 8 | byte(b)
+    }
+}
+
+/// Brief 013: Bagel Fat One ships in the bundle and is registered, and only display styles use it.
+final class BrandTypographyTests: XCTestCase {
+    func testBagelFatOneIsRegistered() throws {
+        let font = try XCTUnwrap(UIFont(name: SLFont.brandFontName, size: 34), "UIAppFonts must list BagelFatOne-Regular.ttf")
+        XCTAssertEqual(font.familyName, "Bagel Fat One")
+        // It covers Hangul, so 엄마 and Korean recipe titles don't fall back mid-word.
+        let ctFont = font as CTFont
+        var glyphs = [CGGlyph](repeating: 0, count: 2)
+        XCTAssertTrue(CTFontGetGlyphsForCharacters(ctFont, Array("엄마".utf16), &glyphs, 2))
+    }
+
+    @MainActor
+    func testLargeTitlesUseTheBrandFaceAndScale() {
+        SLFont.applyNavigationBarAppearance()
+        let large = UINavigationBar.appearance().largeTitleTextAttributes?[.font] as? UIFont
+        XCTAssertEqual(large?.fontName, SLFont.brandFontName)
+        let inline = UINavigationBar.appearance().titleTextAttributes?[.font] as? UIFont
+        XCTAssertNotEqual(inline?.fontName, SLFont.brandFontName, "inline titles stay SF Pro")
+
+        let accessibility = UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
+        let scaled = UIFontMetrics(forTextStyle: .largeTitle)
+            .scaledFont(for: UIFont(name: SLFont.brandFontName, size: 34)!, compatibleWith: accessibility)
+        XCTAssertGreaterThan(scaled.pointSize, 34, "Dynamic Type scales the display face")
     }
 }
 
