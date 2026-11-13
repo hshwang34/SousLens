@@ -119,11 +119,14 @@ final class Slice3FixRoundTests: XCTestCase {
     // MARK: 5 — Dynamic Type layout
 
     func testLayoutStacksAtAccessibilitySizes() {
-        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(stacksNavigation: false, toolColumns: 4, controlsScrollWithContent: false))
-        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(stacksNavigation: false, toolColumns: 4, controlsScrollWithContent: false))
+        // Brief 013 Part C: the control bar is pinned at every size (the step scrolls above it);
+        // at accessibility sizes Back drops its word so the bar stays one row.
+        XCTAssertEqual(CookingLayout.forSize(.large), CookingLayout(backIsIconOnly: false, showsOfflineDetail: true))
+        XCTAssertEqual(CookingLayout.forSize(.xxxLarge), CookingLayout(backIsIconOnly: false, showsOfflineDetail: true))
         for size in [DynamicTypeSize.accessibility1, .accessibility3, .accessibility5] {
-            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(stacksNavigation: true, toolColumns: 2, controlsScrollWithContent: true), "\(size)")
+            XCTAssertEqual(CookingLayout.forSize(size), CookingLayout(backIsIconOnly: true, showsOfflineDetail: false), "\(size)")
         }
+        XCTAssertTrue(CookingLayout.chromeSizeLimit.isAccessibilitySize, "chrome still grows into AX sizes, then stops")
     }
 
     // MARK: 6 — no speech after close

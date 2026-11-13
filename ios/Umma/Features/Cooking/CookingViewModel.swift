@@ -134,13 +134,31 @@ final class CookingViewModel: CookingSessionClient {
     /// "Adapted · Common swap" / "Adapted · AI suggested adaptation" (AI wins when mixed), plus
     /// "· Check the label: …" when a swap on this step carried an allergy warning.
     var adaptedBadgeText: String? {
-        guard let step = currentStep, step.adapted else { return nil }
-        let sources = Set(currentAdaptations.map(\.source))
-        let label = sources.isEmpty || sources.contains(.ai) ? SwapSource.ai.label : SwapSource.rule.label
+        guard let label = adaptedSourceLabel else { return nil }
         if let warning = currentCautions.compactMap(\.allergyWarning).first {
             return "Adapted · \(label) · Check the label: \(warning)"
         }
         return "Adapted · \(label)"
+    }
+
+    /// "Common swap" / "AI suggested adaptation" for an adapted step (AI wins when mixed), else nil.
+    var adaptedSourceLabel: String? {
+        guard let step = currentStep, step.adapted else { return nil }
+        let sources = Set(currentAdaptations.map(\.source))
+        return sources.isEmpty || sources.contains(.ai) ? SwapSource.ai.label : SwapSource.rule.label
+    }
+
+    /// The calm screen's notices: safety/allergy inline under the step, the rest folded into the
+    /// notes chip (brief 013 Part C, DECISIONS #23).
+    var notices: CookingNotices {
+        let step = currentRecipeStep
+        return CookingNotices.make(stepWarnings: step?.warnings ?? [], cautions: currentCautions,
+                                   creatorNote: step?.creatorNote, successCues: step?.successCues ?? [])
+    }
+
+    /// The small header indicator that the step text is adapted (or showing the original).
+    var adaptedIndicator: AdaptedIndicator? {
+        AdaptedIndicator.make(sourceLabel: adaptedSourceLabel, showingOriginal: showOriginal)
     }
 
     /// The Session's own cautions (survive relaunch, other devices), plus the sheet's notice
