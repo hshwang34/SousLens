@@ -311,7 +311,11 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
 
     /// Cooking screen → Ask → "what does this step mean?" → an answer with a step badge → Done.
     private func askCoach(_ app: XCUIApplication) {
-        app.buttons["cooking.ask"].tap()
+        // Repeat / Slower / Ask / Look live in the tools menu (brief 013 Part C).
+        app.buttons["cooking.tools"].tap()
+        let ask = app.buttons["cooking.ask"]
+        XCTAssertTrue(ask.waitForExistence(timeout: 5), "tools menu has no Ask")
+        ask.tap()
         let field = app.descendants(matching: .any)["assistant.query"].firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5), "assistant drawer did not open")
         type("what does this step mean?", into: field, in: app)
