@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Umma Brand Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Gaegu:wght@400;700&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: a short verdict up top, then three brand specimens side by side (stacking on phones), then "Moms" set the same way for comparison. */
+:root {
+  --bg: #F5F4F1;
+  --panel: #FFFFFF;
+  --fg: #1E1D1B;
+  --muted: #6B6862;
+  --line: #E2DFD8;
+  --accent: #B5462E;
+  --ui: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161514; --panel: #201F1D; --fg: #EDEBE6; --muted: #A29E96; --line: #34322E; --accent: #E0735A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161514; --panel: #201F1D; --fg: #EDEBE6; --muted: #A29E96; --line: #34322E; --accent: #E0735A;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 48px 72px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* Header */
+header { display: grid; gap: 14px; max-width: 68ch; }
+header h1 { font: 600 clamp(28px, 4vw, 40px)/1.1 var(--ui); letter-spacing: -.01em; }
+header h1 .ko { font-family: "Gowun Batang", serif; font-weight: 700; color: var(--accent); }
+header p { color: var(--muted); font-size: 16px; }
+
+/* Verdict */
+.verdict { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.verdict > div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; display: grid; gap: 10px; align-content: start; }
+.verdict h2 { font: 600 18px/1.3 var(--ui); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.tag { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.tag.yes { color: #2E7D4F; } .tag.no { color: var(--muted); }
+.verdict ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--fg); }
+.verdict li::marker { color: var(--muted); }
+
+/* Specimens */
+.section-head { display: grid; gap: 6px; }
+.section-head h2 { font: 600 22px/1.25 var(--ui); }
+.section-head p { color: var(--muted); max-width: 70ch; }
+.specimens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.spec { border-radius: 16px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; border: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.stage { padding: 28px 24px 24px; display: grid; gap: 22px; justify-items: start; }
+.lockup { display: flex; align-items: center; gap: 16px; }
+.icon { width: 76px; height: 76px; border-radius: 18px; display: grid; place-items: center; flex: none; box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 6px 16px rgba(0,0,0,.12); }
+.icon svg { width: 62px; height: 62px; }
+.wordmark { font-size: 54px; line-height: .9; }
+.sub-ko { font-size: 14px; opacity: .75; margin-top: 6px; }
+.tagline { font-size: 17px; line-height: 1.35; max-width: 26ch; }
+
+/* Mini in-app card */
+.screen { width: 100%; border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+.screen .meta { font-size: 12px; opacity: .7; }
+.screen .title { font-size: 19px; line-height: 1.2; }
+.screen .step { font-size: 14px; line-height: 1.45; }
+.screen .step b { display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; opacity: .75; font-weight: 600; }
+.chip { justify-self: start; font-size: 12px; padding: 6px 10px; border-radius: 999px; }
+
+.notes { padding: 20px 24px 24px; display: grid; gap: 16px; align-content: start; border-top: 1px solid var(--line); }
+.notes h3 { font: 600 17px/1.3 var(--ui); }
+.notes p { color: var(--muted); font-size: 14px; }
+.swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sw { display: grid; gap: 6px; min-width: 0; }
+.sw i { display: block; height: 34px; border-radius: 8px; border: 1px solid rgba(0,0,0,.08); }
+.sw span { font: 400 11px/1.3 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.sw span b { display: block; font: 500 11px/1.3 var(--ui); color: var(--fg); }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+dt { color: var(--muted); }
+dd { margin: 0; }
+.fit { font-size: 13px; color: var(--fg); }
+.fit b { font-weight: 600; }
+
+/* A — Recipe card */
+.a .stage { background: #FBFAF6; background-image: linear-gradient(#E4E9F2 1px, transparent 1px); background-size: 100% 28px; color: #1F3A7A; }
+.a .icon { background: #FBFAF6; }
+.a .wordmark { font-family: "Gaegu", "Comic Sans MS", cursive; font-weight: 700; font-size: 66px; color: #1F3A7A; }
+.a .sub-ko { font-family: "Gaegu", cursive; font-size: 18px; color: #C2412D; opacity: 1; }
+.a .tagline { font-family: "Gaegu", cursive; font-size: 22px; color: #1F3A7A; }
+.a .screen { background: #FFFFFF; border: 1px solid #DCE2EE; color: #22283A; font-family: "Nunito", system-ui, sans-serif; }
+.a .screen .title { font-family: "Gaegu", cursive; font-weight: 700; font-size: 24px; color: #1F3A7A; }
+.a .chip { background: #FCE9E4; color: #9E3322; }
+
+/* B — Onggi */
+.b .stage { background: #EFE7DC; color: #3B2A20; }
+.b .icon { background: #6A4532; }
+.b .wordmark { font-family: "Gowun Batang", Georgia, serif; font-weight: 700; color: #3B2A20; letter-spacing: -.01em; }
+.b .sub-ko { font-family: "Gowun Batang", serif; color: #6A4532; }
+.b .tagline { font-family: "Gowun Batang", Georgia, serif; color: #3B2A20; }
+.b .screen { background: #FAF6F0; border: 1px solid #DDD0BF; color: #3B2A20; font-family: "Gowun Dodum", system-ui, sans-serif; }
+.b .screen .title { font-family: "Gowun Batang", serif; font-weight: 700; }
+.b .chip { background: #DCE8E1; color: #2D5B47; }
+
+/* C — Persimmon */
+.c .stage { background: #FFF1E6; color: #2A1C14; }
+.c .icon { background: #F2782A; }
+.c .wordmark { font-family: "Bagel Fat One", "Arial Rounded MT Bold", system-ui, sans-serif; color: #2F6B3A; font-size: 58px; letter-spacing: .01em; }
+.c .sub-ko { font-family: "Bagel Fat One", sans-serif; color: #D85F17; opacity: 1; }
+.c .tagline { font-family: "Nunito", system-ui, sans-serif; font-weight: 800; color: #2A1C14; }
+.c .screen { background: #FFFFFF; border: 1px solid #F6D3BC; color: #2A1C14; font-family: "Nunito", system-ui, sans-serif; }
+.c .screen .title { font-weight: 800; }
+.c .chip { background: #2F6B3A; color: #FFFFFF; font-weight: 700; }
+
+/* Moms comparison */
+.compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.compare .stage { background: #FFF1E6; color: #2A1C14; align-content: center; }
+.compare .wordmark { font-family: "Bagel Fat One", "Arial Rounded MT Bold", sans-serif; color: #2F6B3A; font-size: 58px; }
+.compare .icon { background: #F2782A; }
+.compare .notes { border-top: 0; padding: 24px; }
+.compare ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+
+footer { color: var(--muted); font-size: 13px; max-width: 70ch; }
+
+@media (max-width: 980px) {
+  .specimens { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
+  .compare { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .verdict { grid-template-columns: minmax(0, 1fr); }
+  .wordmark { font-size: 46px; }
+  .a .wordmark { font-size: 56px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">SousLens rename · brand directions · 12 Nov 2026</span>
+    <h1>Umma <span class="ko">엄마</span>, three ways</h1>
+    <p>Three directions for the same name, each with a mark, an app icon, a palette, type, and a recipe screen from the app. Pick one, or mix parts of them, and I'll turn it into the real logo, icon set and website.</p>
+  </header>
+
+  <section class="verdict" aria-label="Name comparison">
+    <div>
+      <h2>Umma <span class="tag yes">Recommended</span></h2>
+      <ul>
+        <li>One word you can own. Nobody else in cooking is called this.</li>
+        <li>It means "mum" and sounds like "mama", so it reads even without Korean.</li>
+        <li>It's your story, which is what makes it feel real.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Moms <span class="tag no">Clear but generic</span></h2>
+      <ul>
+        <li>Everyone gets it instantly, which is its one strength.</li>
+        <li>It reads as a parenting app or a mums' group, not cooking.</li>
+        <li>It's a plain plural noun, so you can't own it in search, a domain or a trademark.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section-head">
+    <span class="eyebrow">Directions</span>
+    <h2>Same name, three personalities</h2>
+    <p>All three use the same sample: a doenjang jjigae recorded by a mum, cooked by her kid with what's in their fridge.</p>
+  </section>
+
+  <section class="specimens">
+
+    <!-- A -->
+    <article class="spec a">
+      <div class="stage">
+        <div class="lockup">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 100 100">
+              <path d="M38 40c-6-6 6-10 0-18M52 40c-6-6 6-10 0-18M66 40c-6-6 6-10 0-18" fill="none" stroke="#C2412D" stroke-width="4.5" stroke-linecap="round"/>
+              <path d="M16 50h68c0 18-14 30-34 30S16 68 16 50z" fill="#1F3A7A"/>
+              <path d="M12 50h76" stroke="#1F3A7A" stroke-width="5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="wordmark">umma</div>
+            <div class="sub-ko">엄마의 레시피</div>
+          </div>
+        </div>
+        <p class="tagline">Cook it the way she makes it.</p>
+        <div class="screen">
+          <span class="meta">Recorded by Mi-ok · 4 servings · 35 min</span>
+          <span class="title">Umma's doenjang jjigae</span>
+          <p class="step"><b>Step 3 of 7</b>Stir in the doenjang, then taste. It should be saltier than you think. The tofu will soften it.</p>
+          <span class="chip">No zucchini? Use potato, same size cubes</span>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>A · The recipe card</h3>
+        <p>Like the card in your mum's handwriting, kept in a drawer. Ballpoint blue on lined paper, with a chili-red accent for steam and tips. The most personal of the three.</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#1F3A7A"></i><span><b>Ballpoint</b>#1F3A7A</span></div>
+          <div class="sw"><i style="background:#C2412D"></i><span><b>Gochu</b>#C2412D</span></div>
+          <div class="sw"><i style="background:#FBFAF6"></i><span><b>Card</b>#FBFAF6</span></div>
+          <div class="sw"><i style="background:#E4E9F2"></i><span><b>Rule</b>#E4E9F2</span></div>
+        </div>
+        <dl>
+          <dt>Wordmark</dt><dd>Gaegu, a Korean handwriting face</dd>
+          <dt>App text</dt><dd>Nunito</dd>
+          <dt>Mark</dt><dd>A steaming bowl that doubles as the "u"</dd>
+        </dl>
+        <p class="fit"><b>Fits if</b> you want it to feel homemade and intimate. <b>Risk:</b> handwriting can look casual next to App Store competitors.</p>
+      </div>
+    </article>
+
+    <!-- B -->
+    <article class="spec b">
+      <div class="stage">
+        <div class="lockup">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 100 100">
+              <rect x="38" y="14" width="24" height="7" rx="3.5" fill="#EFE7DC"/>
+              <rect x="33" y="21" width="34" height="8" rx="4" fill="#EFE7DC"/>
+              <path d="M35 31c-12 4-17 14-17 26 0 16 10 26 20 28h24c10-2 20-12 20-28 0-12-5-22-17-26z" fill="#EFE7DC"/>
+              <path d="M25 56c6-5 12 5 19 0s12 5 19 0 10 4 13 1" fill="none" stroke="#2D5B47" stroke-width="3.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="wordmark">Umma</div>
+            <div class="sub-ko">엄마</div>
+          </div>
+        </div>
+        <p class="tagline">Recipes that get passed down, like the jar.</p>
+        <div class="screen">
+          <span class="meta">Recorded by Mi-ok · 4 servings · 35 min</span>
+          <span class="title">Umma's doenjang jjigae</span>
+          <p class="step"><b>Step 3 of 7</b>Stir in the doenjang, then taste. It should be saltier than you think. The tofu will soften it.</p>
+          <span class="chip">No zucchini? Use potato, same size cubes</span>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>B · The onggi jar</h3>
+        <p>Onggi are the clay jars Korean families keep doenjang and kimchi in, handed down for generations. It's the heirloom idea in one object. Earthy and calm, and the most premium of the three.</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#6A4532"></i><span><b>Onggi</b>#6A4532</span></div>
+          <div class="sw"><i style="background:#2D5B47"></i><span><b>Celadon</b>#2D5B47</span></div>
+          <div class="sw"><i style="background:#EFE7DC"></i><span><b>Clay</b>#EFE7DC</span></div>
+          <div class="sw"><i style="background:#3B2A20"></i><span><b>Soy</b>#3B2A20</span></div>
+        </div>
+        <dl>
+          <dt>Wordmark</dt><dd>Gowun Batang, a Korean serif</dd>
+          <dt>App text</dt><dd>Gowun Dodum</dd>
+          <dt>Mark</dt><dd>Onggi jar with a glaze line</dd>
+        </dl>
+        <p class="fit"><b>Fits if</b> you want the app to feel crafted and lasting. <b>Risk:</b> it leans Korean, so non-Korean cooks need the tagline to feel included.</p>
+      </div>
+    </article>
+
+    <!-- C -->
+    <article class="spec c">
+      <div class="stage">
+        <div class="lockup">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 100 100">
+              <circle cx="50" cy="57" r="30" fill="#FFF1E6"/>
+              <path d="M50 36c-8-10-20-8-24-4 8 2 14 6 24 4zM50 36c8-10 20-8 24-4-8 2-14 6-24 4zM50 36c-4 6-12 10-18 10 4-6 10-10 18-10zM50 36c4 6 12 10 18 10-4-6-10-10-18-10z" fill="#2F6B3A"/>
+              <path d="M50 36V24" stroke="#2F6B3A" stroke-width="5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="wordmark">umma</div>
+            <div class="sub-ko">엄마</div>
+          </div>
+        </div>
+        <p class="tagline">Your mum's recipes. Your fridge. Dinner.</p>
+        <div class="screen">
+          <span class="meta">Recorded by Mi-ok · 4 servings · 35 min</span>
+          <span class="title">Umma's doenjang jjigae</span>
+          <p class="step"><b>Step 3 of 7</b>Stir in the doenjang, then taste. It should be saltier than you think. The tofu will soften it.</p>
+          <span class="chip">No zucchini? Use potato, same size cubes</span>
+        </div>
+      </div>
+      <div class="notes">
+        <h3>C · The persimmon</h3>
+        <p>Persimmons (감) are the fruit mums hand you in autumn. Bright orange and leaf green, a chunky rounded wordmark, and the most commercial of the three. It stands out on a home screen.</p>
+        <div class="swatches">
+          <div class="sw"><i style="background:#F2782A"></i><span><b>Persimmon</b>#F2782A</span></div>
+          <div class="sw"><i style="background:#2F6B3A"></i><span><b>Leaf</b>#2F6B3A</span></div>
+          <div class="sw"><i style="background:#FFF1E6"></i><span><b>Flesh</b>#FFF1E6</span></div>
+          <div class="sw"><i style="background:#2A1C14"></i><span><b>Seed</b>#2A1C14</span></div>
+        </div>
+        <dl>
+          <dt>Wordmark</dt><dd>Bagel Fat One, a Korean display face</dd>
+          <dt>App text</dt><dd>Nunito</dd>
+          <dt>Mark</dt><dd>Persimmon with its four-leaf calyx</dd>
+        </dl>
+        <p class="fit"><b>Fits if</b> you want broad, friendly and easy to market. <b>Risk:</b> the least "heirloom" of the three; it carries warmth more than history.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="section-head">
+    <span class="eyebrow">For comparison</span>
+    <h2>"Moms", set the same way</h2>
+  </section>
+
+  <section class="compare">
+    <div class="stage">
+      <div class="lockup">
+        <div class="icon" aria-hidden="true">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="57" r="30" fill="#FFF1E6"/>
+            <path d="M50 36c-8-10-20-8-24-4 8 2 14 6 24 4zM50 36c8-10 20-8 24-4-8 2-14 6-24 4zM50 36c-4 6-12 10-18 10 4-6 10-10 18-10zM50 36c4 6 12 10 18 10-4-6-10-10-18-10z" fill="#2F6B3A"/>
+            <path d="M50 36V24" stroke="#2F6B3A" stroke-width="5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="wordmark">moms</div>
+      </div>
+    </div>
+    <div class="notes">
+      <h3>Same look, weaker name</h3>
+      <ul>
+        <li>Without the icon, "moms" says nothing about food. It could be a parenting forum or a daycare app.</li>
+        <li>"Moms" makes the user the mum. "Umma" makes the recipe hers, which is the product.</li>
+        <li>Commercially, a distinctive word is easier to market than a common one. People search for "Umma app"; nobody can find "Moms app".</li>
+        <li>If clarity is the worry, keep Umma and let the tagline do the explaining.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    These are first-pass directions, not final artwork. The marks are simple placeholders to show the idea. Once you pick a direction, I'll draw the real logo, an iOS icon in every size, and dark-mode colors, then build the website in the same style.
+  </footer>
+
+</div>
+</body>
+</html>

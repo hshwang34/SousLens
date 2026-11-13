@@ -214,3 +214,18 @@ CI (macOS) is now free, so it can run on every iOS PR instead of manual dispatch
 - Brief 007's hold-to-talk iOS voice is superseded by brief 012.
 
 *Lives in:* `docs/product/briefs/012-voice-mode.md`, `docs/product/design/voice-options.html`.
+
+#23 · 2026-11-12 · **SousLens is renamed Umma (엄마), persimmon brand.**
+- **Name:** Umma (Korean for "mum"). The product grew out of mums handing down their recipes.
+  "Moms" and "Sous Chef" were rejected as generic. Older entries above keep the old name as written.
+- **Brand:** direction C from `docs/brand/umma-directions.html`: persimmon orange, leaf green,
+  the chunky Bagel Fat One wordmark, and a persimmon mark with a four-leaf calyx.
+- **App type:** Bagel Fat One for the logo and large screen titles only. SF Pro and SF Rounded
+  everywhere else.
+- **Bundle ID:** `com.umma.ios` (changed before any App Store Connect record exists).
+- **Repo and folder:** `hshwang34/SousLens` → `hshwang34/Umma` and `Projects/SousLens` →
+  `Projects/Umma`, done as the last step once no session runs in the old folder.
+- **Portrait cooking:** safety and allergy notices stay visible as one compact line under the
+  step. The creator tip and "not an exact match" fold into a notes chip. Adapted/Show original
+  moves into the ⋯ menu. The step text comes first and never sits under the controls.
+*Lives in:* `docs/product/briefs/013-umma-rebrand.md`.
