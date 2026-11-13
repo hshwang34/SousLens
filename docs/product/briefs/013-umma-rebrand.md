@@ -1,6 +1,6 @@
 # 013 — Rebrand to Umma (persimmon) + calm portrait cooking
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-11-12
+**Status:** shipped (repo + folder rename pending) · **Owner:** PM · **PR:** #14, #15, #16 · **Updated:** 2026-11-12
 
 ## Problem
 "SousLens" reads as an AI-generated name and says nothing about the idea the product came from:
