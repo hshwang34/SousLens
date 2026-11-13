@@ -452,7 +452,7 @@ struct CookingView: View {
             }
         } label: {
             if model.isSending {
-                ProgressView().tint(SLColor.onAccent)
+                ProgressView().tint(SLColor.onBrand)
             } else {
                 Label(model.nextTitle, systemImage: model.isLastStep ? "flag.checkered" : "chevron.right")
                     .labelStyle(TrailingIconLabelStyle())
@@ -929,7 +929,7 @@ struct ToastView: View {
 }
 
 /// Oversized cooking controls (PRD §6.1: the phone may be propped at a distance).
-/// `.primary` is a solid herb-green capsule (Next, Start, Resume); `.glass` sits on glass.
+/// `.primary` is a solid brand capsule (Next, Start, Resume), matching the app primary button; `.glass` sits on glass.
 struct CookingButtonStyle: ButtonStyle {
     enum Kind { case primary, glass }
     let kind: Kind
@@ -948,9 +948,9 @@ struct CookingButtonStyle: ButtonStyle {
             switch kind {
             case .primary:
                 label
-                    .foregroundStyle(SLColor.onAccent)
-                    .background(SLColor.accent, in: Capsule())
-                    .shadow(color: SLColor.accent.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
+                    .foregroundStyle(SLColor.onBrand)
+                    .background(SLColor.brand, in: Capsule())
+                    .shadow(color: SLColor.brand.opacity(isEnabled ? 0.35 : 0), radius: 12, y: 6)
             case .glass:
                 label
                     .foregroundStyle(SLColor.accent)
