@@ -14,7 +14,7 @@
   content differs from the latest version it is published as the next version;
   ``seeded_recipes/history/<slug>/v<N>.json`` holds earlier contents so fresh and existing
   databases end up with identical versions (brief 005: the gochujang marinade fix is v2).
-* Owned by the seeded creator ``creator@souslens.dev``.
+* Owned by the seeded creator ``creator@umma.dev``.
 * IDs are deterministic (uuid5) and each fixture carries its own ``published_at`` so
   ``fixtures/expected_outputs`` (and the feed order) stays stable.
 
@@ -51,9 +51,9 @@ from app.domains.recipes.schemas import IngredientOut, StepOut
 from app.domains.substitutions.rules import read_rules_file
 from app.domains.users import service as users_service
 
-log = logging.getLogger("souslens.seed")
+log = logging.getLogger("umma.seed")
 
-SEED_CREATOR_EMAIL = "creator@souslens.dev"
+SEED_CREATOR_EMAIL = "creator@umma.dev"
 SEED_NAMESPACE = uuid.UUID("6f1c2a4e-9d3b-4b8e-9a7c-2d5e8f0b1c3a")
 SEED_PUBLISHED_AT = datetime(2026, 10, 15, 0, 0, 0, tzinfo=UTC)
 

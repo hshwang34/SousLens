@@ -40,7 +40,7 @@ from app.domains.pantry.schemas import CandidateOut, ConfidenceBin, ObservationO
 from app.domains.pantry.service import lock_user
 from app.domains.safety.content import makes_model_claim, strip_model_claims
 
-log = logging.getLogger("souslens.pantry.observations")
+log = logging.getLogger("umma.pantry.observations")
 
 OBSERVATION_TTL = timedelta(hours=24)
 PROVIDER_TIMEOUT_SECONDS = 30.0

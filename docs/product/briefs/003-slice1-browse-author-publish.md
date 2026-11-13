@@ -22,7 +22,7 @@ Creator (friend / enthusiastic cook) writing a recipe by hand; learner browsing 
 - [ ] `POST/DELETE /v1/recipes/{id}/save` idempotent (REC-02); `GET /v1/me/saved`.
 - [ ] Search matches title and ingredient names (REC-02).
 - [ ] Unpublish hides from feed; prior versions remain fetchable by id (REC-05).
-- [ ] Share link `souslens://recipe/{id}` + `https://souslens.app/r/{id}` universal-link stub handled
+- [ ] Share link `umma://recipe/{id}` + `https://umma.app/r/{id}` universal-link stub handled
       by the app (REC-01).
 - [ ] iOS: Creator editor (metadata, ingredient editor with quantity/unit/optional/preparation,
       step editor with cues/warnings/notes, reorder), draft autosave, preview, Publish with
@@ -47,10 +47,10 @@ Video import/extraction (Slice 5), forks/follows (P1), ratings.
 - `recipe_versions` is append-only via DB triggers (migration 0002): a row-level BEFORE UPDATE/DELETE
   trigger and a statement-level BEFORE TRUNCATE trigger (row triggers skip TRUNCATE, including
   `TRUNCATE … CASCADE` from `recipes`/`users`). Both honour one transaction-local escape hatch,
-  `SET LOCAL souslens.unlock_versions = 'on'`; the app never sets it (the test reset does).
+  `SET LOCAL umma.unlock_versions = 'on'`; the app never sets it (the test reset does).
 - **PRIV-02 (data controls) must unlock explicitly.** Any account/recipe deletion flow cascades from
   `users`/`recipes` into `recipe_versions` and will be refused by the triggers. That flow must run
-  `SET LOCAL souslens.unlock_versions = 'on'` inside its own transaction, and should first decide
+  `SET LOCAL umma.unlock_versions = 'on'` inside its own transaction, and should first decide
   the policy for versions pinned by other users' sessions (`cooking_sessions.recipe_version_id` is
   `ON DELETE RESTRICT`).
 - One open draft per recipe: `start_edit` locks the recipe row and a partial unique index
@@ -81,9 +81,9 @@ Video import/extraction (Slice 5), forks/follows (P1), ratings.
 - Publish always goes through a "Publish version N?" confirmation, flushes pending edits first, is
   refused after a failed save, and after a network drop re-reads the draft before reporting failure.
 - Share links are built by the app from the recipe id; a server-supplied `share_url` is never shown
-  or shared. `souslens.app` link pages aren't live; the success screen says so.
+  or shared. `umma.app` link pages aren't live; the success screen says so.
 - Published drafts open read-only; edited steps keep their original evidence origin.
-- Deep links: `souslens://recipe/{uuid}` and `https://souslens.app/r/{uuid}` only; applied after
+- Deep links: `umma://recipe/{uuid}` and `https://umma.app/r/{uuid}` only; applied after
   sign-in if received while signed out; cleared on server change.
 - Live smoke (`make ios-smoke`) resets the session with `-auth.hasLaunched NO` and covers
   author → publish → search → save → Saved. Each run publishes a "Smoke Garlic Toast" recipe to the

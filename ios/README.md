@@ -1,15 +1,15 @@
-# SousLens iOS
+# Umma iOS
 
 SwiftUI app (iOS 17.2+, Swift 6 language mode, no third-party packages). The Xcode project is
 **generated** from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen); never edit
-`SousLens.xcodeproj` by hand (it is gitignored).
+`Umma.xcodeproj` by hand (it is gitignored).
 
 ## Run it
 
 ```bash
 brew install xcodegen            # once
-make ios-project                 # regenerates SousLens.xcodeproj from ios/project.yml
-open ios/SousLens.xcodeproj      # pick an iPhone simulator, ⌘R
+make ios-project                 # regenerates Umma.xcodeproj from ios/project.yml
+open ios/Umma.xcodeproj      # pick an iPhone simulator, ⌘R
 ```
 
 Start the backend first so there is something to sign in to:
@@ -62,10 +62,10 @@ cues and warnings.
 - **Save:** Save/Unsave on the detail screen flips immediately and rolls back with an inline message
   if the idempotent POST/DELETE fails. The **Saved** tab is `GET /v1/me/saved` and refreshes
   whenever a save changes anywhere in the app.
-- **Share / deep links:** `souslens://recipe/{id}` (registered in `CFBundleURLTypes`) and
-  `https://souslens.app/r/{id}` (exact host only; associated-domains entry is a stub, the domain is not live) both
+- **Share / deep links:** `umma://recipe/{id}` (registered in `CFBundleURLTypes`) and
+  `https://umma.app/r/{id}` (exact host only; associated-domains entry is a stub, the domain is not live) both
   open the recipe on the Explore stack from any tab. A link that arrives while signed out is
-  applied after sign-in. Try it: `xcrun simctl openurl booted souslens://recipe/<recipe-id>`.
+  applied after sign-in. Try it: `xcrun simctl openurl booted umma://recipe/<recipe-id>`.
 - Search placeholder is "Search recipes or ingredients" (the backend matches title or ingredient).
 
 ## Slice 2: pantry capture and fit (brief 004)
@@ -228,7 +228,7 @@ make ios-check                   # xcodegen generate + xcodebuild test on "iPhon
 make ios-smoke                   # live XCUITests (needs `make backend-dev` + `make seed`); not in ios-check
 ```
 
-`SousLensSmoke` (separate scheme, never in `SousLens`) has five tests: sign in → open the seeded
+`UmmaSmoke` (separate scheme, never in `Umma`) has five tests: sign in → open the seeded
 recipe; `testAuthorPublishAndSave` (Profile → Create recipe → title, one ingredient, one step →
 Publish → confirm → find it via Explore search → Save → see it in Saved); and
 `testTypeIntoPantryAndCheckFit` (Pantry → Speak → Type instead → "chicken thighs, two onions,
@@ -272,9 +272,9 @@ On a device, the app starts with **no** server configured and asks for one; the 
 ## Layout
 
 ```
-SousLens/
-  App/            SousLensApp, AppEnvironment (composition root), RootView (sign-in vs tabs)
-  App/DeepLink    souslens:// and souslens.app/r/{id} parsing (`DeepLink`, `ShareLinks`)
+Umma/
+  App/            UmmaApp, AppEnvironment (composition root), RootView (sign-in vs tabs)
+  App/DeepLink    umma:// and umma.app/r/{id} parsing (`DeepLink`, `ShareLinks`)
   Features/       Explore, Recipe (detail, pantry fit, swap sheet), Cooking (cooking screen,
                   assistant drawer, session end, resume banner/pill), Creator (draft editor, ingredient/step
                   editors, publish confirmation, preview), Saved, Pantry, Profile (my recipes,
@@ -287,7 +287,7 @@ SousLens/
   Services/Cooking SessionCommandSender (idempotency keys), CookingSessionStore (resume, epoch)
   DesignSystem/   SLColor / SLFont / Spacing tokens, RecipeCard, MetadataPill, EmptyStateView
   Resources/      Assets.xcassets (light/dark color tokens), generated Info.plist, entitlements
-SousLensTests/    unit tests + Fixtures/ (recipe_detail.json, recipes_list.json)
+UmmaTests/    unit tests + Fixtures/ (recipe_detail.json, recipes_list.json)
 ```
 
 ## Capture adapters: what the simulator cannot prove
@@ -325,5 +325,5 @@ behaviours are **device-only** and must be checked on an iPhone before Slice 4 r
 - Capture adapters sit behind `UserDefaults` feature flags (`feature.capture.phoneCamera`,
   `feature.capture.phoneSpeech`, `feature.capture.systemAudio`, default on); off → the fake adapter
   is injected.
-- Logs: `os.Logger` subsystem `com.souslens.ios`, categories `api`, `auth`, `editor`, `camera`, `speech`.
-  Filter in Console.app or `xcrun simctl spawn booted log stream --predicate 'subsystem == "com.souslens.ios"'`.
+- Logs: `os.Logger` subsystem `com.umma.ios`, categories `api`, `auth`, `editor`, `camera`, `speech`.
+  Filter in Console.app or `xcrun simctl spawn booted log stream --predicate 'subsystem == "com.umma.ios"'`.

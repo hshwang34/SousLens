@@ -31,7 +31,7 @@ async def test_publish_v1_creates_recipe_version_and_detail_equals_snapshot(
     alice = await bearer(client, "alice@example.com")
     result = await publish_new(client, alice)
     assert result["version_number"] == 1
-    assert result["share_url"] == f"https://souslens.app/r/{result['recipe_id']}"
+    assert result["share_url"] == f"https://umma.app/r/{result['recipe_id']}"
     assert set(result) - {"draft"} == {
         "recipe_id",
         "recipe_version_id",

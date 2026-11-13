@@ -73,8 +73,8 @@ def test_prod_with_apple_auth_is_allowed() -> None:
 @pytest.mark.parametrize(
     "override, match",
     [
-        ({"storage_access_key_id": "souslens-dev"}, "STORAGE_ACCESS_KEY_ID"),
-        ({"storage_secret_access_key": "souslens-dev-secret"}, "STORAGE_ACCESS_KEY_ID"),
+        ({"storage_access_key_id": "umma-dev"}, "STORAGE_ACCESS_KEY_ID"),
+        ({"storage_secret_access_key": "umma-dev-secret"}, "STORAGE_ACCESS_KEY_ID"),
         ({"storage_endpoint_url": "http://localhost:9000"}, "https://"),
         ({"storage_endpoint_url": None}, "https://"),
     ],

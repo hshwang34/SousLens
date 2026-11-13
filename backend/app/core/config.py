@@ -27,8 +27,8 @@ REPO_DIR = BACKEND_DIR.parent
 APP_VERSION = "0.1.0"
 MIN_JWT_SECRET_BYTES = 32
 # Matches the MinIO container in backend/docker-compose.yml; refused in prod.
-DEV_STORAGE_ACCESS_KEY = "souslens-dev"
-DEV_STORAGE_SECRET_KEY = "souslens-dev-secret"
+DEV_STORAGE_ACCESS_KEY = "umma-dev"
+DEV_STORAGE_SECRET_KEY = "umma-dev-secret"
 
 
 class Settings(BaseSettings):
@@ -38,13 +38,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "souslens"
+    app_name: str = "umma"
     app_version: str = APP_VERSION
     environment: Literal["dev", "test", "prod"] = "dev"
     log_level: str = "INFO"
 
-    database_url: str = "postgresql+asyncpg://souslens:souslens@localhost:5433/souslens"
-    test_database_url: str = "postgresql+asyncpg://souslens:souslens@localhost:5433/souslens_test"
+    database_url: str = "postgresql+asyncpg://umma:umma@localhost:5433/umma"
+    test_database_url: str = "postgresql+asyncpg://umma:umma@localhost:5433/umma_test"
     db_echo: bool = False
 
     jwt_secret: str
@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     # Host the *phone* uses for presigned URLs when it differs from the backend's own route to
     # the store (e.g. a LAN IP for a device build in dev). Defaults to storage_endpoint_url.
     storage_public_endpoint_url: str | None = None
-    storage_bucket: str = "souslens-media"
+    storage_bucket: str = "umma-media"
     storage_region: str = "auto"
     storage_addressing_style: Literal["path", "virtual", "auto"] = "path"
     storage_access_key_id: SecretStr = SecretStr(DEV_STORAGE_ACCESS_KEY)
@@ -119,8 +119,8 @@ class Settings(BaseSettings):
     fixtures_dir: Path = REPO_DIR / "fixtures"
 
     # Public share link base (brief 003): share_url = f"{share_url_base}/{recipe_id}".
-    # The domain is not live yet; the iOS app also accepts souslens://recipe/{recipe_id}.
-    share_url_base: str = "https://souslens.app/r"
+    # The domain is not live yet; the iOS app also accepts umma://recipe/{recipe_id}.
+    share_url_base: str = "https://umma.app/r"
 
     cors_origins: list[str] = Field(default_factory=list)
 

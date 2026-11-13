@@ -1,4 +1,4 @@
-# SousLens backend
+# Umma backend
 
 FastAPI + SQLAlchemy 2 (async, asyncpg) + Postgres 16, managed with `uv` on Python 3.12.
 `AI_PROVIDER=mock` is the default and needs no keys.
@@ -8,7 +8,7 @@ FastAPI + SQLAlchemy 2 (async, asyncpg) + Postgres 16, managed with `uv` on Pyth
 ```bash
 make env                       # .env from ../.env.example with a random JWT_SECRET; AUTH_MODE and
                                # JWT_SECRET are required (the app refuses to start without them)
-make db-up                     # postgres:16 in docker, creates souslens + souslens_test
+make db-up                     # postgres:16 in docker, creates umma + umma_test
 make seed                      # alembic upgrade head, then fixtures/ingredients.json (upsert)
                                # and fixtures/seeded_recipes/*.json
 make dev                       # http://localhost:8000/v1/health  (docs at /docs)
@@ -20,7 +20,7 @@ one-time code is printed to the **server log**, never returned by the API.
 
 ```bash
 # 1. ask for a code (202). Watch the `make dev` terminal for a JSON line like
-#    {"logger":"souslens.devlogin","message":"dev sign-in code","email":"tester@example.com","code":"483920",...}
+#    {"logger":"umma.devlogin","message":"dev sign-in code","email":"tester@example.com","code":"483920",...}
 curl -s -X POST localhost:8000/v1/auth/dev-login \
   -H 'content-type: application/json' -d '{"email":"tester@example.com"}'
 # → {"challenge_id":"<uuid>","expires_in_seconds":600,"hint":"Check the server log for your sign-in code."}
@@ -76,7 +76,7 @@ Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
 | GET/DELETE | `/recipe-versions/{version_id}/my-variation` | private saved swaps (Session adaptation shape) / 204 |
 
 `recipe_versions` is append-only: a `BEFORE UPDATE OR DELETE` trigger (migration 0002) raises on
-every row. Operator repairs need `SET LOCAL souslens.unlock_versions = 'on'` in the same
+every row. Operator repairs need `SET LOCAL umma.unlock_versions = 'on'` in the same
 transaction; the app never sets it.
 
 ## Check
@@ -85,7 +85,7 @@ transaction; the app never sets it.
 make check                     # ruff check + ruff format --check + pytest
 ```
 
-Integration tests use `TEST_DATABASE_URL` (default: the compose `souslens_test` DB), run the
+Integration tests use `TEST_DATABASE_URL` (default: the compose `umma_test` DB), run the
 alembic migration at session start and truncate every table between tests.
 
 ## Layout

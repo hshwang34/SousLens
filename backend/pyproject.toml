@@ -1,7 +1,7 @@
 [project]
-name = "souslens-backend"
+name = "umma-backend"
 version = "0.1.0"
-description = "SousLens FastAPI backend"
+description = "Umma FastAPI backend"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",

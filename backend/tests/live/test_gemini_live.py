@@ -1,6 +1,6 @@
 """Opt-in live smoke against the real Gemini API (brief 007): ``make ai-live-smoke``.
 
-Skipped unless ``SOUSLENS_LIVE_SMOKE=1`` **and** ``GEMINI_API_KEY`` are set, so a key in the
+Skipped unless ``UMMA_LIVE_SMOKE=1`` **and** ``GEMINI_API_KEY`` are set, so a key in the
 environment never makes ``make check`` spend money. Three small calls (coach, pantry
 transcript on the lite model, inspect with a 32x32 generated image) are metered with the same
 ``UsageMeter`` the cost guard uses; the run fails if they cost $0.05 or more.
@@ -32,9 +32,9 @@ from app.ai.providers.gemini import GeminiProvider, GenAITransport
 from app.core.config import Settings
 from tests.conftest import TEST_JWT_SECRET
 
-LIVE = os.environ.get("SOUSLENS_LIVE_SMOKE") == "1" and bool(os.environ.get("GEMINI_API_KEY"))
+LIVE = os.environ.get("UMMA_LIVE_SMOKE") == "1" and bool(os.environ.get("GEMINI_API_KEY"))
 pytestmark = pytest.mark.skipif(
-    not LIVE, reason="live smoke: set SOUSLENS_LIVE_SMOKE=1 and GEMINI_API_KEY (make ai-live-smoke)"
+    not LIVE, reason="live smoke: set UMMA_LIVE_SMOKE=1 and GEMINI_API_KEY (make ai-live-smoke)"
 )
 BUDGET_USD = Decimal("0.05")
 RECORD_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "gemini" / "recorded"

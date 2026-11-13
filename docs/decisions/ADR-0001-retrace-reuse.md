@@ -15,18 +15,18 @@ server-authoritative Step Oracle, Postgres, per-user ownership).
 
 Fresh repositories with the PRD §16.1 layout. Port specific, proven modules and patterns:
 
-| Retrace module | SousLens use | Slice |
+| Retrace module | Umma use | Slice |
 |---|---|---|
 | `services/video_probe.py`, `clip_extractor.py` | `backend/app/media/` ffprobe validation + per-step clips, fault-tolerant per step | 5 |
 | `services/gemini_processor.py` (Files API upload + structured output + timestamp clamping) | `backend/app/ai/extractor/gemini.py` behind `RecipeExtractor` | 5 |
 | `services/ephemeral_token.py` | `POST /v1/ai/live-token` (P1 route, feature-gated) | 4/P1 |
 | `services/prompt_builder.py` current-step-only prompt | Cooking Coach grounding packet (PRD §8.5) | 3–4 |
 | `services/session.py` tool dispatcher shape | Step Oracle *proposal* parsing (never direct mutation) | 3 |
-| iOS `BonjourDiscovery`, server-settings override | `ios/SousLens/Services/API` | 0 |
+| iOS `BonjourDiscovery`, server-settings override | `ios/Umma/Services/API` | 0 |
 | iOS Gemini Live WebSocket client, `goAway` reconnect | Slice 4 `SpeechInput`/`AudioOutput` Live adapter | 4 |
 | iOS DAT wiring (`Wearables.configure`, MockDeviceKit, preview/frame grab) | `MetaGlassesCameraSource` | 6 |
-| Token-driven Asset Catalog, type scale, "tool not toy" rigor | `ios/SousLens/DesignSystem` with warmer tokens | 0–1 |
-| TestFlight CI (Fastlane match + tag trigger) | Reproduce for `com.souslens.ios` when the PM asks | 7 |
+| Token-driven Asset Catalog, type scale, "tool not toy" rigor | `ios/Umma/DesignSystem` with warmer tokens | 0–1 |
+| TestFlight CI (Fastlane match + tag trigger) | Reproduce for `com.umma.ios` when the PM asks | 7 |
 
 Not ported: troubleshoot mode, hand tracking, HUD design system, PDF manual ingest, SQLite store,
 in-memory sessions, global (unowned) procedures.

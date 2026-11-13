@@ -1,9 +1,11 @@
-# SousLens — one entry point for checks and dev loops. See CLAUDE.md.
+# Umma — one entry point for checks and dev loops. See CLAUDE.md.
 SHELL := /bin/bash
 SIM ?= iPhone 15
-# Newest installed runtime that has a simulator named $(SIM). A bare `name=` resolves to OS:latest,
-# which fails whenever the newest runtime lacks that model (e.g. iPhone 15 only ships with iOS 17.x).
-SIM_OS ?= $(shell ios/scripts/sim-os.sh "$(SIM)")
+# $(SIM) on the newest runtime that has it (a bare `name=` resolves to OS:latest, which fails when
+# that model only ships with an older runtime). Machines without $(SIM) fall back to a stock iPhone
+# on the newest installed runtime; see ios/scripts/sim-pick.sh. CI passes SIM explicitly.
+SIM_NAME := $(shell ios/scripts/sim-pick.sh name "$(SIM)")
+SIM_OS ?= $(shell ios/scripts/sim-pick.sh os "$(SIM)")
 
 .PHONY: check backend-check ai-live-smoke ios-check ios-smoke env db-up db-down backend-dev backend-worker seed ios-project
 
@@ -39,17 +41,17 @@ ios-project:
 # Ad-hoc signing (identity "-") needs no certificate or profile, but unlike CODE_SIGNING_ALLOWED=NO
 # it embeds the keychain-access-groups entitlement, which the simulator Keychain requires (-34018).
 ios-check: ios-project
-	cd ios && xcodebuild test -project SousLens.xcodeproj -scheme SousLens \
-		-destination 'platform=iOS Simulator,name=$(SIM),OS=$(SIM_OS)' \
+	cd ios && xcodebuild test -project Umma.xcodeproj -scheme Umma \
+		-destination 'platform=iOS Simulator,name=$(SIM_NAME),OS=$(SIM_OS)' \
 		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -quiet
 
 # Live smoke: fresh install → two-step dev sign-in (code read from the backend log) → seeded
 # recipe. Needs `make backend-dev` running with its log at SMOKE_LOG (default below).
 SMOKE_LOG ?= $(CURDIR)/backend/dev.log
-SMOKE_UDID = $$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print([x['udid'] for k,v in d['devices'].items() if k.endswith('iOS-$(subst .,-,$(SIM_OS))') for x in v if x['name']=='$(SIM)'][0])")
+SMOKE_UDID = $$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin); print([x['udid'] for k,v in d['devices'].items() if k.endswith('iOS-$(subst .,-,$(SIM_OS))') for x in v if x['name']=='$(SIM_NAME)'][0])")
 ios-smoke: ios-project
-	cd ios && UDID=$(SMOKE_UDID); xcrun simctl boot "$$UDID" 2>/dev/null; xcrun simctl uninstall "$$UDID" com.souslens.ios 2>/dev/null; \
-	xcodebuild test -project SousLens.xcodeproj -scheme SousLensSmoke \
-		-destination 'platform=iOS Simulator,name=$(SIM),OS=$(SIM_OS)' \
+	cd ios && UDID=$(SMOKE_UDID); xcrun simctl boot "$$UDID" 2>/dev/null; xcrun simctl uninstall "$$UDID" com.umma.ios 2>/dev/null; \
+	xcodebuild test -project Umma.xcodeproj -scheme UmmaSmoke \
+		-destination 'platform=iOS Simulator,name=$(SIM_NAME),OS=$(SIM_OS)' \
 		CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
-		SOUSLENS_SMOKE_LOG="$(SMOKE_LOG)" -quiet
+		UMMA_SMOKE_LOG="$(SMOKE_LOG)" -quiet

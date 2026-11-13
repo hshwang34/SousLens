@@ -61,7 +61,7 @@ async def test_trigger_blocks_cascade_delete_from_recipe(db_session: AsyncSessio
 
 async def test_operator_unlock_is_transaction_local(db_session: AsyncSession) -> None:
     version_id = await _version_id(db_session)
-    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("set local umma.unlock_versions = 'on'"))
     await db_session.execute(
         text("update recipe_versions set servings = 99 where id = :id"), {"id": version_id}
     )
@@ -96,7 +96,7 @@ async def test_truncate_is_blocked_even_with_cascade(db_session: AsyncSession) -
 
 async def test_truncate_honours_the_operator_unlock(db_session: AsyncSession) -> None:
     await _version_id(db_session)
-    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("set local umma.unlock_versions = 'on'"))
     await db_session.execute(text("truncate recipe_versions cascade"))
     await db_session.commit()
     count = (await db_session.execute(text("select count(*) from recipe_versions"))).scalar_one()

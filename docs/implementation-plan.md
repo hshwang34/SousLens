@@ -5,7 +5,7 @@ homes; writers may add files but should not move these without updating this tab
 
 | Req | Slice | Backend | iOS | Tests |
 |---|---|---|---|---|
-| AUTH-01 | 0 | `app/core/security.py`, `app/api/v1/auth.py`, `app/domains/users` | `Services/Auth`, `Features/Profile/SignInView` | `tests/integration/test_auth.py` (isolation, 401/403), `SousLensTests/AuthTests` |
+| AUTH-01 | 0 | `app/core/security.py`, `app/api/v1/auth.py`, `app/domains/users` | `Services/Auth`, `Features/Profile/SignInView` | `tests/integration/test_auth.py` (isolation, 401/403), `UmmaTests/AuthTests` |
 | REC-01 | 0/1 | `app/api/v1/recipes.py` (list/detail), seed script | `Features/Explore`, `Features/Recipe/RecipeDetailView` | `test_recipes_public.py`, DTO decode tests |
 | REC-02 | 1 | `recipes.py` search; `saves` table + `/save` | Explore search, Saved tab | idempotent save test |
 | REC-03 | 1 | `app/domains/recipes/drafts.py`, `/recipes/drafts` | `Features/Creator/{DraftEditor,IngredientEditor,StepEditor}` | draft CRUD + validation tests |

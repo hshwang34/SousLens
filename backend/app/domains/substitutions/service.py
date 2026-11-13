@@ -69,7 +69,7 @@ from app.domains.substitutions.schemas import (
 )
 from app.domains.users import preferences
 
-log = logging.getLogger("souslens.substitutions")
+log = logging.getLogger("umma.substitutions")
 
 MAX_SUGGESTIONS = 3
 MAX_LIVE_SUGGESTIONS = 200  # per user; older served suggestions are dropped

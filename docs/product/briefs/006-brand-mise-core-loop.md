@@ -5,7 +5,7 @@
 ## Problem
 The app works, but it looks like a stock SwiftUI prototype. There are bordered rectangle cards,
 a generic tint, no hierarchy on Explore and no motion. Cooking mode carries about 250pt of
-opaque chrome under the step. Nothing says "SousLens", and nothing makes the moments that matter
+opaque chrome under the step. Nothing says "Umma", and nothing makes the moments that matter
 (you can make this, step done, timer finished) feel good. The pilot needs a product people want
 to open.
 

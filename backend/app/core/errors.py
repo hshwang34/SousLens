@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import CORRELATION_HEADER, get_correlation_id
 
-log = logging.getLogger("souslens.errors")
+log = logging.getLogger("umma.errors")
 
 
 class AppError(Exception):

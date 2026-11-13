@@ -21,7 +21,7 @@ from app.core.security import DevAuthProvider
 from app.db.engine import make_engine, make_sessionmaker
 from app.media.storage import build_storage
 
-log = logging.getLogger("souslens.app")
+log = logging.getLogger("umma.app")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -49,7 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.dispose()
 
     app = FastAPI(
-        title="SousLens API",
+        title="Umma API",
         version=settings.app_version,
         lifespan=lifespan,
         docs_url="/docs" if settings.environment != "prod" else None,

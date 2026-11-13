@@ -1,4 +1,4 @@
-# SousLens backend. Run from this directory or via `make -C backend <target>`.
+# Umma backend. Run from this directory or via `make -C backend <target>`.
 SHELL := /bin/bash
 UV ?= uv
 PORT ?= 8000
@@ -42,4 +42,4 @@ seed: migrate
 # GEMINI_API_KEY in the environment; skipped without it. GEMINI_RECORD=1 saves the responses.
 ai-live-smoke:
 	@test -n "$$GEMINI_API_KEY" || echo "GEMINI_API_KEY is not set: the live smoke will be skipped"
-	SOUSLENS_LIVE_SMOKE=1 $(UV) run --locked pytest tests/live -q -s -p no:cacheprovider
+	UMMA_LIVE_SMOKE=1 $(UV) run --locked pytest tests/live -q -s -p no:cacheprovider

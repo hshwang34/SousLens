@@ -16,9 +16,9 @@ A tester on an iPhone simulator (and later a device on the same Wi-Fi as the bac
 - Empty states say "Try the demo recipe" / "Add pantry item" (PRD §6.1).
 
 ## Acceptance criteria
-- [ ] `ios/project.yml` (XcodeGen) → `SousLens.xcodeproj`; app target `SousLens`
-      (bundle `com.souslens.ios`, team `V56DG94ZL5`, iOS 17.2+, Swift 6 language mode), test target
-      `SousLensTests`. `make ios-check` builds and runs tests on an iPhone 15 simulator with
+- [ ] `ios/project.yml` (XcodeGen) → `Umma.xcodeproj`; app target `Umma`
+      (bundle `com.umma.ios`, team `V56DG94ZL5`, iOS 17.2+, Swift 6 language mode), test target
+      `UmmaTests`. `make ios-check` builds and runs tests on an iPhone 15 simulator with
       `CODE_SIGNING_ALLOWED=NO`.
 - [ ] Bottom tabs Explore / Saved / Pantry / Profile (PRD §6). Saved and Pantry are empty-state
       placeholders with the required copy; Profile shows the signed-in user and Sign out.
@@ -27,7 +27,7 @@ A tester on an iPhone simulator (and later a device on the same Wi-Fi as the bac
 - [ ] `APIClient` (async/await, `URLSession`) with typed Codable DTOs mirroring the backend's
       canonical recipe JSON, PRD error envelope decoding, `X-Correlation-Id` logging, and a
       `ServerSettings` screen (gear on Profile) to override the base URL
-      (default `http://localhost:8000` in simulator). Optional Bonjour `_souslens._tcp` discovery
+      (default `http://localhost:8000` in simulator). Optional Bonjour `_umma._tcp` discovery
       ported from Retrace if cheap; otherwise manual only.
 - [ ] Explore: list of recipe cards (title, creator, prep+cook time, tags) with search field
       wired to `?query=`; pull to refresh; loading/error/empty states.
@@ -64,7 +64,7 @@ None blocking.
   `CODE_SIGNING_ALLOWED=NO`: an unsigned simulator host app cannot use the Keychain (-34018), so
   the token-store tests would not run. The simulator OS is auto-detected (`ios/scripts/sim-os.sh`)
   because a bare `name=iPhone 15` resolves to the newest runtime, which has no iPhone 15.
-- `SousLens.xcodeproj` is gitignored; it is a pure XcodeGen artifact and CI regenerates it.
+- `Umma.xcodeproj` is gitignored; it is a pure XcodeGen artifact and CI regenerates it.
 - Bonjour discovery skipped in Slice 0 (manual URL + simulator default suffice; the backend does
   not advertise yet). Revisit when a physical device joins the pilot.
 - Health response no longer carries `auth_mode` (backend hardening); the DTO was trimmed to match.
@@ -75,7 +75,7 @@ None blocking.
 - Changing the server URL while signed in signs the user out and clears the recipe cache
   (token must never travel to a different host).
 - Screenshots of the gate run live in `docs/product/screenshots/slice0/` for the PM.
-- A live XCUITest smoke (`make ios-smoke`, scheme `SousLensSmoke`) is the PRD Slice 0 gate: fresh
+- A live XCUITest smoke (`make ios-smoke`, scheme `UmmaSmoke`) is the PRD Slice 0 gate: fresh
   install → email → one-time code read from the backend log → Explore → seeded recipe detail. It is
   not part of `make ios-check` or CI because it needs a running backend.
 - Capture adapters use a start-gate/generation pattern so a stop during an awaited permission

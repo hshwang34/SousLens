@@ -3,9 +3,9 @@
 **Status:** draft · **Owner:** PM · **PR:** — · **Updated:** 2026-11-12
 
 ## Problem
-Cooking happens with wet, busy hands. Today every step of SousLens needs a tap: adding pantry
+Cooking happens with wet, busy hands. Today every step of Umma needs a tap: adding pantry
 items, picking a recipe, moving through steps. Retrace showed that a voice-first coach feels
-like a person in the kitchen. SousLens needs that end to end, and the screen should follow
+like a person in the kitchen. Umma needs that end to end, and the screen should follow
 along instead of being the thing you operate.
 
 ## Who it's for

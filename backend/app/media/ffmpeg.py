@@ -23,7 +23,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-log = logging.getLogger("souslens.media.ffmpeg")
+log = logging.getLogger("umma.media.ffmpeg")
 
 PROBE_TIMEOUT_SECONDS = 30.0
 # Input options for every invocation over user media (fix round 1). Forcing the mov/mp4 demuxer

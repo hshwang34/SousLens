@@ -53,7 +53,7 @@ from app.domains.sessions.ask import _summary, doneness_notice_for
 from app.domains.sessions.schemas import GroundingOut, InspectOut
 from app.domains.substitutions.service import context_from
 
-log = logging.getLogger("souslens.sessions.inspect")
+log = logging.getLogger("umma.sessions.inspect")
 
 INSPECT = "inspect"
 USER_INSPECTS_PER_HOUR = 20

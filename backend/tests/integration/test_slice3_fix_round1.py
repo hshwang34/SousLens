@@ -458,7 +458,7 @@ async def test_seed_publishes_fixture_changes_as_v2_and_v1_sessions_stay(
     current = next(f for f in load_fixtures(FIXTURES_DIR) if f.slug == GOCHU)
     # An existing database that only ever saw v1 (before this fix round).
     await seed_fixtures(db_session, FIXTURES_DIR)  # dictionary, rules, everything
-    await db_session.execute(text("SET LOCAL souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("SET LOCAL umma.unlock_versions = 'on'"))
     await db_session.execute(
         text("update recipes set latest_version_id = null where slug = :s"), {"s": GOCHU}
     )

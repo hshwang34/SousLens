@@ -4,7 +4,7 @@ Reusable screenshots and facts for executive briefings, so a new briefing doesn'
 new capture session. Reuse what's still current; recapture only screens whose feature changed.
 
 ## Files
-- `souslens-briefing-features-2026-10-29.html`: the features briefing, self-contained (images
+- `umma-briefing-features-2026-10-29.html`: the features briefing, self-contained (images
   embedded). Its text holds the feature inventory, status per feature, and "Not covered, and why".
 - `assets/*.jpg`: the 53 source images, already resized (≤1600 px).
 
@@ -63,10 +63,10 @@ photo picker), Edit → v2, the unfinished-cooks limit and Stop dialogs, units, 
 links, and "Use my changes from last time" on a second cook.
 
 ## How the capture was run (to redo it cheaply)
-- **Isolation:** a detached worktree of `origin/main`, its own simulator ("SousLens Briefing",
-  iPhone 15, iOS 17.5), its own backend on :8010 and its own database `souslens_brief`. The
+- **Isolation:** a detached worktree of `origin/main`, its own simulator ("Umma Briefing",
+  iPhone 15, iOS 17.5), its own backend on :8010 and its own database `umma_brief`. The
   database was seeded with `make seed`, and the app was pointed at the backend through the
   smoke-test launch args.
-- **Navigation:** a throwaway XCUITest patterned on `ios/SousLensSmokeTests`, calling
+- **Navigation:** a throwaway XCUITest patterned on `ios/UmmaSmokeTests`, calling
   `XCUIScreen.main.screenshot()` at each state. It was deleted afterwards. Next time, keep it as
-  a `SousLensBriefing` UI test target so recapture is one command.
+  a `UmmaBriefing` UI test target so recapture is one command.

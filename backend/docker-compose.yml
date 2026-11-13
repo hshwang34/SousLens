@@ -1,19 +1,19 @@
-# Local Postgres 16 for SousLens. Host port 5433 (5432 is often taken by brew postgresql@16).
+# Local Postgres 16 for Umma. Host port 5433 (5432 is often taken by brew postgresql@16).
 services:
   postgres:
     image: postgres:16
-    container_name: souslens-postgres
+    container_name: umma-postgres
     environment:
-      POSTGRES_USER: souslens
-      POSTGRES_PASSWORD: souslens
-      POSTGRES_DB: souslens
+      POSTGRES_USER: umma
+      POSTGRES_PASSWORD: umma
+      POSTGRES_DB: umma
     ports:
       - "5433:5432"
     volumes:
-      - souslens-pgdata:/var/lib/postgresql/data
+      - umma-pgdata:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U souslens -d souslens"]
+      test: ["CMD-SHELL", "pg_isready -U umma -d umma"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -24,9 +24,9 @@ services:
   # worker creates the bucket on start in dev.
   s3:
     image: motoserver/moto:5.1.4
-    container_name: souslens-s3
+    container_name: umma-s3
     ports:
       - "9000:5000"
 
 volumes:
-  souslens-pgdata:
+  umma-pgdata:
