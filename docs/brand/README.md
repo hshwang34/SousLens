@@ -28,9 +28,9 @@ swift docs/brand/tools/umma-brand.swift
 ```
 
 It writes the SVG masters here, `AppIcon-{light,dark,tinted}.png` (1024 px) into
-`ios/SousLens/Resources/Assets.xcassets/AppIcon.appiconset`, the `BrandMark` vector imageset, and
+`ios/Umma/Resources/Assets.xcassets/AppIcon.appiconset`, the `BrandMark` vector imageset, and
 `previews/app-icon-variants.png`. It uses only CoreGraphics and CoreText (macOS 13+), and reads the
-font from `ios/SousLens/Resources/Fonts/BagelFatOne-Regular.ttf`.
+font from `ios/Umma/Resources/Fonts/BagelFatOne-Regular.ttf`.
 
 ## Which lockup
 
@@ -72,11 +72,11 @@ text (3:1). On a Persimmon fill, set labels in **Seed** (5.9:1), never white (2.
 contrast, which is why the wordmark can be Leaf on Persimmon in a pinch, but text never can.
 
 The app's full token table (light, dark and Increase Contrast) lives in
-`ios/SousLens/DesignSystem/Colors.swift` and is checked by `BrandTokenTests`.
+`ios/Umma/DesignSystem/Colors.swift` and is checked by `BrandTokenTests`.
 
 ## Type
 
-- **Bagel Fat One** (SIL OFL 1.1, `ios/SousLens/Resources/Fonts/BagelFatOne-OFL.txt`): the
+- **Bagel Fat One** (SIL OFL 1.1, `ios/Umma/Resources/Fonts/BagelFatOne-OFL.txt`): the
   wordmark and large display titles only. It covers Hangul, so 엄마 and Korean recipe titles set
   in it too.
 - **SF Pro** for everything else in the app; **SF Rounded** for quantities, timers and step

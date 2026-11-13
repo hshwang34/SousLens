@@ -1,4 +1,4 @@
-# SousLens
+# Umma
 
 > Record a recipe once. Teach anyone to cook it, using the ingredients they actually have.
 
@@ -16,7 +16,7 @@ cooks with a stateful assistant on iPhone — or through Meta AI glasses camera/
 make env                           # backend/.env with a generated secret; mock AI needs nothing else
 make db-up && make seed            # postgres 16 in docker + demo recipes
 make backend-dev                   # http://localhost:8000/v1/health
-make ios-project && open ios/SousLens.xcodeproj   # run on an iPhone simulator
+make ios-project && open ios/Umma.xcodeproj   # run on an iPhone simulator
 make check                         # backend ruff+pytest, iOS build+test
 ```
 

@@ -60,7 +60,7 @@ None blocking — defaults from DECISIONS #4–#6 apply.
 
 ## Engineering decisions (filled in by the lead while building)
 - Postgres everywhere (dev, tests, CI) via docker compose / GH service; no SQLite path, to keep
-  JSONB/UUID behaviour identical. Tests create and migrate `souslens_test` per session.
+  JSONB/UUID behaviour identical. Tests create and migrate `umma_test` per session.
 - SQLAlchemy 2 async + asyncpg + alembic; Pydantic v2 schemas separate from ORM models.
 - JWT HS256 (`pyjwt`) with `JWT_SECRET`; 30-day tokens for the pilot; `AuthProvider` interface so
   Apple can slot in (DECISIONS #5).

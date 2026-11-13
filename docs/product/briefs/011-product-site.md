@@ -3,7 +3,7 @@
 **Status:** in review (PR #9 merged; deploy pending) · **Owner:** PM · **PR:** #9 · **Updated:** 2026-10-28
 
 ## Problem
-A TestFlight link alone tells nobody what SousLens is or why to install it.
+A TestFlight link alone tells nobody what Umma is or why to install it.
 
 ## Who it's for
 Prospective pilot testers and creators arriving from a shared link; also a portfolio viewer.
@@ -29,7 +29,7 @@ trusts it (honest AI labels, safety, privacy), and taps "Join the TestFlight bet
 Blog, waitlist backend, analytics, custom domain purchase (optional later — spends money).
 
 ## Open product questions
-1. **Domain?** A) free `souslens.vercel.app` (if available), B) buy a domain (~$12/yr).
+1. **Domain?** A) free `umma.vercel.app` (if available), B) buy a domain (~$12/yr).
    **Recommendation:** A for the beta.
    → *Answer:* **A, free *.vercel.app** (DECISIONS #20).
 

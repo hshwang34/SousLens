@@ -18,8 +18,8 @@ service as the iPhone camera. Folding the glasses never ends or advances a cooki
 - [ ] DAT iOS SDK **1.0.1** via SPM (MWDATCore and MWDATCamera; MockDevice in tests only). No
       experimental APIs (`Camera.photo`, Speech, Inputs, Motion): pantry and Look frames come from
       the stream.
-- [ ] Two build flavours from `project.yml`: **SousLens** (public, DAT not linked, no
-      ExternalAccessory) and **SousLens Glasses** (DAT linked, `MetaAppID=0`, custom URL scheme,
+- [ ] Two build flavours from `project.yml`: **Umma** (public, DAT not linked, no
+      ExternalAccessory) and **Umma Glasses** (DAT linked, `MetaAppID=0`, custom URL scheme,
       Bluetooth and local-network keys). CI builds both.
 - [ ] A `GlassesCameraSource` behind the existing `CameraSource` protocol, with the start gate and
       generation counter pattern. Registration, permission, preview and frame selection are

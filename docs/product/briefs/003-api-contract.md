@@ -30,7 +30,7 @@ error envelope on every failure. Additive to the Slice 0 contract; nothing there
 }
 // DraftSummary = Draft minus ingredients/steps/creator_notes/dietary_warnings, plus "ingredient_count","step_count"
 // PublishResult
-{ "recipe_id": "uuid", "recipe_version_id": "uuid", "version_number": 1, "share_url": "https://souslens.app/r/{recipe_id}" }
+{ "recipe_id": "uuid", "recipe_version_id": "uuid", "version_number": 1, "share_url": "https://umma.app/r/{recipe_id}" }
 ```
 
 Publish rules (REC-04): title (1–120 chars), servings ≥ 1, ≥ 1 ingredient with a non-empty name,
@@ -97,7 +97,7 @@ Draft field notes (as implemented):
 
 ## Share / deep links
 
-- `share_url` = `https://souslens.app/r/{recipe_id}`; the app also accepts `souslens://recipe/{recipe_id}`.
+- `share_url` = `https://umma.app/r/{recipe_id}`; the app also accepts `umma://recipe/{recipe_id}`.
   Universal-link association is a stub in this slice (the domain is not live); the custom scheme works.
 
 ## Seed

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# SousLens
+# Umma
 
 > Record a recipe once. Teach anyone to cook it, using the ingredients they actually have.
 
@@ -27,7 +27,7 @@ make check          # backend-check + ios-check; must pass before any PR
 make backend-check  # ruff check + ruff format --check + pytest (needs db-up)
 make ios-check      # xcodegen generate + xcodebuild test (iPhone 15, OS auto-detected)
 make ios-smoke      # live XCUITest against a running backend-dev (SMOKE_LOG=<path to its log>)
-make ios-project    # regenerate ios/SousLens.xcodeproj from ios/project.yml
+make ios-project    # regenerate ios/Umma.xcodeproj from ios/project.yml
 ```
 
 Single tests:
@@ -35,25 +35,26 @@ Single tests:
 ```bash
 cd backend && uv run pytest tests/integration/test_auth.py::test_name -q
 cd backend && uv run alembic check        # models and migrations must not drift
-cd ios && xcodebuild test -project SousLens.xcodeproj -scheme SousLens \
+cd ios && xcodebuild test -project Umma.xcodeproj -scheme Umma \
   -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
-  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -only-testing:SousLensTests/AuthStoreTests
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -only-testing:UmmaTests/AuthStoreTests
 ```
 
 Gotchas that have cost real time:
 
 - **The test suite drops and recreates the schema** of `TEST_DATABASE_URL` (default
-  `souslens_test`; conftest refuses any DB name not ending in `_test`). Two agents running pytest
+  `umma_test`; conftest refuses any DB name not ending in `_test`). Two agents running pytest
   at once on the same DB corrupt each other. Give each its own `_test` database or run sequentially.
 - `make check` uses `uv run --locked`; run `uv lock` after any dependency change.
-- `SousLens.xcodeproj` is generated and gitignored. Never hand-edit it; edit `ios/project.yml`.
+- `Umma.xcodeproj` is generated and gitignored. Never hand-edit it; edit `ios/project.yml`.
   If a build says the project doesn't exist, run `make ios-project`.
 - iOS checks sign ad hoc (`CODE_SIGN_IDENTITY=-`), not `CODE_SIGNING_ALLOWED=NO`: the simulator
   Keychain needs the entitlement (-34018 otherwise).
-- A bare `name=iPhone 15` destination resolves to the newest runtime, which has no iPhone 15;
-  `ios/scripts/sim-os.sh` picks the right OS.
+- A bare `name=iPhone 15` destination resolves to the newest runtime, which has no iPhone 15.
+  `ios/scripts/sim-pick.sh` picks the newest runtime that has `SIM`, or falls back to a stock
+  iPhone on the newest runtime when `SIM` isn't installed. Override with `make ios-check SIM=...`.
 - Dev sign-in is two-step: `POST /v1/auth/dev-login` (202) logs a 6-digit code on the
-  `souslens.devlogin` logger; `POST /v1/auth/dev-login/verify` exchanges it for a JWT. Tests get
+  `umma.devlogin` logger; `POST /v1/auth/dev-login/verify` exchanges it for a JWT. Tests get
   the code echoed (`DEV_LOGIN_ECHO_CODE`, test env only) via `tests/conftest.py::dev_sign_in`.
   A per-email budget returns 429 after 10 failed tries in 15 min, with a 30 s cooldown.
 - Scripted simulator clicks (osascript) die when the Mac display locks; use the XCUITest smoke.
@@ -84,7 +85,7 @@ Gotchas that have cost real time:
 - `fixtures/expected_outputs/recipe_detail.json` is the literal API response for the seeded recipe
   (deterministic uuid5 ids). iOS tests decode a verbatim copy of it, so regenerate both together.
 
-### iOS (`ios/SousLens`)
+### iOS (`ios/Umma`)
 
 - `App/AppEnvironment.swift` is the composition root. It wires `APIClient`, `AuthStore`,
   `ServerSettings` and the capture sources, and `bind(...)` connects their callbacks. Tests reuse
@@ -100,7 +101,7 @@ Gotchas that have cost real time:
 - Views render from small presentation structs (e.g. `Features/Recipe/RecipeDetailPresentation`)
   so tests assert what's displayed without UI inspection. Unknown `evidence_origin` decodes to
   `.unknown` and is labelled "AI-extracted", never "Creator instructions".
-- `SousLensSmokeTests` (scheme `SousLensSmoke`) is the live end-to-end test. It is not part of
+- `UmmaSmokeTests` (scheme `UmmaSmoke`) is the live end-to-end test. It is not part of
   `ios-check` or CI.
 
 ## Invariants — never "simplify" these away
@@ -133,6 +134,6 @@ Gotchas that have cost real time:
 - Branches only in worktrees under `.claude/worktrees/`. Never switch branches in the main checkout
   (GitHub Desktop runs on it).
 - Personal identity only: GitHub `hshwang34`, commits as `jacogoby@gmail.com`, Apple Team
-  `V56DG94ZL5`, bundle id `com.souslens.ios`.
+  `V56DG94ZL5`, bundle id `com.umma.ios`.
 - Retrace reference code is in `_retrace_ref/` (gitignored) and `~/Documents/Projects/Retrace`.
   Port modules, don't fork (`docs/decisions/ADR-0001`).

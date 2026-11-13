@@ -1,8 +1,8 @@
-# SousLens — Product Requirements Document
+# Umma — Product Requirements Document
 
 **Version:** 1.0 | **Date:** October 15, 2026 | **Status:** Build-ready MVP specification
 **Audience:** Product owner, Claude Code, iOS/backend engineers, designer, test users
-**Primary platform:** iOS + supported Meta AI glasses | **Working product name:** SousLens
+**Primary platform:** iOS + supported Meta AI glasses | **Working product name:** Umma
 **Product category:** Social recipes × pantry intelligence × contextual cooking education
 
 > **North star:** Record a recipe once. Teach anyone to cook it, using the ingredients they actually have.
@@ -24,7 +24,7 @@ This is the source of truth for an initial solo-developer/portfolio MVP. Claude 
 **Explicit decisions:**
 1. iOS companion app is the home for discovery, creation, pantry, and sessions.
 2. Creator recipes have an **immutable published version**, ordered steps, source attribution, optional clips, and explicit tips/warnings.
-3. **SousLens is a cooking teacher**, not an unbounded recipe-generation chatbot. All instruction begins from a saved/published recipe.
+3. **Umma is a cooking teacher**, not an unbounded recipe-generation chatbot. All instruction begins from a saved/published recipe.
 4. Pantry observations are user-confirmed records with uncertainty and timestamps, not automated truth about food quantity/freshness.
 5. The cooking-session **Step Oracle** in the backend owns canonical step state; the LLM never edits state directly.
 6. Camera inspection is opt-in/on-demand by default. Continuous ambient AI observation is not required for launch.
@@ -43,11 +43,11 @@ Creators likewise struggle to transfer tacit knowledge: "chop until it looks lik
 
 ### 1.2 Product vision
 
-SousLens converts creators' cooking knowledge into **interactive, personalized lessons**. A creator can publish a recipe as a reusable structured procedure; a learner can check their pantry through voice/camera, adapt the recipe with transparent substitutions, and cook using an AI assistant on an iPhone or connected smart glasses. Learners can later save their own variants, with original creator credit retained.
+Umma converts creators' cooking knowledge into **interactive, personalized lessons**. A creator can publish a recipe as a reusable structured procedure; a learner can check their pantry through voice/camera, adapt the recipe with transparent substitutions, and cook using an AI assistant on an iPhone or connected smart glasses. Learners can later save their own variants, with original creator credit retained.
 
 ### 1.3 Positioning
 
-**For** home cooks who discover recipes from real people and want to actually make them, **SousLens** is a recipe-sharing and AI cooking-teaching platform that adapts instructions to their pantry and guides execution hands-free. **Unlike** a static recipe feed or generic chatbot, it stays grounded in a specific creator's demonstrated recipe, preserves step state, and can use visual context from a phone or smart glasses when asked.
+**For** home cooks who discover recipes from real people and want to actually make them, **Umma** is a recipe-sharing and AI cooking-teaching platform that adapts instructions to their pantry and guides execution hands-free. **Unlike** a static recipe feed or generic chatbot, it stays grounded in a specific creator's demonstrated recipe, preserves step state, and can use visual context from a phone or smart glasses when asked.
 
 ### 1.4 Non-goals
 
@@ -55,7 +55,7 @@ Not a grocery delivery business, nutrition/medical system, general-purpose camer
 
 ### 1.5 Retrace inheritance
 
-Original Retrace primitive: **first-person capture → structured expert procedure + source clips → grounded live coaching → optional camera-based verification**. SousLens adds domain-specific `Recipe`, `Ingredient`, `Pantry`, `Substitution`, and `CookingSession` primitives. Reuse concepts, extract/validate/plan stages, step-clip generation, Gemini Live turn-taking, and server-authoritative progression, but do not require a general-purpose workflow platform.
+Original Retrace primitive: **first-person capture → structured expert procedure + source clips → grounded live coaching → optional camera-based verification**. Umma adds domain-specific `Recipe`, `Ingredient`, `Pantry`, `Substitution`, and `CookingSession` primitives. Reuse concepts, extract/validate/plan stages, step-clip generation, Gemini Live turn-taking, and server-authoritative progression, but do not require a general-purpose workflow platform.
 
 ---
 
@@ -87,7 +87,7 @@ Needs predictable seeded content, test pantry, simple permissions and onboarding
 
 ### 2.4 Prioritized user pains
 
-| Pain | Severity | Current workaround | SousLens answer |
+| Pain | Severity | Current workaround | Umma answer |
 |---|---|---|---|
 | Recipe not suited to what's available | High | Manual inventory + improvisation | Pantry-aware fit + explicit swaps |
 | Video instructions difficult to follow mid-cook | High | Rewind, pause, dirty phone | Stateful audio guidance + step clips |
@@ -787,7 +787,7 @@ A test cook finishes a dish using a recipe from another person **without repeate
 
 ### 15.3 Research plan
 
-Recruit 5–10 test users across novice/intermediate levels; 2–3 creators. Observe at least 5 end-to-end cooking sessions. Measure actual moments users touch phone, need to repeat instructions, distrust substitutions, need visual guidance, and leave app. Follow a script but note emergent behavior. Ask whether they would *repeat* cooking with SousLens, not only whether demo looked impressive.
+Recruit 5–10 test users across novice/intermediate levels; 2–3 creators. Observe at least 5 end-to-end cooking sessions. Measure actual moments users touch phone, need to repeat instructions, distrust substitutions, need visual guidance, and leave app. Follow a script but note emergent behavior. Ask whether they would *repeat* cooking with Umma, not only whether demo looked impressive.
 
 ### 15.4 Demonstration script (portfolio)
 
@@ -855,13 +855,13 @@ No time promises; sequence is dependency-based. Don't start slice N+1 until the 
 ### 16.1 Suggested repository layout
 
 ```text
-souslens/
+umma/
 ├── README.md
 ├── PRD.md                      # This file
 ├── CLAUDE.md                   # Execution constraints/checklist
 ├── .env.example
 ├── ios/
-│   └── SousLens/
+│   └── Umma/
 │       ├── App/
 │       ├── Features/{Explore,Recipe,Creator,Pantry,Cooking,Profile}/
 │       ├── Models/
@@ -1007,10 +1007,10 @@ Record a short end-to-end demo and architecture walkthrough. Explain technical t
 
 ## 21. Competitive landscape (context, not implementation dependency)
 
-- **FORK'D / Fond:** imported recipes and steps through glasses. SousLens emphasizes source-grounded interactive learning and kitchen adaptation.
-- **Glutt:** pantry-aware AI chef and audio wearable experiences. SousLens differentiates by creator-demonstration → structured steps/clips → grounded feedback.
-- **Cooklist / SuperCook:** inventory-driven matching. SousLens uses pantry data to teach a *selected creator's recipe*, not only search a recipe database.
-- **Samsung Food / Cookpad / NYT Cooking:** strong recipes/community/editorial content. SousLens competes on instructional continuity and personalized context, not catalog size.
+- **FORK'D / Fond:** imported recipes and steps through glasses. Umma emphasizes source-grounded interactive learning and kitchen adaptation.
+- **Glutt:** pantry-aware AI chef and audio wearable experiences. Umma differentiates by creator-demonstration → structured steps/clips → grounded feedback.
+- **Cooklist / SuperCook:** inventory-driven matching. Umma uses pantry data to teach a *selected creator's recipe*, not only search a recipe database.
+- **Samsung Food / Cookpad / NYT Cooking:** strong recipes/community/editorial content. Umma competes on instructional continuity and personalized context, not catalog size.
 
 Do not claim these are absent features in competitors without checking current live offerings at launch. Differentiation is a **product hypothesis**, not proven market ownership.
 

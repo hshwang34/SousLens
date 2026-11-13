@@ -19,8 +19,8 @@ import UniformTypeIdentifiers
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let brandDir = root.appendingPathComponent("docs/brand")
 let previewDir = brandDir.appendingPathComponent("previews")
-let assets = root.appendingPathComponent("ios/SousLens/Resources/Assets.xcassets")
-let fontURL = root.appendingPathComponent("ios/SousLens/Resources/Fonts/BagelFatOne-Regular.ttf")
+let assets = root.appendingPathComponent("ios/Umma/Resources/Assets.xcassets")
+let fontURL = root.appendingPathComponent("ios/Umma/Resources/Fonts/BagelFatOne-Regular.ttf")
 
 enum Brand {
     static let persimmon: UInt32 = 0xF2782A
