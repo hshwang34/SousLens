@@ -70,7 +70,7 @@ from app.domains.recipes.draft_schemas import DraftContent, DraftExtraction
 from app.media import ffmpeg
 from app.media.storage import ObjectStorage, clip_key
 
-log = logging.getLogger("souslens.worker")
+log = logging.getLogger("umma.worker")
 
 STORAGE_ERRORS = (BotoCoreError, ClientError)
 TRANSIENT = (ProviderUnavailable, ffmpeg.MediaToolError, OSError, *STORAGE_ERRORS)
@@ -147,7 +147,7 @@ class ExtractionWorker:
         self._guard = guard
         self.worker_id = (worker_id or f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}")[:64]
         self._workdir = (
-            workdir or settings.worker_workdir or Path(tempfile.mkdtemp(prefix="souslens-worker-"))
+            workdir or settings.worker_workdir or Path(tempfile.mkdtemp(prefix="umma-worker-"))
         )
         self._lease = timedelta(seconds=settings.worker_lease_seconds)
         self.heartbeat_seconds = max(self._lease.total_seconds() / 3, 1.0)
@@ -788,7 +788,7 @@ async def _main(once: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SousLens creator-video worker")
+    parser = argparse.ArgumentParser(description="Umma creator-video worker")
     parser.add_argument("--once", action="store_true", help="process queued jobs, then exit")
     args = parser.parse_args()
     asyncio.run(_main(args.once))

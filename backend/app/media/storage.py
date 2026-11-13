@@ -27,7 +27,7 @@ from botocore.exceptions import ClientError
 
 from app.core.config import Settings
 
-log = logging.getLogger("souslens.media.storage")
+log = logging.getLogger("umma.media.storage")
 
 
 @dataclass(frozen=True)

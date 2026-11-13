@@ -83,7 +83,7 @@ async def clean_tables(engine: AsyncEngine) -> None:
     tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
     async with engine.begin() as conn:
         # recipe_versions is append-only (migration 0002); the test reset uses the operator unlock.
-        await conn.execute(text("SET LOCAL souslens.unlock_versions = 'on'"))
+        await conn.execute(text("SET LOCAL umma.unlock_versions = 'on'"))
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 
@@ -201,17 +201,17 @@ async def ingredients(engine: AsyncEngine, clean_tables: None) -> None:
 
 # --- Slice 5 (brief 008): tiny generated video, ffmpeg, moto-backed object storage -----------
 
-FFMPEG_REQUIRED = os.environ.get("SOUSLENS_REQUIRE_FFMPEG") == "1"
+FFMPEG_REQUIRED = os.environ.get("UMMA_REQUIRE_FFMPEG") == "1"
 
 
 def require_ffmpeg() -> None:
-    """Skip locally without ffmpeg; CI sets SOUSLENS_REQUIRE_FFMPEG=1 so it fails instead."""
+    """Skip locally without ffmpeg; CI sets UMMA_REQUIRE_FFMPEG=1 so it fails instead."""
     import shutil
 
     if shutil.which("ffmpeg") and shutil.which("ffprobe"):
         return
     if FFMPEG_REQUIRED:
-        raise RuntimeError("ffmpeg/ffprobe are required (SOUSLENS_REQUIRE_FFMPEG=1)")
+        raise RuntimeError("ffmpeg/ffprobe are required (UMMA_REQUIRE_FFMPEG=1)")
     pytest.skip("ffmpeg/ffprobe not installed")
 
 

@@ -77,9 +77,9 @@ async def test_challenge_then_verify_creates_user_and_me_returns_it(
 async def test_code_is_logged_once_on_the_devlogin_logger(
     client: AsyncClient, caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.INFO, logger="souslens.devlogin"):
+    with caplog.at_level(logging.INFO, logger="umma.devlogin"):
         challenge = await start_dev_sign_in(client, "logged@example.com")
-    records = [r for r in caplog.records if r.name == "souslens.devlogin"]
+    records = [r for r in caplog.records if r.name == "umma.devlogin"]
     assert len(records) == 1
     record = records[0]
     logged = {"email": record.email, "code": record.code, "challenge_id": record.challenge_id}  # type: ignore[attr-defined]

@@ -80,7 +80,7 @@ from app.core.errors import (
     ProviderUnavailable,
 )
 
-log = logging.getLogger("souslens.ai.gemini")
+log = logging.getLogger("umma.ai.gemini")
 
 MAX_ATTEMPTS = 3  # the first call plus at most two retries, whatever the cause
 MAX_MALFORMED_RETRIES = 1

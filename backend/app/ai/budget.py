@@ -33,13 +33,13 @@ from app.ai.pricing import cost_usd
 from app.core.config import Settings
 from app.db.models import AIUsage
 
-log = logging.getLogger("souslens.ai.budget")
+log = logging.getLogger("umma.ai.budget")
 
 Capability = Literal[
     "coach", "inspect", "pantry_photo", "pantry_transcript", "substitution", "video"
 ]
 
-_GLOBAL_LOCK_KEY = "souslens:ai_budget"
+_GLOBAL_LOCK_KEY = "umma:ai_budget"
 # ``status`` reports "resting" once less than about one interactive call's reservation is left.
 STATUS_HEADROOM_USD = Decimal("0.05")
 

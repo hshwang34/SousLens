@@ -52,7 +52,7 @@ from app.db.models import (
 from app.domains.ownership import get_owned_or_404
 from app.media.storage import ObjectStorage, source_key
 
-log = logging.getLogger("souslens.media")
+log = logging.getLogger("umma.media")
 
 VIDEO_TYPES: dict[str, str] = {"video/mp4": "mp4", "video/quicktime": "mov"}
 CONSENT_TYPE = "own_video_rights"
@@ -274,7 +274,7 @@ async def lock_user_video(session: AsyncSession, user_id: uuid.UUID) -> None:
     """Serialise one user's video limit checks (transaction-scoped advisory lock)."""
     await session.execute(
         text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
-        {"k": f"souslens:video:{user_id}"},
+        {"k": f"umma:video:{user_id}"},
     )
 
 

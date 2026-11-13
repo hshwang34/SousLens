@@ -193,7 +193,7 @@ class RecipeVersion(CreatedAtMixin, Base):
 
     Append-only at the database level: migration 0002 installs a ``BEFORE UPDATE OR DELETE``
     trigger that raises on every row. The only escape hatch is an explicit
-    ``SET LOCAL souslens.unlock_versions = 'on'`` in the same transaction (operator repairs,
+    ``SET LOCAL umma.unlock_versions = 'on'`` in the same transaction (operator repairs,
     account deletion flows); application code never sets it.
 
     ``title``/``summary``/``tags``/``cover_image_url`` are snapshotted too, so

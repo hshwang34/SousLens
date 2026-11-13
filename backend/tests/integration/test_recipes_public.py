@@ -59,7 +59,7 @@ async def add_recipe(
     published_at: datetime | None = None,
 ) -> Recipe:
     owner = await users_service.get_or_create_by_email(
-        db_session, email=SEED_CREATOR_EMAIL, display_name="SousLens Kitchen", auth_provider="dev"
+        db_session, email=SEED_CREATOR_EMAIL, display_name="Umma Kitchen", auth_provider="dev"
     )
     recipe = Recipe(
         owner_user_id=owner.id, slug=slug, visibility=visibility, title=title, tags=tags or []
@@ -100,7 +100,7 @@ async def test_list_returns_five_seeded_cards_newest_first(
     card = body["items"][0]
     assert card["recipe_id"] == str(ids[GOCHUJANG])
     assert card["title"] == "Gochujang Chicken Thighs"
-    assert card["creator"]["display_name"] == "SousLens Kitchen"
+    assert card["creator"]["display_name"] == "Umma Kitchen"
     assert card["version_number"] == 2  # brief 005: marinade food-safety fix published as v2
     assert card["tags"] == ["korean", "chicken", "weeknight", "spicy"]
     assert card["saved"] is None  # anonymous
@@ -127,7 +127,7 @@ async def test_detail_matches_expected_output_fixture_exactly(
 
     assert body["schema_version"] == "1.0"
     assert body["saved"] is None
-    assert body["share_url"] == f"https://souslens.app/r/{ids[GOCHUJANG]}"
+    assert body["share_url"] == f"https://umma.app/r/{ids[GOCHUJANG]}"
     assert len(body["steps"]) >= 6
     assert any(s["creator_note"] for s in body["steps"])
     assert any("thermometer" in w.lower() for s in body["steps"] for w in s["warnings"])
@@ -335,7 +335,7 @@ async def test_additive_stored_fields_never_break_public_get(
 ) -> None:
     ids = await seed(db_session)
     # Versions are append-only; simulating a future additive column needs the operator unlock.
-    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("set local umma.unlock_versions = 'on'"))
     await db_session.execute(
         text(
             """

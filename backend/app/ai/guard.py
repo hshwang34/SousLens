@@ -38,7 +38,7 @@ from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.mock import MockAIProvider
 from app.core.errors import AIBlocked, ProviderNotConfigured, ProviderOutputInvalid
 
-log = logging.getLogger("souslens.ai.guard")
+log = logging.getLogger("umma.ai.guard")
 
 T = TypeVar("T")
 

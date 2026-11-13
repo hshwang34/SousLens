@@ -13,10 +13,10 @@
     "spicy"
   ],
   "creator": {
-    "id": "f692d3b2-4d37-5232-8bdb-8c1b083bdf1e",
-    "display_name": "SousLens Kitchen"
+    "id": "f87e99ce-9116-5f98-bd40-53213bf23a61",
+    "display_name": "Umma Kitchen"
   },
-  "creator_id": "f692d3b2-4d37-5232-8bdb-8c1b083bdf1e",
+  "creator_id": "f87e99ce-9116-5f98-bd40-53213bf23a61",
   "servings": 4,
   "prep_minutes": 15,
   "cook_minutes": 20,
@@ -283,6 +283,6 @@
     "Most gochujang and soy sauce contain wheat; check labels if avoiding gluten."
   ],
   "published_at": "2026-10-15T00:00:00Z",
-  "share_url": "https://souslens.app/r/a185d1a4-2726-57b9-9b17-069262cbf492",
+  "share_url": "https://umma.app/r/a185d1a4-2726-57b9-9b17-069262cbf492",
   "saved": null
 }

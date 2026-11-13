@@ -281,7 +281,7 @@ async def test_account_deletion_queues_every_object(env: Env) -> None:
     assert len(keys) == 8  # 2 sources + 6 clips
     uid = await user_id(env, "creator@example.com")
     async with env.app.state.sessionmaker() as s, s.begin():
-        await s.execute(text("SET LOCAL souslens.unlock_versions = 'on'"))
+        await s.execute(text("SET LOCAL umma.unlock_versions = 'on'"))
         await s.execute(text("DELETE FROM users WHERE id = :id"), {"id": uid})
     assert await all_keys(env) == set()
     assert await queued_keys(env) == keys
@@ -297,7 +297,7 @@ async def test_recipe_deletion_queues_its_media(env: Env) -> None:
     pub = (await env.client.post(f"/v1/recipes/drafts/{d['id']}/publish", headers=headers)).json()
     keys = await all_keys(env)
     async with env.app.state.sessionmaker() as s, s.begin():
-        await s.execute(text("SET LOCAL souslens.unlock_versions = 'on'"))
+        await s.execute(text("SET LOCAL umma.unlock_versions = 'on'"))
         await s.execute(text("DELETE FROM recipes WHERE id = :id"), {"id": pub["recipe_id"]})
     assert await queued_keys(env) == keys  # source + clips all belonged to the recipe
     await env.worker().drain_deletions()

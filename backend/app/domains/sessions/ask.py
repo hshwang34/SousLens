@@ -77,7 +77,7 @@ from app.domains.substitutions.adapt import suggested_timer
 from app.domains.substitutions.service import context_from
 from app.domains.users import preferences
 
-log = logging.getLogger("souslens.sessions.ask")
+log = logging.getLogger("umma.sessions.ask")
 
 RATE_LIMIT_PER_HOUR = 60  # per session (secondary cap)
 USER_ASKS_PER_HOUR = 120  # per user, across sessions (primary)

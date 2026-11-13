@@ -3,7 +3,7 @@
 Flow (DECISIONS #5, dev mode only):
 
 1. ``create_challenge(email)`` generates a 6-digit code with :mod:`secrets`, stores only an HMAC
-   of it, logs the code once on the ``souslens.devlogin`` logger and returns the challenge id.
+   of it, logs the code once on the ``umma.devlogin`` logger and returns the challenge id.
    No user row is created here.
 2. ``verify_challenge(challenge_id, code)`` compares in constant time, allows at most
    ``MAX_ATTEMPTS`` tries, expires after ``TTL``, is single use, and returns the email. The
@@ -30,7 +30,7 @@ from app.core.config import Settings
 from app.core.errors import RateLimited, Unauthorized
 from app.db.models import DevLoginChallenge
 
-log = logging.getLogger("souslens.devlogin")
+log = logging.getLogger("umma.devlogin")
 
 TTL = timedelta(minutes=10)
 MAX_ATTEMPTS = 5

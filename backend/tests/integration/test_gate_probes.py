@@ -168,7 +168,7 @@ async def test_published_version_content_untouched_after_reseed(db_session: Asyn
     first = await seed_fixtures(db_session, FIXTURES_DIR)
     # Simulate an operator-repaired row (the append-only trigger needs the explicit unlock):
     # a reseed must NOT overwrite published content.
-    await db_session.execute(text("set local souslens.unlock_versions = 'on'"))
+    await db_session.execute(text("set local umma.unlock_versions = 'on'"))
     await db_session.execute(text("update recipe_versions set ingredient_json='[]'::jsonb"))
     await db_session.commit()
     # Fix round 2: a fixture that differs from its latest version with no history file is a
