@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, StateConflict, ValidationError
 from app.db.models import DraftStatus, Recipe, RecipeDraft, RecipeVersion, User, Visibility
+from app.domains.capture.privacy import purge_transcript_for_draft
 from app.domains.media import service as media
 from app.domains.ownership import get_owned_or_404
 from app.domains.recipes.draft_schemas import (
@@ -293,6 +294,7 @@ async def delete_draft(session: AsyncSession, user: User, draft_id: uuid.UUID) -
     row = await get_draft_row(session, user, draft_id)
     ensure_not_extracting(row)
     await media.discard_unpublished_clips(session, row.id)
+    await purge_transcript_for_draft(session, row.id)  # brief 014: discarded → transcript gone
     await session.delete(row)
     await session.flush()
 
@@ -513,6 +515,7 @@ async def publish(
     recipe.published_at = recipe.published_at or datetime.now(UTC)
     row.recipe_id = recipe.id
     row.status = DraftStatus.PUBLISHED
+    await purge_transcript_for_draft(session, row.id)  # brief 014: published → transcript gone
     await session.flush()
     await media.attach_on_publish(
         session,

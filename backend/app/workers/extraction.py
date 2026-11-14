@@ -44,7 +44,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai.budget import CostGuard, Denial, UsageMeter
-from app.ai.providers.base import ExtractedRecipeDraft, ExtractionRequest
+from app.ai.providers.base import (
+    CaptureFact,
+    CaptureUtterance,
+    ExtractedRecipeDraft,
+    ExtractionRequest,
+    TranscriptExtractionRequest,
+)
 from app.ai.providers.gemini import GeminiProvider
 from app.core.config import Settings, get_settings
 from app.core.errors import (
@@ -55,6 +61,8 @@ from app.core.errors import (
 )
 from app.core.logging import configure_logging
 from app.db.models import (
+    CaptureEvent,
+    CaptureSession,
     DraftStatus,
     ExtractionJob,
     ExtractionStatus,
@@ -63,7 +71,9 @@ from app.db.models import (
     RecipeDraft,
     RecipeMedia,
 )
-from app.domains.extraction.pipeline import build_content
+from app.domains.capture.policy import Ledger
+from app.domains.capture.privacy import reap_abandoned
+from app.domains.extraction.pipeline import CAPTURE_DEMO_NOTICE, build_content
 from app.domains.media.service import reap_expired_uploads
 from app.domains.recipes import drafts
 from app.domains.recipes.draft_schemas import DraftContent, DraftExtraction
@@ -89,6 +99,13 @@ MSG = {
     "CLIP_SUPERSEDED": "A newer trim replaced this clip.",
     "DRAFT_DELETED": "The draft was deleted.",
     "CLIP_RENDER_FAILED": "This clip couldn't be made. Try trimming it again.",
+    # Voice capture (brief 014): the recording is kept in every case.
+    "AI_RESTING": (
+        "AI is resting for now. Your recording is saved: make the draft again later, "
+        "or write the recipe by hand below."
+    ),
+    "SESSION_DELETED": "The recording was deleted before the draft could be made.",
+    "TRANSCRIPT_EMPTY": "Nothing was said in this recording. Write the recipe by hand below.",
 }
 
 
@@ -316,6 +333,8 @@ class ExtractionWorker:
         try:
             if job.kind == "trim":
                 await self._trim(job, jobdir)
+            elif job.kind == "capture":
+                await self._capture(job)
             else:
                 await self._extract(job, jobdir)
         except JobLost:
@@ -392,6 +411,15 @@ class ExtractionWorker:
         row.counts_toward_limit = counts
         row.lease_expires_at = None
         row.finished_at = datetime.now(UTC)
+        if row.kind == "capture":
+            await session.execute(
+                update(CaptureSession)
+                .where(
+                    CaptureSession.extraction_job_id == row.id,
+                    CaptureSession.status == "generating",
+                )
+                .values(status="failed")
+            )
         if row.kind == "trim":
             clip_id = (row.params_json or {}).get("clip_id")
             if clip_id:
@@ -653,6 +681,140 @@ class ExtractionWorker:
                 raise JobLost from None
             await asyncio.to_thread(out.unlink, missing_ok=True)
 
+    # --- capture (brief 014) ---------------------------------------------------------------
+
+    async def _capture_request(self, job: Claimed) -> TranscriptExtractionRequest:
+        sid = job.params.get("capture_session_id")
+        async with self._sm() as session:
+            row = await session.get(CaptureSession, uuid.UUID(sid)) if sid else None
+            if row is None or row.transcript_purged_at is not None:
+                raise JobFailed("SESSION_DELETED", MSG["SESSION_DELETED"], counts=False)
+            spoken = (
+                await session.execute(
+                    select(CaptureEvent.t_ms, CaptureEvent.text)
+                    .where(CaptureEvent.session_id == row.id, CaptureEvent.kind == "utterance")
+                    .order_by(CaptureEvent.t_ms, CaptureEvent.created_at)
+                )
+            ).all()
+            ledger = Ledger.model_validate(row.state_json or {})
+        if not spoken:
+            raise JobFailed("TRANSCRIPT_EMPTY", MSG["TRANSCRIPT_EMPTY"], counts=False)
+        facts: list[CaptureFact] = []
+        for q in sorted(ledger.questions.values(), key=lambda q: q.seq):
+            gap = ledger.gaps.get(q.topic_key)
+            if q.outcome == "answered" and gap is not None and gap.answer:
+                facts.append(
+                    CaptureFact(
+                        topic_key=q.topic_key,
+                        topic=gap.topic,
+                        question=q.text,
+                        answer=gap.answer,
+                        t_ms=q.asked_t_ms if q.phase == "live" else None,
+                        phase=q.phase,
+                    )
+                )
+        unanswered = [
+            g.question
+            for g in ledger.gaps.values()
+            if g.status in ("open", "deferred", "unanswered", "asked")
+        ]
+        return TranscriptExtractionRequest(
+            title_hint=job.params.get("title_hint"),
+            utterances=[CaptureUtterance(t_ms=t, text=text) for t, text in spoken],
+            facts=facts,
+            unanswered=unanswered[:10],
+        )
+
+    async def _capture(self, job: Claimed) -> None:
+        """Transcript → draft. No media, no clips. The result is checkpointed before the
+        draft is written, so a resumed job never pays twice."""
+        if job.draft_id is None:
+            raise JobLost
+        stored = job.result.get("extraction")
+        if stored is None:
+            await self._checkpoint(job, progress=10, stage="extracting")
+            request = await self._capture_request(job)
+            extracted, demo = await self._run_capture_extractor(job, request)
+            content = build_content(
+                extracted,
+                duration_ms=0,
+                job_id=job.id,
+                source_media_id=None,
+                demo=demo,
+                title_hint=request.title_hint,
+                demo_notice=CAPTURE_DEMO_NOTICE,
+            )
+            job.result["extraction"] = drafts.normalise(content)
+            job.result["demo"] = demo
+            await self._checkpoint(job, progress=90, stage="extracting", save_result=True)
+        final = DraftContent.model_validate(job.result["extraction"])
+        async with self._sm() as session, session.begin():
+            # The recording may have been deleted (or reaped) while the AI was writing.
+            alive = await session.scalar(
+                select(CaptureSession.id)
+                .where(
+                    CaptureSession.extraction_job_id == job.id,
+                    CaptureSession.transcript_purged_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if alive is None:
+                raise JobFailed("SESSION_DELETED", MSG["SESSION_DELETED"], counts=False)
+            await self._write_draft(session, job, final, status=DraftStatus.REVIEW)
+            res = await session.execute(
+                update(ExtractionJob)
+                .where(self._owned(job))
+                .values(
+                    status=ExtractionStatus.REVIEW,
+                    progress=100,
+                    stage="done",
+                    lease_expires_at=None,
+                    finished_at=datetime.now(UTC),
+                    result_json=job.result,
+                )
+            )
+            if res.rowcount == 0:  # type: ignore[attr-defined]
+                raise JobLost
+            await session.execute(
+                update(CaptureSession)
+                .where(CaptureSession.extraction_job_id == job.id)
+                .values(status="ready")
+            )
+        log.info("capture draft ready", extra={"job_id": str(job.id), "steps": len(final.steps)})
+
+    async def _run_capture_extractor(
+        self, job: Claimed, request: TranscriptExtractionRequest
+    ) -> tuple[ExtractedRecipeDraft, bool]:
+        provider = self._provider
+        if not isinstance(provider, GeminiProvider):
+            return await provider.extract_transcript(request), True  # type: ignore[attr-defined]
+        if not provider.configured:
+            raise ProviderNotConfigured
+        plan = provider.plan_capture_draft(request)
+        await self._checkpoint(job)  # still ours? never reserve for a job someone else holds
+        decision = await self._guard.reserve(
+            job.owner_user_id, "capture_draft", plan.model, plan.ceiling_usd
+        )
+        if isinstance(decision, Denial):
+            raise JobFailed("AI_RESTING", MSG["AI_RESTING"], counts=False)
+        meter = UsageMeter(model=plan.model, at=datetime.now(UTC))
+        outcome = "cancelled"
+        try:
+            extracted = await provider.extract_transcript(request, meter)
+            outcome = "ok"
+            return extracted, False
+        except AIBlocked:
+            outcome = "blocked"
+            raise
+        except ProviderOutputInvalid:
+            outcome = "malformed"
+            raise
+        except Exception:
+            outcome = "error"
+            raise
+        finally:
+            await asyncio.shield(self._guard.settle(decision, meter, outcome))
+
     # --- trim -----------------------------------------------------------------------------
 
     async def _trim(self, job: Claimed, jobdir: Path) -> None:
@@ -717,6 +879,13 @@ class ExtractionWorker:
             n = await reap_expired_uploads(session, self._settings)
         if n:
             log.info("reaped expired uploads", extra={"count": n})
+        # Brief 014: capture transcripts idle for 30 days that were never published.
+        async with self._sm() as session, session.begin():
+            purged = await reap_abandoned(
+                session, ttl_days=self._settings.capture_transcript_ttl_days
+            )
+        if purged:
+            log.info("purged abandoned capture transcripts", extra={"count": purged})
         return n
 
     async def drain_deletions(self) -> int:
