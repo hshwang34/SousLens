@@ -91,8 +91,8 @@ async def test_gemini_mints_locked_token_and_reserves_ceiling(
     assert body["demo"] is False and body["token"] == "mock-live-token-1"
     expires = datetime.fromisoformat(body["expires_at"])
     starts = datetime.fromisoformat(body["new_session_expires_at"])
-    assert timedelta(seconds=140) < expires - before < timedelta(seconds=160)
-    assert timedelta(seconds=50) < starts - before < timedelta(seconds=70)
+    assert timedelta(seconds=40) < expires - before < timedelta(seconds=50)
+    assert timedelta(seconds=10) < starts - before < timedelta(seconds=20)
 
     (spec,) = minter.specs
     assert spec.model == "gemini-3.8-live"
@@ -101,7 +101,7 @@ async def test_gemini_mints_locked_token_and_reserves_ceiling(
 
     (row,) = await ledger(db_session)
     ceiling = live_ceiling_usd(settings, datetime.now(UTC))
-    assert ceiling == Decimal("0.084")  # 60k input at $1/M + 2k output at $12/M
+    assert ceiling == Decimal("0.141")  # 105k input at $1/M + 3k output at $12/M
     assert row.capability == "pantry_live" and row.model == "gemini-3.8-live"
     assert row.status == "settled" and row.outcome == "minted"
     assert row.reserved_usd == ceiling and row.cost_usd == ceiling
@@ -150,16 +150,16 @@ async def test_basket_over_limits_is_422(gclient: AsyncClient, names: list[str])
 async def test_over_daily_cap_returns_demo(
     settings: Settings, clean_tables: None, db_session: AsyncSession
 ) -> None:
-    app = create_app(gemini_settings(settings))  # default $0.25/day: two $0.084 sessions fit
+    app = create_app(gemini_settings(settings))  # default $0.25/day: one $0.141 session fits
     minter = MockLiveTokenMinter()
     app.state.live_token_minter = minter
     async for c in _client(app):
         h = await bearer(c, "a@example.com")
         bodies = [(await c.post(URL, headers=h)).json() for _ in range(3)]
-    assert [b["demo"] for b in bodies] == [False, False, True]
-    assert bodies[2]["token"] is None
-    assert bodies[2]["ai_notice"]["reason"] == "user_daily_cap"
-    assert len(minter.specs) == 2 and len(await ledger(db_session)) == 2
+    assert [b["demo"] for b in bodies] == [False, True, True]
+    assert bodies[1]["token"] is None and bodies[2]["token"] is None
+    assert bodies[1]["ai_notice"]["reason"] == "user_daily_cap"
+    assert len(minter.specs) == 1 and len(await ledger(db_session)) == 1
 
 
 async def test_hourly_rate_limit_is_429(settings: Settings, clean_tables: None) -> None:
@@ -222,8 +222,8 @@ async def test_gemini_minter_locks_model_prompt_and_tool() -> None:
     spec = LiveTokenSpec(
         model="gemini-3.8-live",
         system_instruction=LIVE_PANTRY_SYSTEM,
-        expire_time=now + timedelta(seconds=150),
-        new_session_expire_time=now + timedelta(seconds=60),
+        expire_time=now + timedelta(seconds=45),
+        new_session_expire_time=now + timedelta(seconds=15),
     )
     minted = await minter.mint(spec)
     assert minted.token == "auth_tokens/fake"
@@ -253,12 +253,9 @@ def test_build_live_minter_only_for_gemini_with_key(settings: Settings) -> None:
     assert isinstance(build_live_minter(keyed), GeminiLiveTokenMinter)
 
 
-def test_start_window_must_fit_token_lifetime(settings: Settings) -> None:
-    with pytest.raises(ValueError, match="LIVE_TOKEN_START_SECONDS"):
-        Settings(
-            **{
-                **settings.model_dump(),
-                "live_token_ttl_seconds": 60,
-                "live_token_start_seconds": 90,
-            }
-        )
+@pytest.mark.parametrize(
+    ("field", "value"), [("live_token_start_seconds", 90), ("live_max_session_seconds", 90)]
+)
+def test_windows_must_fit_token_lifetime(settings: Settings, field: str, value: int) -> None:
+    with pytest.raises(ValueError, match=field.upper()):
+        Settings(**{**settings.model_dump(), "live_token_ttl_seconds": 60, field: value})
