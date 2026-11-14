@@ -31,7 +31,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai.budget import CostGuard, Denial, UsageMeter
-from app.ai.notice import AINotice
+from app.ai.notice import LIVE_ALLOWANCE_MESSAGE, AINotice
 from app.ai.pricing import cost_usd
 from app.ai.prompts import data_block
 from app.ai.providers.base import LiveTokenMinter, LiveTokenSpec, MintedLiveToken
@@ -210,7 +210,10 @@ async def issue_live_token(
         decision = await guard.reserve(user_id, CAPABILITY, model, ceiling, now)
     if isinstance(decision, Denial):
         log.info("live token: demo fallback", extra={"reason": decision.reason})
-        return LiveTokenResult(minted=None, notice=AINotice(reason=decision.reason))
+        notice = AINotice(reason=decision.reason)
+        if decision.reason == "user_live_daily_cap":
+            notice = AINotice(reason=decision.reason, message=LIVE_ALLOWANCE_MESSAGE)
+        return LiveTokenResult(minted=None, notice=notice)
 
     meter = UsageMeter(model=model, at=now, attempts=1)
     outcome = "cancelled"

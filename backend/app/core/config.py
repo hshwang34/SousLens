@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Cost guard (DECISIONS #18/#19): per-user UTC-day cap, then the global UTC-month soft
     # degrade (video extraction off) and hard stop (labelled mock fallback for everything).
     ai_user_daily_cap_usd: float = Field(default=0.25, ge=0)
+    # Live pantry scan's own per-user UTC-day allowance (brief 016, PM 2026-11-13): 2 full
+    # scans ≈ 8 sessions x $0.141. Live spend is outside the cap above, inside the monthly caps.
+    ai_user_daily_live_cap_usd: float = Field(default=1.15, ge=0)
     ai_month_soft_cap_usd: float = Field(default=15.0, ge=0)
     ai_month_hard_cap_usd: float = Field(default=22.0, ge=0)
 

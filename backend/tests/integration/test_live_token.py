@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -16,6 +17,7 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.budget import CostGuard, Reservation
 from app.ai.live_pantry import (
     ADD_ITEM,
     LIVE_PANTRY_SYSTEM,
@@ -23,10 +25,12 @@ from app.ai.live_pantry import (
     build_live_minter,
     live_ceiling_usd,
 )
+from app.ai.notice import LIVE_ALLOWANCE_MESSAGE
 from app.ai.providers.base import LiveTokenSpec
 from app.ai.providers.mock import MockLiveTokenMinter
 from app.core.config import Settings
-from app.db.models import AIUsage
+from app.db.engine import make_sessionmaker
+from app.db.models import AIUsage, User
 from app.main import create_app
 from tests.conftest import bearer
 
@@ -53,7 +57,7 @@ def minter() -> MockLiveTokenMinter:
 async def gclient(
     settings: Settings, clean_tables: None, minter: MockLiveTokenMinter
 ) -> AsyncIterator[AsyncClient]:
-    app = create_app(gemini_settings(settings, ai_user_daily_cap_usd=5.0))
+    app = create_app(gemini_settings(settings))
     app.state.live_token_minter = minter
     async for c in _client(app):
         yield c
@@ -147,25 +151,78 @@ async def test_basket_over_limits_is_422(gclient: AsyncClient, names: list[str])
     assert r.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-async def test_over_daily_cap_returns_demo(
-    settings: Settings, clean_tables: None, db_session: AsyncSession
+async def spend(db: AsyncSession, usd: str, capability: str, uid: uuid.UUID | None) -> None:
+    db.add(
+        AIUsage(
+            user_id=uid,
+            capability=capability,
+            model="gemini-3.8-flash",
+            status="settled",
+            reserved_usd=Decimal(usd),
+            cost_usd=Decimal(usd),
+            created_at=datetime.now(UTC),
+        )
+    )
+    await db.commit()
+
+
+async def user_id(db: AsyncSession, email: str) -> uuid.UUID:
+    return (await db.execute(select(User.id).where(User.email == email))).scalar_one()
+
+
+async def test_live_allowance_is_8_sessions_then_demo(
+    gclient: AsyncClient, db_session: AsyncSession, minter: MockLiveTokenMinter
 ) -> None:
-    app = create_app(gemini_settings(settings))  # default $0.25/day: one $0.141 session fits
-    minter = MockLiveTokenMinter()
-    app.state.live_token_minter = minter
-    async for c in _client(app):
-        h = await bearer(c, "a@example.com")
-        bodies = [(await c.post(URL, headers=h)).json() for _ in range(3)]
-    assert [b["demo"] for b in bodies] == [False, True, True]
-    assert bodies[1]["token"] is None and bodies[2]["token"] is None
-    assert bodies[1]["ai_notice"]["reason"] == "user_daily_cap"
-    assert len(minter.specs) == 1 and len(await ledger(db_session)) == 1
+    # Default $1.15/day live allowance: 8 x $0.141 = $1.128 fits, the 9th does not.
+    h = await bearer(gclient, "a@example.com")
+    bodies = [(await gclient.post(URL, headers=h)).json() for _ in range(9)]
+    assert [b["demo"] for b in bodies] == [False] * 8 + [True]
+    assert bodies[8]["token"] is None
+    assert bodies[8]["ai_notice"] == {
+        "code": "AI_RESTING",
+        "message": LIVE_ALLOWANCE_MESSAGE,
+        "reason": "user_live_daily_cap",
+        "demo": True,
+    }
+    assert len(minter.specs) == 8 and len(await ledger(db_session)) == 8
+    # Another user has their own allowance.
+    other = await bearer(gclient, "b@example.com")
+    assert (await gclient.post(URL, headers=other)).json()["demo"] is False
+
+
+async def test_coach_spend_does_not_use_live_allowance(
+    gclient: AsyncClient, db_session: AsyncSession
+) -> None:
+    h = await bearer(gclient, "a@example.com")
+    await spend(db_session, "0.25", "coach", await user_id(db_session, "a@example.com"))
+    assert (await gclient.post(URL, headers=h)).json()["demo"] is False
+
+
+async def test_live_spend_does_not_use_coach_cap(
+    gclient: AsyncClient, db_session: AsyncSession, settings: Settings
+) -> None:
+    await bearer(gclient, "a@example.com")
+    uid = await user_id(db_session, "a@example.com")
+    await spend(db_session, "1.10", "pantry_live", uid)
+    guard = CostGuard(make_sessionmaker(db_session.bind), settings)  # type: ignore[arg-type]
+    status = await guard.status(uid)
+    assert status.live is True and status.user_day_spent_usd == 0
+    decision = await guard.reserve(uid, "coach", "gemini-3.8-flash", Decimal("0.20"))
+    assert isinstance(decision, Reservation)
+
+
+async def test_monthly_hard_stop_still_blocks_live(
+    gclient: AsyncClient, db_session: AsyncSession, minter: MockLiveTokenMinter
+) -> None:
+    h = await bearer(gclient, "a@example.com")
+    await spend(db_session, "21.90", "coach", None)  # app-wide month spend near the $22 stop
+    body = (await gclient.post(URL, headers=h)).json()
+    assert body["demo"] is True and body["ai_notice"]["reason"] == "monthly_cap"
+    assert minter.specs == []
 
 
 async def test_hourly_rate_limit_is_429(settings: Settings, clean_tables: None) -> None:
-    app = create_app(
-        gemini_settings(settings, ai_user_daily_cap_usd=5.0, live_tokens_per_user_per_hour=2)
-    )
+    app = create_app(gemini_settings(settings, live_tokens_per_user_per_hour=2))
     app.state.live_token_minter = MockLiveTokenMinter()
     async for c in _client(app):
         h = await bearer(c, "a@example.com")
