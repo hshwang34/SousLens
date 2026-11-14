@@ -10,6 +10,7 @@ from app.api.v1 import (
     extractions,
     feed,
     health,
+    live_scans,
     me,
     media,
     pantry,
@@ -26,6 +27,7 @@ router.include_router(feed.router)
 router.include_router(drafts.router)  # before recipes: `/recipes/drafts` is not a recipe id
 router.include_router(recipes.router)
 router.include_router(recipes.versions_router)
+router.include_router(live_scans.router)  # before pantry: `/pantry/live-scans` is not an item
 router.include_router(pantry.router)
 router.include_router(substitutions.router)
 router.include_router(sessions.router)
