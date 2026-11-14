@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     ai,
+    capture,
     creators,
     drafts,
     extractions,
@@ -31,3 +32,4 @@ router.include_router(sessions.router)
 router.include_router(ai.router)
 router.include_router(media.router)
 router.include_router(extractions.router)
+router.include_router(capture.router)
