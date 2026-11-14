@@ -32,7 +32,7 @@ MAX_ITEMS_PER_REQUEST = 100
 QUANTITY_MAX = 1_000_000
 
 StorageLocationIn = Literal["fridge", "freezer", "pantry", "counter", "other"]
-SourceIn = Literal["manual", "voice", "photo"]
+SourceIn = Literal["manual", "voice", "photo", "live"]
 ConfidenceBin = Literal["high", "medium", "unknown"]
 
 Label = Annotated[
@@ -187,3 +187,70 @@ class ObservationOut(BaseModel):
     requires_confirmation: Literal[True] = True
     expires_at: datetime
     ai_notice: AINotice | None = notice_field()  # brief 007; omitted unless set
+
+
+# --- live scans (brief 016) -----------------------------------------------------------------
+
+LIVE_NAME_MAX = 120
+LIVE_EVIDENCE_MAX = 300
+LiveConfidence = Literal["high", "medium", "low"]
+LiveName = Annotated[
+    str,
+    BeforeValidator(partial(check_text, multiline=False, trim=True)),
+    StringConstraints(min_length=1, max_length=LIVE_NAME_MAX),
+]
+LiveKind = Annotated[
+    str,
+    BeforeValidator(partial(check_text, multiline=False, trim=True)),
+    StringConstraints(max_length=32),
+]
+LiveEvidence = Annotated[
+    str,
+    BeforeValidator(partial(check_text, multiline=True, trim=True)),
+    StringConstraints(max_length=LIVE_EVIDENCE_MAX),
+]
+
+
+class CreateLiveScan(_Strict):
+    demo: bool = False  # set by the caller for mock/demo scans: nothing auto-saves
+
+
+class LiveScanCreated(BaseModel):
+    id: uuid.UUID
+    demo: bool
+    expires_at: datetime
+
+
+class LiveItemIn(_Strict):
+    """What the model reported through ``add_item``. Untrusted data, never instructions."""
+
+    name: LiveName
+    kind: LiveKind | None = None
+    confidence: LiveConfidence
+    evidence: LiveEvidence | None = None
+
+
+class LiveItemOut(BaseModel):
+    status: Literal["new", "already_in_basket", "in_pantry"]
+    key: str
+    canonical_name: str
+    display_name: str
+    confidence: LiveConfidence
+    existing_pantry_item_id: uuid.UUID | None = None
+
+
+class LiveScanOut(BaseModel):
+    id: uuid.UUID
+    demo: bool
+    status: Literal["scanning", "finished"]
+    expires_at: datetime
+    items: list[LiveItemOut]
+
+
+class LiveReviewItem(LiveItemOut):
+    reason: Literal["unsure", "in_pantry", "demo"]
+
+
+class LiveScanFinished(BaseModel):
+    saved: list[PantryItemOut]
+    review: list[LiveReviewItem]

@@ -86,6 +86,7 @@ class PantrySource(enum.StrEnum):
     MANUAL = "manual"
     VOICE = "voice"
     PHOTO = "photo"
+    LIVE = "live"  # auto-saved from a live pantry scan (brief 016)
 
 
 class StorageLocation(enum.StrEnum):
@@ -649,6 +650,56 @@ class PantryObservation(CreatedAtMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
+
+
+LIVE_SCAN_STATUSES = ("scanning", "finished")
+LIVE_CONFIDENCES = ("high", "medium", "low")
+
+
+class PantryLiveScan(CreatedAtMixin, Base):
+    """A live pantry scan's basket session (brief 016). 24 h TTL like observations; only
+    ``finish`` writes pantry rows. ``demo`` scans (mock provider) never auto-save."""
+
+    __tablename__ = "pantry_live_scans"
+    __table_args__ = (
+        CheckConstraint(_in("status", LIVE_SCAN_STATUSES), name="status_known"),
+        Index("ix_pantry_live_scans_owner_created", "owner_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    demo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="scanning", server_default=text("'scanning'")
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+
+class PantryLiveScanItem(CreatedAtMixin, Base):
+    """One deduplicated basket item: one row per normalised key per scan."""
+
+    __tablename__ = "pantry_live_scan_items"
+    __table_args__ = (
+        UniqueConstraint("scan_id", "key"),
+        CheckConstraint(_in("confidence", LIVE_CONFIDENCES), name="confidence_known"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    scan_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("pantry_live_scans.id", ondelete="CASCADE"), nullable=False
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str | None] = mapped_column(String(32))
+    confidence: Mapped[str] = mapped_column(String(8), nullable=False)
+    evidence: Mapped[str | None] = mapped_column(Text)
 
 
 class CookingSession(TimestampMixin, Base):
