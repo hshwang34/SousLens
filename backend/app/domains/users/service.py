@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import User
+from app.db.models import User, UserRole
 
 
 def display_name_from_email(email: str) -> str:
@@ -64,3 +65,17 @@ async def get_or_create_by_email(
             raise
         return user
     return candidate
+
+
+async def set_role(session: AsyncSession, user: User, role: str) -> User:
+    user.role = UserRole(role)
+    await session.flush()
+    return user
+
+
+async def complete_onboarding(session: AsyncSession, user: User) -> User:
+    """Idempotent: the first completion time is kept (brief 015)."""
+    if user.onboarded_at is None:
+        user.onboarded_at = datetime.now(UTC)
+        await session.flush()
+    return user

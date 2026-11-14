@@ -49,7 +49,15 @@ async def test_preferences_normalised_and_bounded(
     await seed(db_session)
     alice = await bearer(client, "alice@example.com")
     r = await client.get("/v1/me/preferences", headers=alice)
-    assert r.json() == {"allergies": [], "avoid": [], "updated_at": None, "unrecognized": []}
+    assert r.json() == {
+        "allergies": [],
+        "avoid": [],
+        "diets": [],
+        "cuisines": [],
+        "skill_level": None,
+        "updated_at": None,
+        "unrecognized": [],
+    }
     out = await set_prefs(
         client,
         alice,
