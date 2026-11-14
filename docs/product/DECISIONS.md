@@ -280,3 +280,22 @@ PRD §4.2 (P1) forward and amends #4 ("P0 social = feed/save/share only").
 - **Seed content:** six fictional creator personas with original recipes. No real people or
   brands.
 *Lives in:* `docs/product/briefs/015-onboarding-social.md`, `015-api-contract.md`.
+
+#28 · 2026-11-13 · **Live pantry scan on Gemini Live; only unsure items need confirming (brief 016).**
+- **Engine:** Gemini Live. The phone streams camera frames (max 1/s) straight to Google with a
+  single-use ephemeral token from our backend, locked to the model, instructions and one
+  `add_item` tool. Item positions on screen are not needed.
+- **Supersedes, for the pantry live scan only:** #4's "no continuous video to the model, single
+  deliberate frames only" and #25's "No Gemini Live". Narrows PRD §4.3 P2 ("continuous autonomous
+  scene tracking") and §9.5 ("visual capture deliberate") the same way. Everything else in #4 and
+  #25 stands.
+- **Exception to PAN-04 and "No silent state changes":** high-confidence items from a live scan
+  are saved without a per-item tap. They carry source `live`, show an "Auto-added" chip and can
+  be removed. Medium and low-confidence items, and items that match an existing pantry item, still
+  need the cook's tap.
+- **Unchanged:** the camera runs only while the scan screen is open, with a visible indicator.
+  Frames are never stored. Gemini runs on the paid tier only (#19), inside the existing caps,
+  with each scan reserving its worst-case cost. `AI_PROVIDER=mock` replays a labelled demo
+  script and never auto-saves.
+- **Spend:** none until the PM gives an explicit go (spike first, under $1).
+*Lives in:* `docs/product/briefs/016-live-pantry-scan.md`.
