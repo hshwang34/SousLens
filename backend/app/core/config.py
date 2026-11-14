@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     dev_login_lockout_window_minutes: int = 15
     dev_login_max_failures_per_window: int = 10
     ai_provider: Literal["mock", "gemini"] = "mock"
+    # Brief 012 tier plumbing (DECISIONS #22): every account gets this entitlement until
+    # purchases exist. The beta runs everyone on ``paid``; there is no per-user column yet.
+    default_entitlement: Literal["free", "paid"] = "paid"
 
     # Gemini (Slice 4, DECISIONS #19). The key is a SecretStr: it never appears in reprs, logs
     # or error bodies, and it never leaves the backend. Each capability has its own model so a

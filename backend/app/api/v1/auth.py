@@ -61,4 +61,4 @@ async def verify_dev_login(
     user = await provider.authenticate(session, email=email, display_name=None)
     await session.commit()
     token = create_access_token(settings, user.id)
-    return TokenResponse(access_token=token, user=UserOut.from_model(user))
+    return TokenResponse(access_token=token, user=UserOut.from_model(user, settings))

@@ -46,7 +46,7 @@ Bearer auth unless marked public; errors use the PRD §11 envelope. Full shapes:
 |---|---|---|
 | GET | `/health` | public |
 | POST | `/auth/dev-login`, `/auth/dev-login/verify` | dev mode only (two-step, code in the server log) |
-| GET | `/me` | current user |
+| GET | `/me` | current user: `id`, `display_name`, `preference_units`, `created_at`, `entitlement` (`free` / `paid`, from `DEFAULT_ENTITLEMENT`, default `paid` for the beta; brief 012) |
 | GET | `/me/saved` | saved recipes, newest save first |
 | GET | `/me/recipes` | my published recipes (any visibility) + `has_open_draft` |
 | GET | `/recipes?query=&tag=&cursor=&limit=` | public feed; `query` matches title or any ingredient; `saved` is `null` when anonymous |

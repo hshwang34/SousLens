@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
 from app.domains.matching.dictionary import load_dictionary
 from app.domains.recipes import service as recipes_service
@@ -15,8 +15,9 @@ router = APIRouter(tags=["me"])
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser) -> UserOut:
-    return UserOut.from_model(user)
+async def me(user: CurrentUser, settings: SettingsDep) -> UserOut:
+    """Current user, including the ``free`` / ``paid`` entitlement (brief 012)."""
+    return UserOut.from_model(user, settings)
 
 
 @router.get("/me/saved", response_model=RecipeCardList)
