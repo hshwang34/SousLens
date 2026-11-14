@@ -32,22 +32,34 @@ final class OnboardingViewModel {
     private(set) var diets: [String] = []
     private(set) var cuisines: [String] = []
     var skillLevel: String?
+    // Follow: suggestions for the chosen cuisines. Each follow / unfollow is its own tap and
+    // saves right away; nothing is preselected.
+    enum SuggestionsPhase: Equatable { case idle, loading, loaded, error(String) }
+    private(set) var suggestionsPhase: SuggestionsPhase = .idle
+    private(set) var suggestions: [CreatorSummary] = []
+    private(set) var followBusy: Set<UUID> = []
+    private var suggestionsCuisines: [String]?
+    // Pantry: how many items the user confirmed here (0 = skipped or "Later").
+    private(set) var pantryItemsAdded = 0
 
     private(set) var isWorking = false
     private(set) var errorMessage: String?
     private(set) var isFinished = false
 
     private let service: OnboardingService
+    private let social: SocialService
     private let onUserUpdated: @MainActor (User) -> Void
     private var tastePrefilled = false
 
     init(service: OnboardingService,
+         social: SocialService,
          preferencesService: PreferencesService,
          steps: [Step] = OnboardingViewModel.allSteps,
          onUserUpdated: @escaping @MainActor (User) -> Void) {
         precondition(steps.first == .welcome && steps.last == .done, "onboarding starts at welcome and ends at done")
         self.steps = steps
         self.service = service
+        self.social = social
         self.preferences = PreferencesViewModel(service: preferencesService)
         self.onUserUpdated = onUserUpdated
     }
@@ -69,6 +81,7 @@ final class OnboardingViewModel {
     var canSkip: Bool { step.isSkippable && !isWorking }
 
     var hasAllergies: Bool { !preferences.entries(.allergies).isEmpty }
+    var followingCount: Int { suggestions.filter(\.isFollowing).count }
 
     var canContinue: Bool {
         guard !isWorking else { return false }
@@ -80,6 +93,51 @@ final class OnboardingViewModel {
         case .allergies:
             return preferences.phase == .loaded && !preferences.isSaving && (hasAllergies || saysNoAllergies)
         }
+    }
+
+    // MARK: - Follow
+
+    /// Loads once per cuisine choice; going back and changing cuisines reloads.
+    func loadSuggestions() async {
+        guard suggestionsCuisines != cuisines || suggestionsPhase != .loaded else { return }
+        suggestionsPhase = .loading
+        do {
+            let loaded = try await social.suggestedCreators(cuisines: cuisines, limit: 8)
+            // Keep follows the user already made in this run if a creator is still suggested.
+            let followed = Set(suggestions.filter(\.isFollowing).map(\.id))
+            suggestions = loaded.map { creator in
+                var copy = creator
+                if followed.contains(creator.id) { copy.isFollowing = true }
+                return copy
+            }
+            suggestionsCuisines = cuisines
+            suggestionsPhase = .loaded
+        } catch let error as APIError where error == .cancelled {
+            return
+        } catch {
+            suggestionsPhase = .error((error as? APIError)?.userMessage ?? error.localizedDescription)
+        }
+    }
+
+    func toggleFollow(_ creatorId: UUID) async {
+        guard let i = suggestions.firstIndex(where: { $0.id == creatorId }), !followBusy.contains(creatorId) else { return }
+        let wasFollowing = suggestions[i].isFollowing
+        followBusy.insert(creatorId)
+        suggestions[i].isFollowing.toggle()
+        defer { followBusy.remove(creatorId) }
+        do {
+            let updated = wasFollowing ? try await social.unfollow(creatorId: creatorId) : try await social.follow(creatorId: creatorId)
+            if let j = suggestions.firstIndex(where: { $0.id == creatorId }) { suggestions[j] = updated }
+        } catch {
+            if let j = suggestions.firstIndex(where: { $0.id == creatorId }) { suggestions[j].isFollowing = wasFollowing }
+            errorMessage = "Couldn’t update: \((error as? APIError)?.userMessage ?? error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Pantry
+
+    func pantryAdded(_ count: Int) {
+        pantryItemsAdded += count
     }
 
     // MARK: - Actions

@@ -77,6 +77,12 @@ struct ProfileView: View {
         .fullScreenCover(item: $editor, onDismiss: { Task { await model?.refresh() } }) { editor in
             DraftEditorView(model: editor)
         }
+        .task(id: environment.requestNewRecipe) {
+            // Brief 015: onboarding's "Record your first recipe" lands here.
+            guard environment.requestNewRecipe else { return }
+            environment.requestNewRecipe = false
+            await createRecipe()
+        }
     }
 
     // MARK: - My recipes

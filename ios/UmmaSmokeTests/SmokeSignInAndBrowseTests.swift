@@ -45,6 +45,52 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         attach(app, "4-detail")
     }
 
+    // MARK: - Brief 015
+
+    /// A brand-new email walks the whole first run. The email is unique per run so the server
+    /// has no `onboarded_at` yet. Needs `make seed` (the personas) on the backend.
+    func testOnboardingFirstRun() throws {
+        let email = "smoke-onboard-\(Int(Date().timeIntervalSince1970))@umma.dev"
+        let app = try launchSignedIn(email: email, onboarding: true)
+        let next = app.buttons["onboarding.continue"]
+        XCTAssertTrue(next.waitForExistence(timeout: 15), "onboarding did not appear for a new account")
+        attach(app, "015-1-welcome")
+        next.tap()
+
+        app.buttons["onboarding.role.cook"].tap()
+        attach(app, "015-2-role")
+        next.tap()
+
+        let none = app.buttons["onboarding.allergy.none"]
+        XCTAssertTrue(none.waitForExistence(timeout: 10))
+        XCTAssertFalse(next.isEnabled, "allergies need an answer")
+        none.tap()
+        attach(app, "015-3-allergies")
+        next.tap()
+
+        let korean = app.buttons["onboarding.cuisine.korean"]
+        XCTAssertTrue(korean.waitForExistence(timeout: 5))
+        korean.tap()
+        attach(app, "015-4-taste")
+        next.tap()
+
+        let follow = app.buttons["Follow"].firstMatch
+        XCTAssertTrue(follow.waitForExistence(timeout: 10), "no creator suggestions (did make seed run?)")
+        attach(app, "015-5-follow")
+        follow.tap()
+        XCTAssertTrue(app.buttons["Following"].firstMatch.waitForExistence(timeout: 5))
+        next.tap()
+
+        XCTAssertTrue(app.buttons["onboarding.pantry.scan"].waitForExistence(timeout: 5))
+        attach(app, "015-6-pantry")
+        app.buttons["onboarding.skip"].tap()
+
+        attach(app, "015-7-done")
+        next.tap()
+        XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 15), "onboarding did not finish")
+        attach(app, "015-8-explore")
+    }
+
     // MARK: - Brief 003
 
     func testAuthorPublishAndSave() throws {
@@ -431,7 +477,8 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
     // MARK: - Helpers
 
     /// Launches, signs out any leftover session, then signs in with the code from the server log.
-    private func launchSignedIn(email: String) throws -> XCUIApplication {
+    /// Onboarding (brief 015) is off unless asked for, so the older flows start on the tabs.
+    private func launchSignedIn(email: String, onboarding: Bool = false) throws -> XCUIApplication {
         let logPath = try XCTUnwrap(
             ProcessInfo.processInfo.environment["UMMA_SMOKE_LOG"],
             "UMMA_SMOKE_LOG must point at the backend log (use `make ios-smoke`)"
@@ -440,6 +487,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         // `-auth.hasLaunched NO` overrides that UserDefaults key for this launch only, so the app
         // takes its fresh-install path and discards any session a previous run left behind.
         app.launchArguments += ["-serverBaseURL", "http://localhost:8000", "-auth.hasLaunched", "NO"]
+        app.launchArguments += ["-feature.onboarding", onboarding ? "YES" : "NO"]
         app.launch()
 
         // Step 1: email
@@ -461,6 +509,7 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         codeField.typeText(code)
         attach(app, "2-code")
         app.buttons["Verify"].tap()
+        if onboarding { return app }
         XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 15), "sign-in did not complete")
         return app
     }

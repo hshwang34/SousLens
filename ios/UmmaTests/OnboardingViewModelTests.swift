@@ -16,7 +16,7 @@ final class OnboardingViewModelTests: XCTestCase {
     }
 
     private func makeModel(_ steps: [OnboardingViewModel.Step] = OnboardingViewModel.allSteps) async -> OnboardingViewModel {
-        let model = OnboardingViewModel(service: social, preferencesService: cooking, steps: steps) { [weak self] user in
+        let model = OnboardingViewModel(service: social, social: social, preferencesService: cooking, steps: steps) { [weak self] user in
             self?.updatedUsers.append(user)
         }
         await model.start()
@@ -131,6 +131,58 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertEqual(model.diets, ["vegan"])
         XCTAssertEqual(model.cuisines, ["japanese"])
         XCTAssertEqual(model.skillLevel, "confident")
+    }
+
+    func testFollowSuggestionsUseCuisinesAndToggleSavesEachTap() async throws {
+        let mina = try XCTUnwrap(UUID(uuidString: SocialFixtures.minaId))
+        social.suggestedHandler = { _ in
+            [SocialFixtures.creator(), SocialFixtures.creator(id: SocialFixtures.samId, name: "Sam Okafor")]
+        }
+        let model = await makeModel([.welcome, .taste, .follow, .done])
+        await model.continueTapped()
+        model.toggleCuisine("korean")
+        await model.continueTapped()
+        XCTAssertEqual(model.step, .follow)
+        XCTAssertTrue(model.canSkip)
+
+        await model.loadSuggestions()
+        XCTAssertEqual(model.suggestionsPhase, .loaded)
+        XCTAssertEqual(model.suggestions.count, 2)
+        XCTAssertEqual(model.followingCount, 0, "nothing preselected")
+        XCTAssertTrue(social.calls.contains(.suggested(["korean"])))
+
+        await model.loadSuggestions()
+        XCTAssertEqual(social.calls.filter { if case .suggested = $0 { true } else { false } }.count, 1, "same cuisines: no reload")
+
+        await model.toggleFollow(mina)
+        XCTAssertEqual(model.followingCount, 1)
+        XCTAssertEqual(social.calls.last, .follow(mina))
+        await model.toggleFollow(mina)
+        XCTAssertEqual(model.followingCount, 0)
+        XCTAssertEqual(social.calls.last, .unfollow(mina))
+    }
+
+    func testFailedFollowRollsBack() async throws {
+        let mina = try XCTUnwrap(UUID(uuidString: SocialFixtures.minaId))
+        social.followHandler = { _, _ in throw APIError.http(status: 503, correlationId: nil) }
+        let model = await makeModel([.welcome, .follow, .done])
+        await model.continueTapped()
+        await model.loadSuggestions()
+        await model.toggleFollow(mina)
+        XCTAssertEqual(model.followingCount, 0)
+        XCTAssertNotNil(model.errorMessage)
+    }
+
+    func testPantryCountsAddedItemsAndCanBeSkipped() async {
+        let model = await makeModel([.welcome, .pantry, .done])
+        await model.continueTapped()
+        XCTAssertEqual(model.step, .pantry)
+        XCTAssertTrue(model.canContinue)
+        model.pantryAdded(3)
+        model.pantryAdded(2)
+        XCTAssertEqual(model.pantryItemsAdded, 5)
+        model.skip()
+        XCTAssertEqual(model.step, .done)
     }
 
     func testProgressCountsOnlyRealSteps() async {

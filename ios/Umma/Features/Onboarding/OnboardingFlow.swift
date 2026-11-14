@@ -22,7 +22,8 @@ struct OnboardingFlow: View {
         .task {
             guard model == nil else { return }
             let auth = environment.auth
-            let created = OnboardingViewModel(service: environment.api, preferencesService: environment.api, steps: steps) { user in
+            let created = OnboardingViewModel(service: environment.api, social: environment.api,
+                                              preferencesService: environment.api, steps: steps) { user in
                 auth.updateUser(user)
             }
             model = created
@@ -59,7 +60,8 @@ struct OnboardingFlow: View {
         case .role: RoleStep(model: model)
         case .allergies: AllergiesStep(model: model)
         case .taste: TasteStep(model: model)
-        case .follow, .pantry: EmptyView()  // brief 015 PR 9
+        case .follow: FollowStep(model: model)
+        case .pantry: PantryStep(model: model)
         case .done: DoneStep(model: model)
         }
     }
@@ -75,11 +77,7 @@ struct OnboardingFlow: View {
             }
             Button {
                 forward = true
-                Task {
-                    await model.continueTapped()
-                    // Land on Explore; a deep link that waited for onboarding still applies.
-                    if model.isFinished { environment.selectedTab = .explore }
-                }
+                Task { await finish(model, recordRecipe: false) }
             } label: {
                 if model.isWorking {
                     ProgressView().tint(SLColor.onBrand)
@@ -91,11 +89,33 @@ struct OnboardingFlow: View {
             .disabled(!model.canContinue)
             .slDisabledAppearance(!model.canContinue)
             .accessibilityIdentifier("onboarding.continue")
+            if model.step == .done, model.role == .creator {
+                Button("Record your first recipe") {
+                    Task { await finish(model, recordRecipe: true) }
+                }
+                .buttonStyle(SLButtonStyle(prominent: false))
+                .disabled(model.isWorking)
+                .accessibilityIdentifier("onboarding.recordRecipe")
+            }
         }
         .padding(.horizontal, Spacing.screen)
         .padding(.vertical, Spacing.md)
         .bottomBarScrim()
         .animation(.mise(reduceMotion: reduceMotion), value: model.step)
+    }
+
+    /// Continue on most steps; on Done it completes onboarding and picks where the tabs open.
+    private func finish(_ model: OnboardingViewModel, recordRecipe: Bool) async {
+        await model.continueTapped()
+        guard model.isFinished else { return }
+        if recordRecipe {
+            // Brief 015: the brief 014 recorder when it ships; today Profile's new-recipe editor.
+            environment.selectedTab = .profile
+            environment.requestNewRecipe = true
+        } else {
+            // Land on Explore; a deep link that waited for onboarding still applies.
+            environment.selectedTab = .explore
+        }
     }
 
     static func primaryTitle(_ step: OnboardingViewModel.Step) -> String {
@@ -343,26 +363,6 @@ private struct TasteStep: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             Text(title).font(SLFont.headline).foregroundStyle(SLColor.textPrimary).accessibilityAddTraits(.isHeader)
             FlowLayout(spacing: Spacing.sm) { content() }
-        }
-    }
-}
-
-private struct DoneStep: View {
-    let model: OnboardingViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.lg) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(SLColor.success)
-                .accessibilityHidden(true)
-                .padding(.top, Spacing.xl)
-            OnboardingTitle(
-                title: "You’re all set",
-                message: model.role == .creator
-                    ? "Your feed is ready. When you’re ready to share a family recipe, tap New recipe in Profile."
-                    : "Your feed is ready. Change any of this later in Profile."
-            )
         }
     }
 }
