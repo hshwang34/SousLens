@@ -56,6 +56,10 @@ class CommandIn(_In):
     t_ms: TMs | None = None
 
 
+class FinishIn(_In):
+    t_ms: TMs | None = None
+
+
 class AskOut(BaseModel):
     question_id: uuid.UUID
     text: str
@@ -116,3 +120,8 @@ class SessionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     events: list[EventOut] | None = None  # only on GET
+
+
+class FinishOut(BaseModel):
+    questions: list[AskOut]
+    session: SessionOut

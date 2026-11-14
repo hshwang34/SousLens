@@ -8,6 +8,7 @@ import itertools
 import uuid
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 
 from tests.conftest import bearer
@@ -114,6 +115,8 @@ async def test_other_users_get_identical_404s(client: AsyncClient) -> None:
                 json={"segments": [], "silence_ms": 0},
                 headers={**intruder, **key()},
             ),
+            client.post(f"{BASE}/{sid}/finish", json={}, headers={**intruder, **key()}),
+            client.post(f"{BASE}/{sid}/generate", headers={**intruder, **key()}),
             client.post(
                 f"{BASE}/{sid}/commands", json={"command": "pause"}, headers={**intruder, **key()}
             ),
@@ -287,6 +290,85 @@ async def test_spacing_and_cap_follow_t_ms(client: AsyncClient) -> None:
     assert len(asked) == 6
     assert all(b - a >= 45_000 for a, b in itertools.pairwise(asked))
     assert (await cap.get())["live_asks_used"] == 6
+
+
+# --- finish + generate ---------------------------------------------------------------------
+
+
+async def test_finish_returns_at_most_three_and_is_idempotent(client: AsyncClient) -> None:
+    cap = await start(client)
+    await cap.post("/commands", {"command": "stop_asking"})
+    await cap.say(1000, "the tofu goes in", "then the onion and the garlic", "into the oven")
+    k = key()
+    out = await cap.post("/finish", {"t_ms": 90_000}, k=k)
+    assert len(out["questions"]) == 3
+    assert out["session"]["status"] == "wrapping_up"
+    assert out["questions"][0]["topic_key"] == "oven_temperature"
+    assert all(q["phase"] == "wrapup" and q["expires_at_ms"] is None for q in out["questions"])
+    assert await cap.post("/finish", {"t_ms": 90_000}, k=k) == out
+    again = await cap.post("/finish", {})
+    assert [q["question_id"] for q in again["questions"]] == [
+        q["question_id"] for q in out["questions"]
+    ]
+    q = out["questions"][0]
+    await cap.outcome(q["question_id"], "answered", 95_000, "180 degrees")
+    assert len((await cap.get())["wrapup_questions"]) == 2
+
+
+async def test_deferred_questions_come_first_in_wrap_up(client: AsyncClient) -> None:
+    cap = await start(client)
+    ask = (await cap.say(50_000, "the tofu goes in"))["ask"]
+    await cap.outcome(ask["question_id"], "later", 51_000)
+    await cap.say(60_000, "into the oven", silence=0)
+    out = await cap.post("/finish", {})
+    assert out["questions"][0]["topic_key"] == "tofu_quantity"
+
+
+async def test_generate_needs_finish_and_creates_a_capture_job(client: AsyncClient) -> None:
+    cap = await start(client)
+    await cap.say(1000, "the pork belly goes in, 300 grams of pork belly", silence=0)
+    err = await cap.post("/generate", status=409)
+    assert err["error"]["code"] == "STATE_CONFLICT"
+    await cap.post("/finish", {})
+    k = key()
+    job = await cap.post("/generate", k=k, status=202)
+    assert job["kind"] == "capture" and job["status"] == "queued"
+    assert (await cap.post("/generate", k=k, status=202))["id"] == job["id"]
+    polled = await client.get(f"/v1/extractions/{job['id']}", headers=cap.headers)
+    assert polled.status_code == 200 and polled.json()["draft_id"] == job["draft_id"]
+    out = await cap.get()
+    assert out["status"] == "generating" and out["draft_id"] == job["draft_id"]
+    assert out["wrapup_questions"] == []
+    await cap.post("/generate", status=409)
+
+
+async def test_delete_while_generating_is_refused(client: AsyncClient) -> None:
+    cap = await start(client)
+    await cap.say(1000, "the tofu goes in", silence=0)
+    await cap.post("/finish", {})
+    await cap.post("/generate", status=202)
+    res = await client.delete(f"{BASE}/{cap.sid}", headers=cap.headers)
+    assert res.status_code == 409
+    assert (await cap.get())["status"] == "generating"
+
+
+async def test_generate_over_the_monthly_cap_keeps_the_recording(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.domains.extraction import jobs
+
+    async def full(*_a: Any, **_k: Any) -> int:
+        return 5
+
+    monkeypatch.setattr(jobs, "monthly_extractions", full)
+    cap = await start(client)
+    await cap.say(1000, "the tofu goes in", silence=0)
+    await cap.post("/finish", {})
+    err = (await cap.post("/generate", status=429))["error"]
+    assert err["code"] == "CAPTURE_GENERATION_LIMIT" and err["retryable"] is True
+    out = await cap.get()
+    assert out["status"] == "wrapping_up" and out["draft_id"] is None
+    assert any(e["kind"] == "utterance" for e in out["events"])
 
 
 async def test_delete_session_removes_its_events(client: AsyncClient) -> None:
