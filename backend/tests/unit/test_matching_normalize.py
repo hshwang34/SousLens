@@ -219,6 +219,27 @@ def test_generic_names_expose_ambiguity(d: IngredientDictionary) -> None:
     assert normalize("chicken thighs", d).ambiguous_with == ()
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # Live scan spike (brief 016): hyphen-less grain names and canned vs fresh tomatoes.
+        ("long grain rice", "rice"),
+        ("long-grain rice", "rice"),
+        ("chopped tomatoes", "canned tomatoes"),  # the canned product, not fresh tomatoes
+        ("canned chopped tomatoes", "canned tomatoes"),
+        ("tinned chopped tomatoes", "canned tomatoes"),
+        ("diced tomatoes", "canned tomatoes"),
+        ("tomatoes", "tomato"),
+        ("fresh tomatoes", "tomato"),
+        ("chopped tomato", "tomato"),  # one tomato, chopped: still fresh
+        ("canned chickpeas", "chickpeas"),  # chickpeas are the same ingredient canned or not
+        ("chickpeas", "chickpeas"),
+    ],
+)
+def test_canned_and_grain_variants(text: str, expected: str, d: IngredientDictionary) -> None:
+    assert key(text, d) == expected
+
+
 def test_alternatives_split_on_or() -> None:
     assert alternatives("spam or bacon") == ["spam", "bacon"]
     assert alternatives("Garlic") == ["garlic"]

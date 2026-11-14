@@ -221,3 +221,21 @@ async def test_hourly_scan_limit(client: AsyncClient) -> None:
         await start(client, h)
     res = await client.post(BASE, headers=h)
     assert res.status_code == 429 and res.json()["error"]["code"] == "RATE_LIMITED"
+
+
+async def test_spike_dedupe_gaps(client: AsyncClient) -> None:
+    """Gemini Live spike: long grain rice is rice; canned chopped tomatoes ≠ fresh tomatoes."""
+    h = await bearer(client, "cook@example.com")
+    scan = await start(client, h)
+    assert (await add(client, h, scan, "rice")).json()["status"] == "new"
+    rice = (await add(client, h, scan, "long grain rice")).json()
+    assert rice["status"] == "already_in_basket" and rice["key"] == "rice"
+
+    canned = (await add(client, h, scan, "chopped tomatoes")).json()
+    assert canned["status"] == "new" and canned["key"] == "canned tomatoes"
+    fresh = (await add(client, h, scan, "tomatoes")).json()
+    assert fresh["status"] == "new" and fresh["key"] == "tomato"
+    assert (await add(client, h, scan, "canned chopped tomatoes")).json()["key"] == (
+        "canned tomatoes"
+    )
+    assert len((await client.get(f"{BASE}/{scan}", headers=h)).json()["items"]) == 3
