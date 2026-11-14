@@ -67,7 +67,8 @@ iPhone in hand. Glasses come later on the same path.
 3. **Spend go.** → *Answer:* PM supplied the keys and asked for a real test (2026-11-13). Spike run.
 4. **Per-user cap for live scans?** A 2-minute scan costs about $0.15 (spike), so the $0.25/day cap allows
    1–2. Options: keep it, a separate live-scan allowance, or cut cost first (session rotation).
-   **Recommendation:** cut cost first, then re-measure. → *Answer:* pending.
+   **Recommendation:** a separate live-scan allowance. → *Answer:* separate allowance, 2 full scans (about 4
+   min) per person per day, about $1.15/day, still inside the app-wide monthly caps (PM, 2026-11-13).
 
 ## PR sequence
 0. Docs: this brief and DECISIONS #28.

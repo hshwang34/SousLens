@@ -297,5 +297,8 @@ PRD §4.2 (P1) forward and amends #4 ("P0 social = feed/save/share only").
   Frames are never stored. Gemini runs on the paid tier only (#19), inside the existing caps,
   with each scan reserving its worst-case cost. `AI_PROVIDER=mock` replays a labelled demo
   script and never auto-saves.
-- **Spend:** none until the PM gives an explicit go (spike first, under $1).
+- **Spend:** the PM supplied the keys and asked for a real test (2026-11-13). The spike cost about $0.35.
+- **Allowance:** live scan has its own per-person daily allowance of 2 full scans (about 4 minutes,
+  about $1.15/day; each 30 s session reserves its 45 s token's worst case, about $0.14). It is separate from
+  the $0.25/day coach and photo cap (#19) and still inside the app-wide monthly soft and hard caps.
 *Lives in:* `docs/product/briefs/016-live-pantry-scan.md`.
