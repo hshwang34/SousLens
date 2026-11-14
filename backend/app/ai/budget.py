@@ -44,6 +44,7 @@ Capability = Literal[
     "video",
     "capture",
     "capture_draft",
+    "pantry_live",
 ]
 # Draft-making calls (one per video / capture session) are limited by the per-user monthly
 # extraction count instead of the $0.25 per-user day budget (brief 008, brief 014). They still

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai.budget import CostGuard
+from app.ai.live_pantry import build_live_minter
 from app.ai.providers.mock import MockAIProvider
 from app.ai.registry import build_provider
 from app.api.v1 import auth as auth_router
@@ -59,6 +60,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ai_provider = build_provider(settings)
     # The labelled demo path used when a Gemini budget cap is reached (brief 007).
     app.state.ai_fallback = MockAIProvider(settings.fixtures_dir)
+    # Brief 016: mints single-use Gemini Live tokens; None unless AI_PROVIDER=gemini with a key.
+    app.state.live_token_minter = build_live_minter(settings)
     # Object storage for creator video and clips (brief 008). Building the client is offline.
     app.state.storage = build_storage(settings)
     app.state.auth_provider = None

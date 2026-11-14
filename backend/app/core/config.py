@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     gemini_model_pantry: str = "gemini-3.5-flash-lite"
     gemini_model_video: str = "gemini-3.8-flash"  # brief 008
     gemini_model_capture: str = "gemini-3.8-flash"  # brief 014 interviewer + draft
+    gemini_model_live: str = "gemini-3.8-live"  # brief 016 live pantry scan (phone-side session)
     # Brief 014: a capture transcript nobody published is deleted after this many idle days.
     capture_transcript_ttl_days: int = Field(default=30, ge=1, le=365)
     # Whole-call deadline for interactive features, retries included (brief 007).
@@ -82,6 +83,22 @@ class Settings(BaseSettings):
     ai_user_daily_cap_usd: float = Field(default=0.25, ge=0)
     ai_month_soft_cap_usd: float = Field(default=15.0, ge=0)
     ai_month_hard_cap_usd: float = Field(default=22.0, ge=0)
+
+    # Live pantry scan (brief 016). The phone gets a single-use token; the server can't see live
+    # usage, so each token reserves a worst-case session and settles at that ceiling. Spike:
+    # 9 nudged turns billed ~43k prompt tokens in 36 s; a 30 s session nudged every 2 frames is
+    # assumed at 60k prompt + 2k output (audio) tokens. iOS rotates sessions every
+    # LIVE_MAX_SESSION_SECONDS and fetches a new token for each one.
+    live_token_ttl_seconds: int = Field(default=150, ge=30, le=1800)
+    live_token_start_seconds: int = Field(default=60, ge=10, le=600)
+    live_max_session_seconds: int = Field(default=30, ge=5, le=600)
+    live_nudge_text: str = "Report any new items now visible."
+    live_nudge_every_frames: int = Field(default=2, ge=1, le=30)
+    live_frame_max_fps: float = Field(default=1.0, gt=0, le=2)
+    live_ceiling_input_tokens: int = Field(default=60_000, ge=0)
+    live_ceiling_output_tokens: int = Field(default=2_000, ge=0)
+    live_tokens_per_user_per_hour: int = Field(default=60, ge=0)
+    live_token_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
 
     media_root: Path = BACKEND_DIR / "media"
     ffmpeg_path: str = "ffmpeg"
@@ -144,6 +161,8 @@ class Settings(BaseSettings):
             raise ValueError("AUTH_MODE=dev is only allowed when ENVIRONMENT is dev or test")
         if self.ai_month_soft_cap_usd > self.ai_month_hard_cap_usd:
             raise ValueError("AI_MONTH_SOFT_CAP_USD must not exceed AI_MONTH_HARD_CAP_USD")
+        if self.live_token_start_seconds > self.live_token_ttl_seconds:
+            raise ValueError("LIVE_TOKEN_START_SECONDS must not exceed LIVE_TOKEN_TTL_SECONDS")
         if self.dev_login_echo_code and self.environment != "test":
             raise ValueError("DEV_LOGIN_ECHO_CODE=true is only allowed when ENVIRONMENT=test")
         if self.environment == "prod" and (

@@ -42,6 +42,9 @@ PRICE_TABLE: tuple[PriceRow, ...] = (
     PriceRow("gemini-3.8-flash", datetime(2027, 1, 1, tzinfo=UTC), Price(_d("1.50"), _d("7.50"))),
     # gemini-3.5-flash-lite: $0.30 (text / image / video / audio) / $2.50; no change announced.
     PriceRow("gemini-3.5-flash-lite", _EPOCH, Price(_d("0.30"), _d("2.50"))),
+    # gemini-3.8-live (brief 016), conservative: text/image/audio input at $1.00 and every output
+    # token at the audio-output price, $12.00 (the model speaks even when told not to).
+    PriceRow("gemini-3.8-live", _EPOCH, Price(_d("1.00"), _d("12.00"))),
 )
 
 # Above every row in the table (and above Gemini 4 Argon's Dec-2026 $4 / $20), so an unknown or
