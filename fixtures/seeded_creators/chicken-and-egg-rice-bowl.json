@@ -1,0 +1,206 @@
+{
+  "slug": "chicken-and-egg-rice-bowl",
+  "title": "Chicken and Egg Rice Bowl",
+  "summary": "Chicken thigh and onion simmered in a sweet soy broth, then finished with softly set egg and spooned over rice. A one-pan bowl my family asks for every week.",
+  "tags": [
+    "japanese",
+    "chicken",
+    "rice",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-29T20:00:00Z",
+  "creator": {
+    "handle": "kenji-arai",
+    "display_name": "Kenji Arai",
+    "bio": "Sample creator. Simple Japanese home meals: rice bowls, noodles and quick glazes."
+  },
+  "servings": 2,
+  "prep_minutes": 10,
+  "cook_minutes": 15,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "chicken thigh",
+      "quantity": 10,
+      "unit": "oz",
+      "optional": false,
+      "preparation": "boneless, cut into bite-size pieces",
+      "notes": null
+    },
+    {
+      "id": "ing-2",
+      "name": "onion",
+      "quantity": 0.5,
+      "unit": null,
+      "optional": false,
+      "preparation": "thinly sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "soy sauce",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "mirin",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "sugar",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "egg",
+      "quantity": 3,
+      "unit": null,
+      "optional": false,
+      "preparation": "lightly beaten",
+      "notes": "just break the yolks; streaks of white are fine"
+    },
+    {
+      "id": "ing-7",
+      "name": "cooked rice",
+      "quantity": 2,
+      "unit": "cup",
+      "optional": false,
+      "preparation": "hot",
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "scallion",
+      "quantity": 1,
+      "unit": null,
+      "optional": true,
+      "preparation": "thinly sliced",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Cut the chicken into bite-size pieces and slice the onion.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Chicken pieces are roughly the same size"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel.",
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "In a small skillet, bring the soy sauce, mirin, sugar and 1/2 cup water to a simmer. Add the onion and cook 3 minutes.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5"
+      ],
+      "estimated_minutes": 4,
+      "success_cues": [
+        "Onion has softened and turned translucent"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Add the chicken in a single layer, cover and simmer 6 to 8 minutes, turning once.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 8,
+      "success_cues": [
+        "Chicken is opaque throughout",
+        "A thermometer in the largest piece reads 165°F (74°C)"
+      ],
+      "warnings": [
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": "Small pieces cook evenly, so cut them all about the same size.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Pour the beaten egg in a slow circle over everything. Cover and cook on low for 1 to 2 minutes, until the egg is mostly set but still soft on top.",
+      "ingredient_refs": [
+        "ing-6"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Egg is set at the edges and soft and glossy in the center"
+      ],
+      "warnings": [
+        "Soft-set egg is not fully cooked; cook it longer until firm if you are serving young children, pregnant guests or anyone who avoids runny eggs."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Slide half the chicken and egg over each bowl of hot rice, spoon over the broth and top with scallion if using.",
+      "ingredient_refs": [
+        "ing-7",
+        "ing-8"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Rice is moistened by the broth but not swimming in it"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "A small skillet makes the egg set evenly; cook in two batches if you only have a big one."
+  ],
+  "dietary_warnings": [
+    "Contains egg, soy and wheat (soy sauce)."
+  ]
+}

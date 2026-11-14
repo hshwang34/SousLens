@@ -1,0 +1,228 @@
+{
+  "slug": "crispy-lemon-chicken-cutlets",
+  "title": "Crispy Lemon Chicken Cutlets",
+  "summary": "Thin chicken cutlets in a crunchy panko crust, pan-fried and finished with a buttery lemon and parsley sauce. Dinner in under 40 minutes.",
+  "tags": [
+    "italian",
+    "chicken",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-24T18:00:00Z",
+  "creator": {
+    "handle": "lucia-ferraro",
+    "display_name": "Lucia Ferraro",
+    "bio": "Sample creator. Italian home cooking with pantry staples, a good pan and not much fuss."
+  },
+  "servings": 3,
+  "prep_minutes": 15,
+  "cook_minutes": 20,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "chicken breast",
+      "quantity": 1,
+      "unit": "lb",
+      "optional": false,
+      "preparation": "halved horizontally into thin cutlets",
+      "notes": "2 breasts"
+    },
+    {
+      "id": "ing-2",
+      "name": "all-purpose flour",
+      "quantity": 0.33,
+      "unit": "cup",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "egg",
+      "quantity": 2,
+      "unit": null,
+      "optional": false,
+      "preparation": "beaten",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "panko",
+      "quantity": 1,
+      "unit": "cup",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "olive oil",
+      "quantity": 0.25,
+      "unit": "cup",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "butter",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "lemon",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "juiced",
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "black pepper",
+      "quantity": 0.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-10",
+      "name": "parsley",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": true,
+      "preparation": "chopped",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Halve each chicken breast horizontally into thin cutlets and season both sides with salt and pepper.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-8",
+        "ing-9"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Cutlets are an even thickness, about 1/2 inch"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel.",
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Set up three plates: flour, beaten egg and panko. Coat each cutlet in flour, then egg, then press firmly into the panko.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2",
+        "ing-3",
+        "ing-4"
+      ],
+      "estimated_minutes": 6,
+      "success_cues": [
+        "Crumbs cover the cutlet completely with no bare patches"
+      ],
+      "warnings": [
+        "Wash hands after breading; the egg and flour plates have touched raw chicken, so discard leftovers."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Heat the olive oil in a large skillet over medium heat. Fry the cutlets in batches, 3 to 4 minutes per side, without crowding the pan.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-5"
+      ],
+      "estimated_minutes": 12,
+      "success_cues": [
+        "Crust is deep golden and crisp on both sides",
+        "A thermometer in the thickest cutlet reads 165°F (74°C)"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward.",
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": "Leave them alone while they fry. Moving them knocks the crust off.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Move the cutlets to a rack. Pour off most of the oil, lower the heat and melt the butter with the lemon juice, swirling for 30 seconds.",
+      "ingredient_refs": [
+        "ing-6",
+        "ing-7"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Butter foams and turns slightly cloudy with the lemon"
+      ],
+      "warnings": [
+        "The pan is still hot; tilt it away from you when pouring off oil."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Spoon the lemon butter over the cutlets, scatter parsley if using and serve right away.",
+      "ingredient_refs": [
+        "ing-10"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Crust stays crisp under the sauce"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Pound the cutlets thinner if your breasts are very thick; they cook more evenly."
+  ],
+  "dietary_warnings": [
+    "Contains wheat (flour, panko), egg and milk (butter)."
+  ]
+}

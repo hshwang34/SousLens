@@ -141,6 +141,14 @@
     {"canonical_name": "baking powder", "aliases": [], "category": "baking", "allergens": [], "qualifiers": []},
     {"canonical_name": "vanilla extract", "aliases": ["vanilla"], "category": "baking", "allergens": [], "qualifiers": []},
     {"canonical_name": "chickpeas", "aliases": ["chickpea", "garbanzo beans", "garbanzo bean", "canned chickpeas"], "category": "legume", "allergens": [], "qualifiers": []},
-    {"canonical_name": "black beans", "aliases": ["black bean", "canned black beans"], "category": "legume", "allergens": [], "qualifiers": []}
+    {"canonical_name": "black beans", "aliases": ["black bean", "canned black beans"], "category": "legume", "allergens": [], "qualifiers": []},
+    {"canonical_name": "chili powder", "aliases": ["chile powder"], "category": "spice", "allergens": [], "qualifiers": []},
+    {"canonical_name": "chipotle pepper in adobo", "aliases": ["chipotle peppers in adobo", "chipotles in adobo"], "category": "preserved", "allergens": [], "qualifiers": []},
+    {"canonical_name": "corn tortilla", "aliases": ["corn tortillas"], "category": "grain", "allergens": [], "qualifiers": []},
+    {"canonical_name": "ditalini", "aliases": [], "category": "grain", "allergens": ["wheat"], "qualifiers": ["dried"]},
+    {"canonical_name": "garam masala", "aliases": [], "category": "spice", "allergens": [], "qualifiers": []},
+    {"canonical_name": "queso fresco", "aliases": [], "category": "dairy", "allergens": ["milk"], "qualifiers": []},
+    {"canonical_name": "somen", "aliases": ["somen noodles"], "category": "grain", "allergens": ["wheat"], "qualifiers": ["dried"]},
+    {"canonical_name": "udon", "aliases": ["udon noodles"], "category": "grain", "allergens": ["wheat"], "qualifiers": []}
   ]
 }

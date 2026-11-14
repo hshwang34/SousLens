@@ -1,0 +1,208 @@
+{
+  "slug": "doenjang-tofu-stew",
+  "title": "Weeknight Doenjang Tofu Stew",
+  "summary": "A bubbling pot of soybean-paste stew with soft tofu, zucchini and potato. Made with plain water so it stays vegetarian, and ready in about half an hour.",
+  "tags": [
+    "korean",
+    "soup",
+    "vegetarian",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-16T09:00:00Z",
+  "creator": {
+    "handle": "mina-cho",
+    "display_name": "Mina Cho",
+    "bio": "Sample creator. Korean home cooking the way my mom taught me: stews, banchan and noodles for busy nights."
+  },
+  "servings": 3,
+  "prep_minutes": 10,
+  "cook_minutes": 20,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "doenjang",
+      "quantity": 3,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": "brands vary in saltiness; start with 2 if yours is strong"
+    },
+    {
+      "id": "ing-2",
+      "name": "tofu",
+      "quantity": 14,
+      "unit": "oz",
+      "optional": false,
+      "preparation": "cut into 3/4-inch cubes",
+      "notes": "medium or firm"
+    },
+    {
+      "id": "ing-3",
+      "name": "zucchini",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "halved lengthwise and sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "potato",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "peeled and cut into small cubes",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "onion",
+      "quantity": 0.5,
+      "unit": null,
+      "optional": false,
+      "preparation": "diced",
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "garlic",
+      "quantity": 3,
+      "unit": "clove",
+      "optional": false,
+      "preparation": "minced",
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "gochugaru",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": true,
+      "preparation": null,
+      "notes": "for gentle heat"
+    },
+    {
+      "id": "ing-8",
+      "name": "scallion",
+      "quantity": 2,
+      "unit": null,
+      "optional": true,
+      "preparation": "sliced",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Cut the potato, onion and zucchini so everything is ready before the pot goes on.",
+      "ingredient_refs": [
+        "ing-3",
+        "ing-4",
+        "ing-5"
+      ],
+      "estimated_minutes": 6,
+      "success_cues": [
+        "Potato cubes are roughly the same small size so they cook evenly"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Pour 3 cups of water into a small pot and whisk in the doenjang until no lumps remain. Add the potato, onion and garlic and bring to a boil over medium-high heat.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-4",
+        "ing-5",
+        "ing-6"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Broth is evenly cloudy and tan with no paste clumps",
+        "Steady boil across the surface"
+      ],
+      "warnings": [
+        "Boiling water: pour away from you and use oven mitts on the pot handles."
+      ],
+      "creator_note": "Whisk the paste in before it gets hot. It dissolves much more easily in cold water.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Lower to a lively simmer and cook for 8 minutes, until a potato cube gives easily when poked with a knife.",
+      "ingredient_refs": [
+        "ing-4"
+      ],
+      "estimated_minutes": 8,
+      "success_cues": [
+        "A knife slides into a potato cube with little resistance"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Add the zucchini, tofu and gochugaru if using. Simmer 4 to 5 minutes more without stirring hard so the tofu stays in cubes.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-7"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Zucchini is just tender and still bright green at the edges",
+        "Tofu is heated through and holding its shape"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Taste the broth; add a splash of water if too salty. Top with scallion and serve straight from the pot with rice.",
+      "ingredient_refs": [
+        "ing-8"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Broth tastes savory and rounded, not harsh"
+      ],
+      "warnings": [
+        "The pot and broth stay very hot; set it on a trivet and ladle carefully."
+      ],
+      "creator_note": "In my house this goes on the table still bubbling.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Leftovers taste even better the next day; reheat until simmering."
+  ],
+  "dietary_warnings": [
+    "Contains soy (doenjang, tofu). Some doenjang brands contain wheat; check the label."
+  ]
+}

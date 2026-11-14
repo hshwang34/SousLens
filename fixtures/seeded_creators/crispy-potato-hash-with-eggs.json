@@ -1,0 +1,219 @@
+{
+  "slug": "crispy-potato-hash-with-eggs",
+  "title": "Crispy Potato Hash with Eggs",
+  "summary": "Cubed potatoes fried until crunchy with onion and bell pepper, then topped with eggs cooked right in the pan. Breakfast for dinner, done in one skillet.",
+  "tags": [
+    "american",
+    "vegetarian",
+    "beginner",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-11-09T23:00:00Z",
+  "creator": {
+    "handle": "sam-okafor",
+    "display_name": "Sam Okafor",
+    "bio": "Sample creator. American weeknight basics that feed a crowd and leave few dishes."
+  },
+  "servings": 2,
+  "prep_minutes": 10,
+  "cook_minutes": 25,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "potato",
+      "quantity": 1,
+      "unit": "lb",
+      "optional": false,
+      "preparation": "cut into 1/2-inch cubes",
+      "notes": "Yukon Gold or russet"
+    },
+    {
+      "id": "ing-2",
+      "name": "neutral oil",
+      "quantity": 3,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "onion",
+      "quantity": 0.5,
+      "unit": null,
+      "optional": false,
+      "preparation": "diced",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "bell pepper",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "diced",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "black pepper",
+      "quantity": 0.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "egg",
+      "quantity": 4,
+      "unit": null,
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "butter",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "chives",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": true,
+      "preparation": "chopped",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Cut the potatoes into small, even cubes and pat them dry with a towel.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 6,
+      "success_cues": [
+        "Cubes are about the same size",
+        "Potatoes feel dry to the touch"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": "Dry potatoes are crispy potatoes. Wet ones steam.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Heat the oil in a large skillet over medium-high heat. Add the potatoes in a single layer and cook without stirring for 5 minutes, then flip and cook 8 to 10 minutes more, turning now and then.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2"
+      ],
+      "estimated_minutes": 15,
+      "success_cues": [
+        "Potatoes are golden and crisp on several sides",
+        "A fork slides easily into a cube"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Add the butter, onion and bell pepper, salt and pepper. Cook 4 to 5 minutes until the vegetables soften.",
+      "ingredient_refs": [
+        "ing-3",
+        "ing-4",
+        "ing-5",
+        "ing-6",
+        "ing-8"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Onion is soft and translucent",
+        "Potatoes are still crisp"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Make four wells in the hash and crack an egg into each. Cover and cook on medium-low until the whites are fully set, 4 to 6 minutes.",
+      "ingredient_refs": [
+        "ing-7"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Whites are opaque with no clear, jiggly parts",
+        "Yolks are as firm as you like them"
+      ],
+      "warnings": [
+        "Runny yolks are undercooked eggs; cook longer until firm if you are serving young children, pregnant guests or anyone who avoids runny eggs."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Scatter chives over the top if using and serve straight from the skillet.",
+      "ingredient_refs": [
+        "ing-9"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Each serving gets crispy potatoes and two eggs"
+      ],
+      "warnings": [
+        "The skillet handle is hot; use a mitt."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Leftover roasted or boiled potatoes work too and cut the cook time in half."
+  ],
+  "dietary_warnings": [
+    "Contains egg and milk (butter)."
+  ]
+}

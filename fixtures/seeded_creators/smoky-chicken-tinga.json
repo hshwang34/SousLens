@@ -1,0 +1,217 @@
+{
+  "slug": "smoky-chicken-tinga",
+  "title": "Smoky Chicken Tinga",
+  "summary": "Chicken thighs simmered in a smoky chipotle and tomato sauce, then shredded into it. Perfect piled on tostadas or tucked into tacos.",
+  "tags": [
+    "mexican",
+    "chicken",
+    "spicy"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-26T19:00:00Z",
+  "creator": {
+    "handle": "rosa-delgado",
+    "display_name": "Rosa Delgado",
+    "bio": "Sample creator. Everyday Mexican family cooking: tacos, rice and slow-simmered sauces."
+  },
+  "servings": 4,
+  "prep_minutes": 10,
+  "cook_minutes": 35,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "chicken thigh",
+      "quantity": 1.5,
+      "unit": "lb",
+      "optional": false,
+      "preparation": "boneless, skinless",
+      "notes": null
+    },
+    {
+      "id": "ing-2",
+      "name": "neutral oil",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "onion",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "thinly sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "garlic",
+      "quantity": 3,
+      "unit": "clove",
+      "optional": false,
+      "preparation": "minced",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "canned tomatoes",
+      "quantity": 1,
+      "unit": "can",
+      "optional": false,
+      "preparation": "crushed",
+      "notes": "14 oz"
+    },
+    {
+      "id": "ing-6",
+      "name": "chipotle peppers in adobo",
+      "quantity": 2,
+      "unit": null,
+      "optional": false,
+      "preparation": "chopped, plus 1 tbsp sauce",
+      "notes": "use 1 for milder heat"
+    },
+    {
+      "id": "ing-7",
+      "name": "dried oregano",
+      "quantity": 0.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "cilantro",
+      "quantity": 0.25,
+      "unit": "cup",
+      "optional": true,
+      "preparation": "chopped",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Heat the oil in a deep skillet over medium heat. Cook the onion until soft and lightly golden, about 6 minutes, then stir in the garlic for 30 seconds.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4"
+      ],
+      "estimated_minutes": 7,
+      "success_cues": [
+        "Onions are soft and golden at the edges",
+        "Garlic smells fragrant, not burnt"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Add the crushed tomatoes, chipotles with their sauce, oregano, salt and half a cup of water. Simmer 5 minutes.",
+      "ingredient_refs": [
+        "ing-5",
+        "ing-6",
+        "ing-7",
+        "ing-8"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Sauce is brick red and gently bubbling"
+      ],
+      "warnings": [
+        "Chipotle sauce stains and burns eyes; wash hands after chopping."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Nestle the chicken thighs into the sauce, cover and simmer over low heat for 20 minutes, turning once.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 20,
+      "success_cues": [
+        "Meat pulls apart easily with a fork",
+        "A thermometer in the thickest thigh reads 165°F (74°C)"
+      ],
+      "warnings": [
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": "Thighs stay juicy here. Breast dries out if you go this long.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Lift the chicken out onto a board, shred it with two forks and return it to the sauce. Simmer uncovered 5 minutes so the sauce clings.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 6,
+      "success_cues": [
+        "Sauce coats the shreds and no thin liquid pools in the pan"
+      ],
+      "warnings": [
+        "Use a clean board, not the one that held raw chicken."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Taste for salt and finish with cilantro if using.",
+      "ingredient_refs": [
+        "ing-8",
+        "ing-9"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Smoky, slightly spicy and well seasoned"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Even better the next day. It freezes well too."
+  ],
+  "dietary_warnings": [
+    "Check the chipotle can label; some brands contain wheat or soy."
+  ]
+}

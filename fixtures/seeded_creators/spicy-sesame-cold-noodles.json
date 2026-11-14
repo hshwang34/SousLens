@@ -1,0 +1,218 @@
+{
+  "slug": "spicy-sesame-cold-noodles",
+  "title": "Spicy Sesame Cold Noodles",
+  "summary": "Thin wheat noodles rinsed cold and tossed in a sweet, tangy gochujang sauce with crisp cucumber. A summer lunch that comes together in fifteen minutes.",
+  "tags": [
+    "korean",
+    "noodles",
+    "vegetarian",
+    "spicy",
+    "quick"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-22T09:00:00Z",
+  "creator": {
+    "handle": "mina-cho",
+    "display_name": "Mina Cho",
+    "bio": "Sample creator. Korean home cooking the way my mom taught me: stews, banchan and noodles for busy nights."
+  },
+  "servings": 2,
+  "prep_minutes": 10,
+  "cook_minutes": 5,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "somen noodles",
+      "quantity": 6,
+      "unit": "oz",
+      "optional": false,
+      "preparation": null,
+      "notes": "thin wheat noodles; any thin noodle works"
+    },
+    {
+      "id": "ing-2",
+      "name": "gochujang",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "rice vinegar",
+      "quantity": 1.5,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "sugar",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "soy sauce",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "sesame oil",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "cucumber",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "cut into thin matchsticks",
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "egg",
+      "quantity": 1,
+      "unit": null,
+      "optional": true,
+      "preparation": "hard-boiled and halved",
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "sesame seeds",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": true,
+      "preparation": null,
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Stir the gochujang, rice vinegar, sugar, soy sauce and sesame oil together in a large bowl until smooth.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5",
+        "ing-6"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Sauce is smooth and glossy with no sugar grit at the bottom"
+      ],
+      "warnings": [],
+      "creator_note": "Taste it now. It should be a bit too strong on its own; the noodles calm it down.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Cut the cucumber into thin matchsticks.",
+      "ingredient_refs": [
+        "ing-7"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Matchsticks are thin and roughly even"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Boil the noodles according to the package, usually 2 to 3 minutes, stirring so they don't clump.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Noodles are tender all the way through with no hard core"
+      ],
+      "warnings": [
+        "Boiling water: pour away from you and use oven mitts on the pot handles."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Drain the noodles and rinse under cold running water, rubbing them with your hands, until they feel cold and no longer starchy. Shake off as much water as you can.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Noodles feel cold and smooth, not sticky",
+        "No water dripping from the colander"
+      ],
+      "warnings": [
+        "Pour the boiling water away from you into the sink."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Toss the noodles in the sauce, pile into bowls and top with cucumber, the egg half and sesame seeds if using.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-7",
+        "ing-8",
+        "ing-9"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Every noodle is coated red",
+        "Cucumber stays crisp on top"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Leave out the egg and it is vegan."
+  ],
+  "dietary_warnings": [
+    "Contains wheat (noodles, gochujang, soy sauce), soy and sesame. Optional egg."
+  ]
+}
