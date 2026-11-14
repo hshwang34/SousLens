@@ -118,6 +118,14 @@ than a real kitchen's, so these numbers are optimistic until a real device test.
 - The phone connects straight to Gemini with an ephemeral token (PRD §9.3's planned
   `/ai/live-token`). Because the server can't see live usage, the token's lifetime is the spend
   ceiling. The full ceiling is reserved and settled.
+- Auto-save also requires the reported name to match the ingredient dictionary. Unrecognised names
+  go to review with reason `unrecognized`. This cuts false positives and keeps label text, such as an
+  instruction-like string read off a package, out of the pantry unless the cook ticks it (review of
+  PR #48).
+- Demo is enforced by the server: in mock mode every scan is a demo scan and nothing auto-saves.
+- Google closes an open Live session when its token expires (verified, error 1011), so each 45 s
+  token's reservation covers the worst case of an honest client. A modified client could still spend
+  more turns per second than assumed. Backstop: a Google Cloud project budget alert.
 - No session compression or resumption. A 2-minute cap per session is simpler than handling
   GoAway and resumption.
 
