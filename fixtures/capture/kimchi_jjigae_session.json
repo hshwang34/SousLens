@@ -1,0 +1,29 @@
+{
+  "description": "Brief 014 replay: Mum's Kimchi Jjigae, recorded while cooking. The simmer time and the tofu quantity are never stated. Each turn is one POST /turns; questions are answered from `answers` by topic_key, everything else uses `default_outcome`.",
+  "title_hint": "Mum's Kimchi Jjigae",
+  "default_outcome": "skipped",
+  "answers": {
+    "simmer_time": {"outcome": "answered", "answer_text": "Until the kimchi goes soft."}
+  },
+  "turns": [
+    {"t_ms": 2000, "silence_ms": 0, "segments": ["Today I'm making Mum's kimchi jjigae."]},
+    {"t_ms": 6000, "silence_ms": 0, "segments": ["First the pork belly goes in the pot, 300 grams of pork belly, no oil, medium heat."]},
+    {"t_ms": 14000, "silence_ms": 0, "segments": ["Stir it until the fat comes out."]},
+    {"t_ms": 24000, "silence_ms": 0, "segments": ["Now the kimchi, the old sour one, two cups of kimchi."]},
+    {"t_ms": 30000, "silence_ms": 0, "segments": ["And a spoon of gochugaru."]},
+    {"t_ms": 36000, "silence_ms": 0, "segments": ["Then two cups of water."]},
+    {"t_ms": 40000, "silence_ms": 800, "segments": []},
+    {"t_ms": 44000, "silence_ms": 0, "segments": ["Now we let it simmer."]},
+    {"t_ms": 46000, "silence_ms": 0, "segments": ["My mum always says never rush the kimchi."]},
+    {"t_ms": 50000, "silence_ms": 1600, "assistant_speaking": true, "segments": []},
+    {"t_ms": 52000, "silence_ms": 3000, "segments": []},
+    {"t_ms": 54500, "silence_ms": 0, "segments": ["Until the kimchi goes soft."]},
+    {"t_ms": 70000, "silence_ms": 0, "segments": ["Then the tofu goes in."]},
+    {"t_ms": 72000, "silence_ms": 0, "segments": ["And the spring onions on top."]},
+    {"t_ms": 80000, "silence_ms": 2500, "segments": []},
+    {"t_ms": 110000, "silence_ms": 2500, "segments": []},
+    {"t_ms": 130000, "silence_ms": 0, "segments": ["Let it simmer a bit more."]},
+    {"t_ms": 136000, "silence_ms": 4000, "segments": []}
+  ],
+  "finish_t_ms": 140000
+}

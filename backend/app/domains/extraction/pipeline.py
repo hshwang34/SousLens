@@ -46,6 +46,11 @@ DEMO_NOTICE = (
     "Replace it with your own ingredients and steps before publishing."
 )
 
+CAPTURE_DEMO_NOTICE = (
+    "AI is off, so this draft was put together by simple rules from what you said. "
+    "Check every ingredient and step before publishing."
+)
+
 _WS_RE = re.compile(r"[ \t]+")
 
 
@@ -96,6 +101,7 @@ def build_content(
     source_media_id: uuid.UUID | None,
     demo: bool,
     title_hint: str | None = None,
+    demo_notice: str = DEMO_NOTICE,
 ) -> DraftContent:
     corpus = [i.name for i in extracted.ingredients] + [s.instruction for s in extracted.steps]
     high_risk = is_high_risk(corpus)
@@ -155,12 +161,13 @@ def build_content(
         cook_minutes=extracted.cook_minutes,
         ingredients=ingredients,
         steps=steps,
+        creator_notes=_list(extracted.creator_notes, high_risk=high_risk),
         extraction=DraftExtraction(
             job_id=job_id,
             source_media_id=source_media_id,
             demo=demo,
             partial=PARTIAL_UNKNOWN in extracted.unknowns,
             unknowns=unknowns,
-            notice=DEMO_NOTICE if demo else None,
+            notice=demo_notice if demo else None,
         ),
     )
