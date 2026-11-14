@@ -35,8 +35,16 @@ final class AppEnvironment {
     var selectedTab: Tab = .explore
     /// Explore's navigation stack. Deep links push onto it from any tab.
     var exploreRoutes: [RecipeRoute] = []
-    /// A link that arrived while signed out; applied once the user is signed in.
+    /// A link that arrived while signed out (or mid-onboarding); applied once the tabs show.
     private(set) var pendingDeepLink: DeepLink?
+    /// Brief 015 first-run onboarding, behind `feature.onboarding` until every step has shipped.
+    var onboardingEnabled = UserDefaults.standard.object(forKey: AppEnvironment.onboardingFlagKey) as? Bool ?? false
+    nonisolated static let onboardingFlagKey = "feature.onboarding"
+
+    /// True while the signed-in user still has to finish onboarding (the tabs aren't shown).
+    var isOnboarding: Bool {
+        onboardingEnabled && (auth.user?.needsOnboarding ?? false)
+    }
     /// Bumped whenever a recipe's saved state changes anywhere; the Saved tab refreshes on change.
     private(set) var savedRevision = 0
 
@@ -132,7 +140,7 @@ final class AppEnvironment {
     }
 
     func open(_ link: DeepLink) {
-        guard auth.isSignedIn else {
+        guard auth.isSignedIn, !isOnboarding else {
             pendingDeepLink = link
             return
         }
