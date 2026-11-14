@@ -12,8 +12,23 @@ final class ScriptedLiveSocket: LiveSocket, @unchecked Sendable {
     private var _closeReason: Data?
     private var ended = false
     private var _cancelled = false
-    /// Answer the setup message with `setupComplete` (default) or a server close.
-    var answersSetup = true
+    enum SetupReply { case complete, reject, silent }
+    /// Answer the setup message with `setupComplete` (default), a server close, or nothing.
+    var setupReply = SetupReply.complete
+    /// While set, every non-setup `send` suspends until `releaseSends()` (a network stall).
+    private var stalled = false
+    private var stalledSends: [CheckedContinuation<Void, Never>] = []
+
+    func stallSends() { lock.withLock { stalled = true } }
+
+    func releaseSends() {
+        let pending = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            stalled = false
+            defer { stalledSends = [] }
+            return stalledSends
+        }
+        pending.forEach { $0.resume() }
+    }
 
     var sent: [String] { lock.withLock { _sent } }
     var cancelled: Bool { lock.withLock { _cancelled } }
@@ -29,7 +44,19 @@ final class ScriptedLiveSocket: LiveSocket, @unchecked Sendable {
             return text.contains("\"setup\"")
         }
         if isSetup {
-            if answersSetup { push(#"{"setupComplete":{}}"#) } else { serverClose(code: .policyViolation, reason: "bad token") }
+            switch setupReply {
+            case .complete: push(#"{"setupComplete":{}}"#)
+            case .reject: serverClose(code: .policyViolation, reason: "bad token")
+            case .silent: break
+            }
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let wait = lock.withLock { () -> Bool in
+                if stalled { stalledSends.append(continuation); return true }
+                return false
+            }
+            if !wait { continuation.resume() }
         }
     }
 
@@ -69,6 +96,18 @@ final class ScriptedLiveSocket: LiveSocket, @unchecked Sendable {
     }
 
     func drop() { end() }
+
+    /// The receive fails first; the close code becomes readable a moment later.
+    func serverCloseLate(code: URLSessionWebSocketTask.CloseCode, reason: String, after delay: Duration) {
+        end()
+        Task {
+            try? await Task.sleep(for: delay)
+            self.lock.withLock {
+                self._closeCode = code
+                self._closeReason = Data(reason.utf8)
+            }
+        }
+    }
 
     private func end() {
         let pending = lock.withLock { () -> [CheckedContinuation<URLSessionWebSocketTask.Message, Error>] in
@@ -263,13 +302,17 @@ final class GeminiLiveTransportTests: XCTestCase {
         let transport = makeTransport()
         try await transport.connect(token: LiveScanFixtures.token(nudgeEveryFrames: 2, frameMaxFps: 1))
         let jpeg = Data([0xFF, 0xD8, 0xFF])
+        // Let the sender drain between steps, as it does at 1 fps; a backlog would drop media.
         transport.send(frame: jpeg)               // t=0 sent
+        await waitForSent(2)
         clock.advance(byMs: 500)
         transport.send(frame: jpeg)               // t=500 dropped
-        clock.advance(byMs: 470)
-        transport.send(frame: jpeg)               // t=970 sent (within jitter tolerance) → nudge
+        await waitForSent(3)
+        clock.advance(byMs: 300)
+        transport.send(frame: jpeg)               // t=800 sent (within the 250 ms jitter tolerance) → nudge
+        await waitForSent(6)
         clock.advance(byMs: 1000)
-        transport.send(frame: jpeg)               // t=1970 sent
+        transport.send(frame: jpeg)               // t=1800 sent
         XCTAssertEqual(transport.framesSent, 3)
         // FakeVoiceClock ticks once per advance, so three keep-alive audio chunks are interleaved.
         await waitForSent(8)
@@ -296,6 +339,83 @@ final class GeminiLiveTransportTests: XCTestCase {
         XCTAssertFalse(clock.isTicking)
         transport.send(frame: Data([1]))
         XCTAssertEqual(transport.framesSent, 0, "nothing is sent after close")
+    }
+
+    func testSetupTimesOutWhenTheServerNeverAnswers() async throws {
+        socket.setupReply = .silent
+        let transport = GeminiLiveTransport(clock: clock, setupTimeout: .milliseconds(100)) { [unowned self] _ in self.socket }
+        do {
+            try await transport.connect(token: LiveScanFixtures.token())
+            XCTFail("a silent server must not hang connect")
+        } catch {
+            XCTAssertEqual(error as? LiveScanError, .setupFailed("timed out"))
+        }
+        XCTAssertTrue(socket.cancelled)
+        XCTAssertFalse(clock.isTicking)
+    }
+
+    func testStalledNetworkKeepsMediaBoundedAndToolResponsesInOrder() async throws {
+        let transport = makeTransport()
+        try await transport.connect(token: LiveScanFixtures.token(nudgeEveryFrames: 0))
+        socket.stallSends()
+        let jpeg = Data([0xFF, 0xD8])
+        transport.send(frame: jpeg)               // picked up by the sender, stuck in flight
+        await waitForSent(2)
+        for _ in 0..<20 {
+            clock.advance(byMs: 1000)             // also queues a keep-alive each tick
+            transport.send(frame: jpeg)
+        }
+        transport.respond(callID: "a", name: "add_item", status: "new", canonical: "eggs")
+        transport.respond(callID: "b", name: "add_item", status: "already_in_basket", canonical: "eggs")
+        transport.respond(callID: "c", name: "add_item", status: "new", canonical: "rice")
+        XCTAssertLessThanOrEqual(transport.queuedMediaCount, GeminiLiveTransport.maxMediaBacklog)
+        XCTAssertGreaterThan(transport.droppedMedia, 30, "stale frames and keep-alives are dropped, not queued")
+        socket.releaseSends()
+        await waitForSent(2 + 3 + GeminiLiveTransport.maxMediaBacklog)
+        let afterStall = Array(socket.sent.dropFirst(2))
+        XCTAssertEqual(kinds(afterStall), ["tool", "tool", "tool", "audio", "video"], "tool responses jump the media queue")
+        let ids = try afterStall.prefix(3).map { try jsonObject($0).value(forKeyPath: "tool_response.functionResponses.id") as? [String] }
+        XCTAssertEqual(ids, [["a"], ["b"], ["c"]])
+        transport.close()
+    }
+
+    func testEveryCallIsAnsweredEvenWithBadArgs() async throws {
+        let transport = makeTransport()
+        let events = EventLog(transport.events)
+        try await transport.connect(token: LiveScanFixtures.token())
+        socket.push(#"""
+        {"toolCall":{"functionCalls":[
+          {"id":"x1","name":"add_item","args":{"name":42,"confidence":"high"}},
+          {"id":"x2","name":"add_item","args":"oops"},
+          {"id":"x3","name":7},
+          {"id":"x4","name":"add_item","args":{"name":"eggs","confidence":5,"kind":["dairy"]}}]}}
+        """#)
+        let item = await events.next()
+        XCTAssertEqual(item, .itemReported(callID: "x4", name: "eggs", kind: nil, confidence: .unknown))
+        await waitForSent(4)
+        let answered = try socket.sent.dropFirst().map { text -> String? in
+            let ids = try jsonObject(text).value(forKeyPath: "tool_response.functionResponses.id") as? [String]
+            return ids?.first
+        }
+        XCTAssertEqual(answered, ["x1", "x2", "x3"], "unusable calls are answered 'ignored', none dropped")
+        XCTAssertTrue(socket.sent.dropFirst().allSatisfy { $0.contains("\"ignored\"") })
+        transport.close()
+    }
+
+    func testOnlyRelevantServerMessagesAreParsed() {
+        let audio = Data(#"{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"data":"AAAA"}}]}}}"#.utf8)
+        XCTAssertNil(GeminiLiveTransport.decodeIfRelevant(audio), "model audio is skipped without a JSON parse")
+        XCTAssertNotNil(GeminiLiveTransport.decodeIfRelevant(Data(#"{"goAway":{}}"#.utf8))?.goAway)
+        XCTAssertNotNil(GeminiLiveTransport.decodeIfRelevant(Data(#"{"setupComplete":{}}"#.utf8))?.setupComplete)
+    }
+
+    func testLateCloseCodeIsReportedAsAServerClose() async throws {
+        let transport = makeTransport()
+        let events = EventLog(transport.events)
+        try await transport.connect(token: LiveScanFixtures.token())
+        socket.serverCloseLate(code: .policyViolation, reason: "token expired", after: .milliseconds(20))
+        let received = await events.next()
+        XCTAssertEqual(received, .closed(.server(code: 1008, reason: "token expired")))
     }
 
     func testGoAwaySurfaces() async throws {
@@ -336,7 +456,7 @@ final class GeminiLiveTransportTests: XCTestCase {
         }
         XCTAssertTrue(requests.isEmpty, "no socket opened for an expired token")
 
-        socket.answersSetup = false
+        socket.setupReply = .reject
         let rejected = makeTransport()
         do {
             try await rejected.connect(token: LiveScanFixtures.token())

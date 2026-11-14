@@ -19,7 +19,14 @@ extension URLSessionWebSocketTask: LiveSocket {}
 /// Video frames, a silent audio keep-alive every second, and a text nudge every
 /// `nudgeEveryFrames` frames (the spike found video alone never triggers a turn). Model audio and
 /// transcripts are never decoded or played. The session closes itself at `maxSessionSeconds`.
-/// Always call `close()` when done; outgoing messages are sent in order by one sender task.
+/// Always call `close()` when done.
+///
+/// Outgoing messages go through one sender task with two lanes: tool responses are never dropped
+/// and go first; media (video, keep-alive audio, nudges) keeps only the newest
+/// `maxMediaBacklog` messages, so a network stall never sends a burst of stale frames.
+///
+/// Frame throttling is owned by the camera frame stream (brief 016 PR 4, `frameMaxFps`). The check
+/// here is only a safety cap with a wide jitter tolerance, so it never halves the real frame rate.
 @MainActor
 final class GeminiLiveTransport: LiveScanTransport {
     typealias SocketFactory = @MainActor (URLRequest) -> any LiveSocket
@@ -33,7 +40,10 @@ final class GeminiLiveTransport: LiveScanTransport {
     private enum State { case idle, connecting, open, closed }
     private var state = State.idle
     private var socket: (any LiveSocket)?
-    private var outbox: AsyncStream<String>.Continuation?
+    private var priorityLane: [String] = []
+    private var mediaLane: [String] = []
+    private var senderWakeup: CheckedContinuation<Void, Never>?
+    private(set) var droppedMedia = 0
     private var tasks: [Task<Void, Never>] = []
     private var token: LiveScanToken?
     private var openedAtMs: Int64 = 0
@@ -41,14 +51,26 @@ final class GeminiLiveTransport: LiveScanTransport {
     private(set) var framesSent = 0
 
     /// Camera timestamps jitter; a frame up to this early still counts as on time.
-    private static let frameToleranceMs: Int64 = 50
+    private static let frameToleranceMs: Int64 = 250
+    static let maxMediaBacklog = 2
+    private static let markers = ["toolCall", "goAway", "setupComplete"].map { Data($0.utf8) }
+
+    private let setupTimeout: Duration
+    private let closeCodeGrace: Duration
+    private var setupTimedOut = false
 
     init(clock: any VoiceClock = SystemVoiceClock(),
+         setupTimeout: Duration = .seconds(10),
+         closeCodeGrace: Duration = .milliseconds(100),
          makeSocket: @escaping SocketFactory = { URLSession.shared.webSocketTask(with: $0) }) {
         (events, continuation) = AsyncStream.makeStream(of: LiveScanEvent.self)
         self.clock = clock
+        self.setupTimeout = setupTimeout
+        self.closeCodeGrace = closeCodeGrace
         self.makeSocket = makeSocket
     }
+
+    var queuedMediaCount: Int { mediaLane.count }
 
     func connect(token: LiveScanToken) async throws {
         guard state == .idle else { throw LiveScanError.alreadyConnected }
@@ -59,17 +81,26 @@ final class GeminiLiveTransport: LiveScanTransport {
         let socket = makeSocket(LiveScanWire.request(token: token))
         self.socket = socket
         socket.resume()
+        // The socket may open and never answer; cancelling it makes `receive` throw.
+        let timeout = Task { [weak self, setupTimeout] in
+            try? await Task.sleep(for: setupTimeout)
+            guard !Task.isCancelled, let self, self.state == .connecting else { return }
+            self.setupTimedOut = true
+            socket.cancel(with: .normalClosure, reason: nil)
+        }
+        defer { timeout.cancel() }
         do {
             try await socket.send(.string(LiveScanWire.setup(modelPath: model)))
             while true {
                 let message = try await socket.receive()
-                if LiveScanWire.decode(Self.payload(message))?.setupComplete != nil { break }
+                if Self.decodeIfRelevant(Self.payload(message))?.setupComplete != nil { break }
             }
         } catch {
-            logger.error("live scan setup failed: \(error.localizedDescription, privacy: .public)")
+            let reason = setupTimedOut ? "timed out" : error.localizedDescription
+            logger.error("live scan setup failed: \(reason, privacy: .public)")
             teardown()
             continuation.finish()
-            throw LiveScanError.setupFailed(error.localizedDescription)
+            throw LiveScanError.setupFailed(reason)
         }
         guard state == .connecting else {
             throw LiveScanError.setupFailed("Closed during setup.")
@@ -89,16 +120,17 @@ final class GeminiLiveTransport: LiveScanTransport {
         let minGapMs = Int64(1000 / fps) - Self.frameToleranceMs
         if let lastFrameMs, now - lastFrameMs < minGapMs { return }
         lastFrameMs = now
-        outbox?.yield(LiveScanWire.video(jpeg: jpeg))
+        enqueueMedia(LiveScanWire.video(jpeg: jpeg))
         framesSent += 1
         if token.nudgeEveryFrames > 0, framesSent % token.nudgeEveryFrames == 0 {
-            outbox?.yield(LiveScanWire.text(token.nudgeText))
+            enqueueMedia(LiveScanWire.text(token.nudgeText))
         }
     }
 
     func respond(callID: String, name: String, status: String, canonical: String?) {
         guard state == .open else { return }
-        outbox?.yield(LiveScanWire.toolResponse(callID: callID, name: name, status: status, canonical: canonical))
+        priorityLane.append(LiveScanWire.toolResponse(callID: callID, name: name, status: status, canonical: canonical))
+        wakeSender()
     }
 
     func close() {
@@ -113,18 +145,40 @@ final class GeminiLiveTransport: LiveScanTransport {
             finish(.sessionLimit)
             return
         }
-        outbox?.yield(LiveScanWire.audio(pcm: LiveScanWire.silentSecond))
+        enqueueMedia(LiveScanWire.audio(pcm: LiveScanWire.silentSecond))
+    }
+
+    private func enqueueMedia(_ text: String) {
+        mediaLane.append(text)
+        if mediaLane.count > Self.maxMediaBacklog {
+            mediaLane.removeFirst(mediaLane.count - Self.maxMediaBacklog)
+            droppedMedia += 1
+        }
+        wakeSender()
+    }
+
+    private func wakeSender() {
+        senderWakeup?.resume()
+        senderWakeup = nil
+    }
+
+    private func nextOutgoing() -> String? {
+        if !priorityLane.isEmpty { return priorityLane.removeFirst() }
+        if !mediaLane.isEmpty { return mediaLane.removeFirst() }
+        return nil
     }
 
     private func startSender(_ socket: any LiveSocket) {
-        let (stream, outbox) = AsyncStream.makeStream(of: String.self)
-        self.outbox = outbox
         tasks.append(Task { [weak self] in
-            for await text in stream {
+            while let self, self.state == .open {
+                guard let text = self.nextOutgoing() else {
+                    await withCheckedContinuation { self.senderWakeup = $0 }
+                    continue
+                }
                 do {
                     try await socket.send(.string(text))
                 } catch {
-                    self?.connectionFailed("send", error)
+                    await self.connectionFailed("send", error)
                     return
                 }
             }
@@ -138,7 +192,7 @@ final class GeminiLiveTransport: LiveScanTransport {
                 do {
                     message = try await socket.receive()
                 } catch {
-                    self?.connectionFailed("receive", error)
+                    await self?.connectionFailed("receive", error)
                     return
                 }
                 guard let self else { return }
@@ -148,12 +202,13 @@ final class GeminiLiveTransport: LiveScanTransport {
     }
 
     private func handle(_ message: URLSessionWebSocketTask.Message) {
-        guard state == .open, let decoded = LiveScanWire.decode(Self.payload(message)) else { return }
+        guard state == .open, let decoded = Self.decodeIfRelevant(Self.payload(message)) else { return }
         if decoded.goAway != nil {
             continuation.yield(.goAway)
         }
         for call in decoded.toolCall?.functionCalls ?? [] {
-            guard let id = call.id, let name = call.name else { continue }
+            guard let id = call.id else { continue }
+            let name = call.name ?? ""
             let itemName = call.args?.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard name == "add_item", !itemName.isEmpty else {
                 // Answer anyway so the model never waits on a call we can't use.
@@ -165,9 +220,15 @@ final class GeminiLiveTransport: LiveScanTransport {
         }
     }
 
-    private func connectionFailed(_ direction: String, _ error: Error) {
+    private func connectionFailed(_ direction: String, _ error: Error) async {
         guard state == .open, let socket else { return }
-        let code = socket.closeCode
+        var code = socket.closeCode
+        if code == .invalid {
+            // The close frame (e.g. 1008 token expired) can land just after `receive` throws.
+            try? await Task.sleep(for: closeCodeGrace)
+            guard state == .open else { return }
+            code = socket.closeCode
+        }
         if code == .invalid {
             logger.error("live scan \(direction, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             continuation.yield(.error(error.localizedDescription))
@@ -192,12 +253,19 @@ final class GeminiLiveTransport: LiveScanTransport {
     private func teardown() {
         state = .closed
         clock.stopTicking()
-        outbox?.finish()
-        outbox = nil
+        priorityLane = []
+        mediaLane = []
+        wakeSender()
         tasks.forEach { $0.cancel() }
         tasks = []
         socket?.cancel(with: .normalClosure, reason: nil)
         token = nil
+    }
+
+    /// Model audio arrives as large JSON chunks; don't parse them on the main actor.
+    static func decodeIfRelevant(_ data: Data) -> LiveScanWire.ServerMessage? {
+        guard markers.contains(where: { data.range(of: $0) != nil }) else { return nil }
+        return LiveScanWire.decode(data)
     }
 
     private static func payload(_ message: URLSessionWebSocketTask.Message) -> Data {

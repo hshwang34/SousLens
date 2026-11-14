@@ -61,6 +61,8 @@ enum LiveScanWire {
     // MARK: - Server messages
 
     /// Only the fields we act on. `serverContent` (model audio, transcripts) is never decoded.
+    /// Every field decodes leniently: one wrongly typed value must not hide the call ids, because
+    /// every function call needs an answer.
     struct ServerMessage: Decodable {
         struct Empty: Decodable {}
         struct ToolCall: Decodable {
@@ -70,16 +72,43 @@ enum LiveScanWire {
             let id: String?
             let name: String?
             let args: Args?
+
+            enum CodingKeys: String, CodingKey { case id, name, args }
+
+            init(from decoder: Decoder) throws {
+                let container = try? decoder.container(keyedBy: CodingKeys.self)
+                id = try? container?.decodeIfPresent(String.self, forKey: .id)
+                name = try? container?.decodeIfPresent(String.self, forKey: .name)
+                args = try? container?.decodeIfPresent(Args.self, forKey: .args)
+            }
         }
         struct Args: Decodable {
             let name: String?
             let kind: String?
             let confidence: String?
+
+            enum CodingKeys: String, CodingKey { case name, kind, confidence }
+
+            init(from decoder: Decoder) throws {
+                let container = try? decoder.container(keyedBy: CodingKeys.self)
+                name = try? container?.decodeIfPresent(String.self, forKey: .name)
+                kind = try? container?.decodeIfPresent(String.self, forKey: .kind)
+                confidence = try? container?.decodeIfPresent(String.self, forKey: .confidence)
+            }
         }
 
         let setupComplete: Empty?
         let toolCall: ToolCall?
         let goAway: Empty?
+
+        enum CodingKeys: String, CodingKey { case setupComplete, toolCall, goAway }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            setupComplete = try? container.decodeIfPresent(Empty.self, forKey: .setupComplete)
+            toolCall = try? container.decodeIfPresent(ToolCall.self, forKey: .toolCall)
+            goAway = try? container.decodeIfPresent(Empty.self, forKey: .goAway)
+        }
     }
 
     static func decode(_ data: Data) -> ServerMessage? {
