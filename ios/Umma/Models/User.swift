@@ -13,10 +13,25 @@ struct User: Codable, Sendable, Identifiable, Hashable {
         }
     }
 
+    /// Brief 012 tier. Server AI (Paid voice, coach AI, Look, pantry photo, video) is gated on
+    /// it server-side; the app only uses it to pick a voice transport.
+    enum Entitlement: String, Codable, Sendable {
+        case free
+        case paid
+
+        /// An unknown value from a newer server reads as `free`: never assume server AI.
+        init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Entitlement(rawValue: raw) ?? .free
+        }
+    }
+
     let id: UUID
     let displayName: String
     let preferenceUnits: Units
     let createdAt: Date
+    /// `nil` from an older server or a cached user saved before brief 012; treated as `free`.
+    var entitlement: Entitlement? = nil
 }
 
 struct DevLoginRequest: Encodable, Sendable {
