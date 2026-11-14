@@ -95,13 +95,21 @@ async def _creator_or_404(
 async def suggested(
     session: AsyncSession, user: User, cuisines: list[str], limit: int
 ) -> list[CreatorSummary]:
-    """Onboarding suggestions: cuisine overlap, then recipe count, then name. Excludes self."""
+    """Onboarding suggestions: recipes in the chosen cuisines, then recipe count, then name.
+
+    Counting matching *recipes* (not matching cuisine labels) puts a Korean specialist ahead of
+    a generalist with one Korean dish. Excludes the caller.
+    """
     wanted = set(cuisines)
-    summaries = [s for s, _ in (await _summaries(session, user)).values() if s.id != user.id]
-    summaries.sort(
-        key=lambda s: (-len(wanted & set(s.cuisines)), -s.recipe_count, s.display_name.lower())
-    )
-    return summaries[: max(1, min(limit, SUGGESTED_MAX))]
+
+    def key(entry: tuple[CreatorSummary, list[Recipe]]) -> tuple[int, int, str]:
+        summary, recipes = entry
+        matching = sum(1 for r in recipes if wanted & set(r.tags))
+        return (-matching, -summary.recipe_count, summary.display_name.lower())
+
+    entries = [e for e in (await _summaries(session, user)).values() if e[0].id != user.id]
+    entries.sort(key=key)
+    return [summary for summary, _ in entries[: max(1, min(limit, SUGGESTED_MAX))]]
 
 
 async def profile(

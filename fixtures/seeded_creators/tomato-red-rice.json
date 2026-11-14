@@ -1,0 +1,205 @@
+{
+  "slug": "tomato-red-rice",
+  "title": "Tomato Red Rice",
+  "summary": "Fluffy rice toasted in oil, then simmered in a blended tomato, onion and garlic broth. The side dish that goes with every taco night.",
+  "tags": [
+    "mexican",
+    "rice",
+    "side",
+    "vegetarian-option"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-11-03T19:00:00Z",
+  "creator": {
+    "handle": "rosa-delgado",
+    "display_name": "Rosa Delgado",
+    "bio": "Sample creator. Everyday Mexican family cooking: tacos, rice and slow-simmered sauces."
+  },
+  "servings": 4,
+  "prep_minutes": 10,
+  "cook_minutes": 25,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "rice",
+      "quantity": 1,
+      "unit": "cup",
+      "optional": false,
+      "preparation": "long-grain, rinsed and drained well",
+      "notes": null
+    },
+    {
+      "id": "ing-2",
+      "name": "tomato",
+      "quantity": 2,
+      "unit": null,
+      "optional": false,
+      "preparation": "roughly chopped",
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "onion",
+      "quantity": 0.25,
+      "unit": null,
+      "optional": false,
+      "preparation": "roughly chopped",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "garlic",
+      "quantity": 1,
+      "unit": "clove",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "chicken stock",
+      "quantity": 1.5,
+      "unit": "cup",
+      "optional": false,
+      "preparation": null,
+      "notes": "use vegetable broth to keep it vegetarian"
+    },
+    {
+      "id": "ing-6",
+      "name": "neutral oil",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "cilantro",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": true,
+      "preparation": "chopped",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Blend the tomatoes, onion, garlic and salt into a smooth purée.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-7"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Purée is completely smooth with no chunks"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Heat the oil in a pot over medium heat and add the drained rice. Stir constantly until the grains turn opaque and lightly golden, 4 to 5 minutes.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-6"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Grains are chalky white with some light golden ones",
+        "Rice smells toasty like popcorn"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": "Toasting the rice is what keeps the grains separate. Take your time.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Pour in the tomato purée and let it sizzle and thicken for 2 minutes, stirring.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Purée darkens slightly and most of the raw tomato smell is gone"
+      ],
+      "warnings": [
+        "The purée will spit when it hits the hot rice; pour it in slowly."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Add the stock, bring to a boil, then cover, turn the heat to low and cook 18 minutes without lifting the lid.",
+      "ingredient_refs": [
+        "ing-5"
+      ],
+      "estimated_minutes": 18,
+      "success_cues": [
+        "Liquid is fully absorbed",
+        "Small steam holes dot the surface of the rice"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Rest off the heat, still covered, for 5 minutes. Fluff with a fork and fold in cilantro if using.",
+      "ingredient_refs": [
+        "ing-8"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Grains are tender and separate, not mushy"
+      ],
+      "warnings": [
+        "Lift the lid away from you; trapped steam is hot."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Rinse the rice until the water runs mostly clear; that also helps keep it fluffy."
+  ],
+  "dietary_warnings": [
+    "Check the stock label; some contain wheat, soy or celery."
+  ]
+}

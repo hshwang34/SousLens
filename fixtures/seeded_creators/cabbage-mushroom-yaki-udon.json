@@ -1,0 +1,217 @@
+{
+  "slug": "cabbage-mushroom-yaki-udon",
+  "title": "Cabbage and Mushroom Yaki Udon",
+  "summary": "Thick, chewy udon stir-fried with cabbage, shiitake and carrot in a glossy soy and mirin sauce. A fifteen-minute, fully plant-based noodle supper.",
+  "tags": [
+    "japanese",
+    "noodles",
+    "vegan",
+    "quick"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-11-08T20:00:00Z",
+  "creator": {
+    "handle": "kenji-arai",
+    "display_name": "Kenji Arai",
+    "bio": "Sample creator. Simple Japanese home meals: rice bowls, noodles and quick glazes."
+  },
+  "servings": 2,
+  "prep_minutes": 10,
+  "cook_minutes": 8,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "udon noodles",
+      "quantity": 14,
+      "unit": "oz",
+      "optional": false,
+      "preparation": null,
+      "notes": "frozen or vacuum-packed"
+    },
+    {
+      "id": "ing-2",
+      "name": "cabbage",
+      "quantity": 2,
+      "unit": "cup",
+      "optional": false,
+      "preparation": "sliced into ribbons",
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "shiitake mushroom",
+      "quantity": 4,
+      "unit": "oz",
+      "optional": false,
+      "preparation": "stems removed, sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "carrot",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "cut into thin matchsticks",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "neutral oil",
+      "quantity": 1.5,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "soy sauce",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "mirin",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "sugar",
+      "quantity": 0.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "scallion",
+      "quantity": 2,
+      "unit": null,
+      "optional": true,
+      "preparation": "cut into 1-inch pieces",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Loosen the udon in a bowl of hot tap water for a minute, then drain. Mix the soy sauce, mirin and sugar in a cup.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-6",
+        "ing-7",
+        "ing-8"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Noodles separate into individual strands",
+        "Sugar is dissolved in the sauce"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Prep the cabbage, shiitake and carrot.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Vegetables are cut and ready next to the stove"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Heat the oil in a large skillet over high heat. Stir-fry the carrot and shiitake for 2 minutes, then add the cabbage for 2 minutes more.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5"
+      ],
+      "estimated_minutes": 4,
+      "success_cues": [
+        "Mushrooms are browned at the edges",
+        "Cabbage is wilted but still has some crunch"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": "Keep the heat high. You want a sear, not a steam.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Add the noodles and sauce and toss for 2 to 3 minutes until the noodles are hot and coated.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Noodles are glossy and evenly brown from the sauce",
+        "No liquid left pooling in the pan"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Toss in the scallion if using and serve right away.",
+      "ingredient_refs": [
+        "ing-9"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Scallion is just wilted and still bright green"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Any sturdy vegetable works here; this is how I clear out the fridge on Fridays."
+  ],
+  "dietary_warnings": [
+    "Contains wheat (udon, soy sauce) and soy."
+  ]
+}

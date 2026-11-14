@@ -1,0 +1,227 @@
+{
+  "slug": "ginger-yogurt-chicken-curry",
+  "title": "Ginger Yogurt Chicken Curry",
+  "summary": "Chicken thighs marinated in yogurt and spices, then simmered in a mild onion and tomato sauce. Gentle enough for kids, rich enough for guests.",
+  "tags": [
+    "indian",
+    "chicken",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-11-06T17:30:00Z",
+  "creator": {
+    "handle": "priya-raman",
+    "display_name": "Priya Raman",
+    "bio": "Sample creator. Weeknight Indian curries built from a well-stocked spice drawer."
+  },
+  "servings": 4,
+  "prep_minutes": 20,
+  "cook_minutes": 30,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "chicken thigh",
+      "quantity": 1.5,
+      "unit": "lb",
+      "optional": false,
+      "preparation": "boneless, skinless, cut into bite-size pieces",
+      "notes": null
+    },
+    {
+      "id": "ing-2",
+      "name": "plain yogurt",
+      "quantity": 0.5,
+      "unit": "cup",
+      "optional": false,
+      "preparation": null,
+      "notes": "whole-milk yogurt is less likely to split"
+    },
+    {
+      "id": "ing-3",
+      "name": "ginger",
+      "quantity": 1,
+      "unit": "inch",
+      "optional": false,
+      "preparation": "grated",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "garlic",
+      "quantity": 3,
+      "unit": "clove",
+      "optional": false,
+      "preparation": "grated",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "ground cumin",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "garam masala",
+      "quantity": 1.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "neutral oil",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "onion",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "finely chopped",
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "canned tomatoes",
+      "quantity": 1,
+      "unit": "cup",
+      "optional": false,
+      "preparation": "crushed",
+      "notes": null
+    },
+    {
+      "id": "ing-10",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Cut the chicken into bite-size pieces and mix in a bowl with the yogurt, ginger, garlic, cumin, garam masala and salt. Marinate at least 15 minutes in the fridge.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5",
+        "ing-6",
+        "ing-10"
+      ],
+      "estimated_minutes": 15,
+      "success_cues": [
+        "Every piece is coated in the marinade"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel.",
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": "Overnight marinating is even better if you plan ahead.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Heat the oil in a wide pan over medium heat and cook the onion until golden, about 8 minutes.",
+      "ingredient_refs": [
+        "ing-7",
+        "ing-8"
+      ],
+      "estimated_minutes": 8,
+      "success_cues": [
+        "Onions are soft and golden brown"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Add the crushed tomatoes and cook until thick and the oil starts to separate, about 5 minutes.",
+      "ingredient_refs": [
+        "ing-9"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Sauce is thick and glossy with oil around the edges"
+      ],
+      "warnings": [
+        "Thick tomato sauce spatters; stir with a long spoon."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Add the chicken with all its marinade and stir. Cover and simmer over low heat for 15 minutes, stirring now and then.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 15,
+      "success_cues": [
+        "Sauce is smooth and creamy, not grainy",
+        "A thermometer in the largest piece reads 165°F (74°C)"
+      ],
+      "warnings": [
+        "Raw chicken: wash hands, board and knife after handling, and keep it away from ready-to-eat food. Check the thickest piece reaches 165°F (74°C) with a thermometer; color alone is not a reliable sign."
+      ],
+      "creator_note": "Keep the heat low once the yogurt goes in or it can curdle.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Taste for salt, add a splash of water if too thick and serve with rice.",
+      "ingredient_refs": [
+        "ing-10"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Sauce clings to the chicken and tastes balanced"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Use a separate board for the raw chicken."
+  ],
+  "dietary_warnings": [
+    "Contains milk (yogurt)."
+  ]
+}

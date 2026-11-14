@@ -1,0 +1,199 @@
+{
+  "slug": "garlicky-spinach-namul",
+  "title": "Garlicky Spinach Namul",
+  "summary": "A quick spinach side dish: blanched for seconds, squeezed dry, then tossed with garlic, sesame oil and toasted sesame seeds. Lives in the fridge for a few days of easy banchan.",
+  "tags": [
+    "korean",
+    "side",
+    "vegan",
+    "quick"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-19T09:00:00Z",
+  "creator": {
+    "handle": "mina-cho",
+    "display_name": "Mina Cho",
+    "bio": "Sample creator. Korean home cooking the way my mom taught me: stews, banchan and noodles for busy nights."
+  },
+  "servings": 4,
+  "prep_minutes": 5,
+  "cook_minutes": 5,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "spinach",
+      "quantity": 1,
+      "unit": "lb",
+      "optional": false,
+      "preparation": "rinsed well, roots trimmed",
+      "notes": "mature bunch spinach holds up better than baby spinach"
+    },
+    {
+      "id": "ing-2",
+      "name": "salt",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": "plus a pinch for the water"
+    },
+    {
+      "id": "ing-3",
+      "name": "garlic",
+      "quantity": 1,
+      "unit": "clove",
+      "optional": false,
+      "preparation": "finely minced",
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "soy sauce",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "sesame oil",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "sesame seeds",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": "toasted",
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "scallion",
+      "quantity": 1,
+      "unit": null,
+      "optional": true,
+      "preparation": "finely chopped",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Bring a large pot of water to a boil with a pinch of salt. Fill a bowl with cold water next to the stove.",
+      "ingredient_refs": [
+        "ing-2"
+      ],
+      "estimated_minutes": 6,
+      "success_cues": [
+        "Water is at a full rolling boil",
+        "Cold water bowl is ready before the spinach goes in"
+      ],
+      "warnings": [
+        "Boiling water: pour away from you and use oven mitts on the pot handles."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Push the spinach under the boiling water and cook for 30 to 45 seconds, then lift it straight into the cold water.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Leaves turn deep bright green and just wilt",
+        "Stems still bend with a little spring"
+      ],
+      "warnings": [
+        "Boiling water: pour away from you and use oven mitts on the pot handles."
+      ],
+      "creator_note": "Don't walk away here. A minute too long and it goes slimy.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Gather the spinach into a ball and squeeze out as much water as you can, then cut the ball in half once or twice.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Spinach holds together as a firm, compact ball",
+        "Only a few drops come out on a final squeeze"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Loosen the spinach in a bowl. Add the garlic, soy sauce, sesame oil, remaining salt and scallion if using, and mix with your fingers so every strand is coated.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5",
+        "ing-7"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Strands are separated and glossy with oil",
+        "Tastes lightly salty with a clear garlic bite"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Crush the sesame seeds between your fingers as you sprinkle them over. Serve at room temperature or chilled.",
+      "ingredient_refs": [
+        "ing-6"
+      ],
+      "estimated_minutes": 1,
+      "success_cues": [
+        "Seeds are scattered evenly and smell nutty"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Keeps covered in the fridge for 3 days."
+  ],
+  "dietary_warnings": [
+    "Contains soy and wheat (soy sauce) and sesame."
+  ]
+}

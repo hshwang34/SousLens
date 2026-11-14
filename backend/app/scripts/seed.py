@@ -14,7 +14,10 @@
   content differs from the latest version it is published as the next version;
   ``seeded_recipes/history/<slug>/v<N>.json`` holds earlier contents so fresh and existing
   databases end up with identical versions (brief 005: the gochujang marinade fix is v2).
-* Owned by the seeded creator ``creator@umma.dev``.
+* Owned by the seeded creator ``creator@umma.dev``, or, for ``seeded_creators/*.json``
+  (brief 015), by a fictional persona keyed by ``creator.handle``. Personas use
+  ``auth_provider = "seed"`` with no email, which no sign-in path accepts. Tests seed only
+  ``seeded_recipes``; ``make seed`` adds the personas.
 * IDs are deterministic (uuid5) and each fixture carries its own ``published_at`` so
   ``fixtures/expected_outputs`` (and the feed order) stays stable.
 
@@ -39,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.engine import make_engine, make_sessionmaker
-from app.db.models import Ingredient, Recipe, RecipeVersion, SubstitutionRule, Visibility
+from app.db.models import Ingredient, Recipe, RecipeVersion, SubstitutionRule, User, Visibility
 from app.domains.matching.dictionary import (
     IngredientDictionary,
     entries_from_file,
@@ -62,6 +65,9 @@ class SeedCreator(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     display_name: str
+    # Brief 015 personas: fictional, original, bios start with "Sample creator.".
+    handle: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    bio: str | None = Field(default=None, max_length=280)
 
 
 class SeedIngredient(IngredientOut):
@@ -107,8 +113,11 @@ def seed_uuid(kind: str, key: str) -> uuid.UUID:
     return uuid.uuid5(SEED_NAMESPACE, f"{kind}:{key}")
 
 
-def load_fixtures(fixtures_dir: Path) -> list[SeedRecipe]:
-    folder = fixtures_dir / "seeded_recipes"
+PERSONA_PROVIDER = "seed"
+
+
+def load_fixtures(fixtures_dir: Path, folder_name: str = "seeded_recipes") -> list[SeedRecipe]:
+    folder = fixtures_dir / folder_name
     return [
         SeedRecipe.model_validate(json.loads(path.read_text(encoding="utf-8")))
         for path in sorted(folder.glob("*.json"))
@@ -168,17 +177,42 @@ def load_history(fixtures_dir: Path, slug: str) -> list[SeedRecipe]:
     return [SeedRecipe.model_validate(json.loads(p.read_text(encoding="utf-8"))) for p in paths]
 
 
+async def seed_persona(session: AsyncSession, creator: SeedCreator) -> User:
+    """Upsert a fictional creator persona (brief 015). Never sign-in-able: provider ``seed``,
+    no email. Name and bio are refreshed on every run."""
+    assert creator.handle is not None
+    user = await users_service.find_by_subject(
+        session, auth_provider=PERSONA_PROVIDER, subject=creator.handle
+    )
+    if user is None:
+        user = User(
+            id=seed_uuid("persona", creator.handle),
+            auth_provider=PERSONA_PROVIDER,
+            auth_subject=creator.handle,
+            email=None,
+            display_name=creator.display_name,
+        )
+        session.add(user)
+    user.display_name = creator.display_name
+    user.bio = creator.bio
+    await session.flush()
+    return user
+
+
 async def seed_recipe(
     session: AsyncSession, fixture: SeedRecipe, history: list[SeedRecipe] | None = None
 ) -> SeedResult:
     history = history or []
-    creator = await users_service.get_or_create_by_email(
-        session,
-        email=SEED_CREATOR_EMAIL,
-        display_name=fixture.creator.display_name,
-        auth_provider="dev",
-        user_id=seed_uuid("user", SEED_CREATOR_EMAIL),
-    )
+    if fixture.creator.handle:
+        creator = await seed_persona(session, fixture.creator)
+    else:
+        creator = await users_service.get_or_create_by_email(
+            session,
+            email=SEED_CREATOR_EMAIL,
+            display_name=fixture.creator.display_name,
+            auth_provider="dev",
+            user_id=seed_uuid("user", SEED_CREATOR_EMAIL),
+        )
     recipe = (
         await session.execute(select(Recipe).where(Recipe.slug == fixture.slug))
     ).scalar_one_or_none()
@@ -354,12 +388,19 @@ async def seed_substitution_rules(session: AsyncSession, fixtures_dir: Path) -> 
     return RuleSeedResult(created, updated, unchanged, len(stale))
 
 
-async def seed_fixtures(session: AsyncSession, fixtures_dir: Path) -> list[SeedResult]:
+async def seed_fixtures(
+    session: AsyncSession, fixtures_dir: Path, *, include_creators: bool = False
+) -> list[SeedResult]:
+    """``include_creators`` adds the brief 015 personas (``make seed``). Tests leave it off so
+    the five-recipe feed and ``expected_outputs`` stay stable."""
     await seed_ingredients(session, fixtures_dir)
     await seed_substitution_rules(session, fixtures_dir)
+    fixtures = load_fixtures(fixtures_dir)
+    if include_creators:
+        fixtures += load_fixtures(fixtures_dir, "seeded_creators")
     results = [
         await seed_recipe(session, fixture, load_history(fixtures_dir, fixture.slug))
-        for fixture in load_fixtures(fixtures_dir)
+        for fixture in fixtures
     ]
     await session.commit()
     conflicts = [r.slug for r in results if r.conflict]
@@ -385,7 +426,7 @@ async def run(settings: Settings | None = None) -> list[SeedResult]:
     engine = make_engine(settings.database_url)
     try:
         async with make_sessionmaker(engine)() as session:
-            results = await seed_fixtures(session, settings.fixtures_dir)
+            results = await seed_fixtures(session, settings.fixtures_dir, include_creators=True)
     finally:
         await engine.dispose()
     for r in results:

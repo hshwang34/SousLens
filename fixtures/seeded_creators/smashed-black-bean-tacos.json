@@ -1,0 +1,229 @@
+{
+  "slug": "smashed-black-bean-tacos",
+  "title": "Smashed Black Bean and Avocado Tacos",
+  "summary": "Warm corn tortillas with cumin-spiced smashed black beans, creamy avocado, lime-pickled onion and cilantro. A meatless taco night in twenty minutes.",
+  "tags": [
+    "mexican",
+    "vegetarian",
+    "quick",
+    "weeknight"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-18T19:00:00Z",
+  "creator": {
+    "handle": "rosa-delgado",
+    "display_name": "Rosa Delgado",
+    "bio": "Sample creator. Everyday Mexican family cooking: tacos, rice and slow-simmered sauces."
+  },
+  "servings": 3,
+  "prep_minutes": 10,
+  "cook_minutes": 10,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "black beans",
+      "quantity": 1,
+      "unit": "can",
+      "optional": false,
+      "preparation": "drained and rinsed",
+      "notes": "15 oz"
+    },
+    {
+      "id": "ing-2",
+      "name": "ground cumin",
+      "quantity": 0.5,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-3",
+      "name": "neutral oil",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "red onion",
+      "quantity": 0.5,
+      "unit": null,
+      "optional": false,
+      "preparation": "thinly sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "lime",
+      "quantity": 2,
+      "unit": null,
+      "optional": false,
+      "preparation": "juiced",
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "avocado",
+      "quantity": 1,
+      "unit": null,
+      "optional": false,
+      "preparation": "sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-7",
+      "name": "corn tortillas",
+      "quantity": 8,
+      "unit": null,
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "cilantro",
+      "quantity": 0.25,
+      "unit": "cup",
+      "optional": true,
+      "preparation": "chopped",
+      "notes": null
+    },
+    {
+      "id": "ing-9",
+      "name": "salt",
+      "quantity": 0.75,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-10",
+      "name": "queso fresco",
+      "quantity": 0.25,
+      "unit": "cup",
+      "optional": true,
+      "preparation": "crumbled",
+      "notes": null
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Toss the sliced red onion with the juice of one lime and a pinch of salt. Set aside while you cook.",
+      "ingredient_refs": [
+        "ing-4",
+        "ing-5",
+        "ing-9"
+      ],
+      "estimated_minutes": 4,
+      "success_cues": [
+        "Onion starts turning pink and softening"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": "Quick lime onions wake up every taco. Don't skip them.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Warm the oil in a skillet over medium heat. Add the beans, cumin and a splash of water and cook 3 minutes, then smash about half with a fork.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-2",
+        "ing-3"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Beans are hot and partly mashed into a thick, spreadable mix"
+      ],
+      "warnings": [
+        "Hot oil can spit; add food away from your body and keep the handle turned inward."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Warm the tortillas one at a time in a dry pan over medium-high heat, about 30 seconds per side, and stack them in a towel.",
+      "ingredient_refs": [
+        "ing-7"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Tortillas are soft and pliable with a few toasted spots",
+        "They fold without cracking"
+      ],
+      "warnings": [
+        "Use tongs; the dry pan gets very hot."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Slice the avocado and squeeze over the remaining lime juice.",
+      "ingredient_refs": [
+        "ing-5",
+        "ing-6"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Avocado slices are glossy with lime and not browning"
+      ],
+      "warnings": [
+        "Sharp knife: curl your fingertips under and keep the board steady on a damp towel."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Fill each tortilla with beans, avocado, pickled onion, cilantro and queso fresco if using.",
+      "ingredient_refs": [
+        "ing-1",
+        "ing-4",
+        "ing-6",
+        "ing-8",
+        "ing-10"
+      ],
+      "estimated_minutes": 3,
+      "success_cues": [
+        "Each taco has a layer of beans and a bit of every topping"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Skip the queso fresco and the tacos are vegan."
+  ],
+  "dietary_warnings": [
+    "Optional queso fresco contains milk. Check corn tortilla labels if you avoid wheat."
+  ]
+}

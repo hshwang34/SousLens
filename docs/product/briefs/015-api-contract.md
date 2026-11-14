@@ -63,13 +63,13 @@ first `onboarded_at`.
 
 | Endpoint | Result |
 |---|---|
-| `GET /creators/suggested?cuisines=korean,italian&limit=8` | **200** `{"items": [CreatorSummary]}`. Users with ≥1 published recipe, excluding the caller. Ranked by cuisine overlap, then recipe count, then name. `limit` 1–20, default 8. |
+| `GET /creators/suggested?cuisines=korean,italian&limit=8` | **200** `{"items": [CreatorSummary]}`. Users with ≥1 published recipe, excluding the caller. Ranked by how many of their recipes are in the chosen cuisines, then recipe count, then name. `limit` 1–20, default 8. |
 | `GET /creators/{id}` | **200** `{"creator": CreatorSummary, "recipes": [RecipeCard]}` (newest first). 404 if the user has no published recipe. |
 | `PUT /creators/{id}/follow` | **200** `CreatorSummary` with `is_following: true`. Idempotent. 404 for self or a non-creator. |
 | `DELETE /creators/{id}/follow` | **200** `CreatorSummary` with `is_following: false`. Idempotent. |
 | `GET /me/following` | **200** `{"items": [CreatorSummary]}`, most recently followed first. |
 
-`RecipeCard.creator` (`CreatorRef`) gains `avatar_url` (nullable), additive.
+`RecipeCard.creator` (`CreatorRef`) is unchanged. Seeded personas have no `avatar_url`; the app draws a monogram.
 
 ## Feeds
 

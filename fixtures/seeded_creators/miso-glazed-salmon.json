@@ -1,0 +1,207 @@
+{
+  "slug": "miso-glazed-salmon",
+  "title": "Miso-Glazed Salmon",
+  "summary": "Salmon fillets brushed with a sweet miso and mirin glaze and broiled until caramelized at the edges. Ten minutes of cooking for a weeknight that feels special.",
+  "tags": [
+    "japanese",
+    "seafood",
+    "pescatarian",
+    "weeknight",
+    "quick"
+  ],
+  "cover_image_url": null,
+  "published_at": "2026-10-21T20:00:00Z",
+  "creator": {
+    "handle": "kenji-arai",
+    "display_name": "Kenji Arai",
+    "bio": "Sample creator. Simple Japanese home meals: rice bowls, noodles and quick glazes."
+  },
+  "servings": 2,
+  "prep_minutes": 10,
+  "cook_minutes": 10,
+  "ingredients": [
+    {
+      "id": "ing-1",
+      "name": "salmon",
+      "quantity": 2,
+      "unit": "fillet",
+      "optional": false,
+      "preparation": "about 6 oz each, patted dry",
+      "notes": null
+    },
+    {
+      "id": "ing-2",
+      "name": "miso",
+      "quantity": 2,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": "white miso is milder"
+    },
+    {
+      "id": "ing-3",
+      "name": "mirin",
+      "quantity": 1,
+      "unit": "tbsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-4",
+      "name": "sugar",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-5",
+      "name": "soy sauce",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": null
+    },
+    {
+      "id": "ing-6",
+      "name": "neutral oil",
+      "quantity": 1,
+      "unit": "tsp",
+      "optional": false,
+      "preparation": null,
+      "notes": "for the foil"
+    },
+    {
+      "id": "ing-7",
+      "name": "scallion",
+      "quantity": 1,
+      "unit": null,
+      "optional": true,
+      "preparation": "thinly sliced",
+      "notes": null
+    },
+    {
+      "id": "ing-8",
+      "name": "cooked rice",
+      "quantity": 2,
+      "unit": "cup",
+      "optional": true,
+      "preparation": null,
+      "notes": "for serving"
+    }
+  ],
+  "steps": [
+    {
+      "id": "step-1",
+      "order": 0,
+      "instruction": "Heat the broiler with a rack about 6 inches below it. Line a baking tray with foil and brush it with the oil.",
+      "ingredient_refs": [
+        "ing-6"
+      ],
+      "estimated_minutes": 5,
+      "success_cues": [
+        "Broiler element is glowing",
+        "Foil is evenly oiled"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-2",
+      "order": 1,
+      "instruction": "Mix the miso, mirin, sugar and soy sauce in a small bowl until smooth.",
+      "ingredient_refs": [
+        "ing-2",
+        "ing-3",
+        "ing-4",
+        "ing-5"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Glaze is smooth and spreadable, like thick yogurt"
+      ],
+      "warnings": [],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-3",
+      "order": 2,
+      "instruction": "Pat the salmon dry and set it skin side down on the tray. Spread the glaze over the tops and sides.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Each fillet is covered in an even thin layer of glaze"
+      ],
+      "warnings": [
+        "Raw fish: wash hands and tools after handling. Check the thickest part reaches 145°F (63°C) with a thermometer rather than relying on looks."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-4",
+      "order": 3,
+      "instruction": "Broil 7 to 10 minutes, depending on thickness, watching closely after 5 minutes.",
+      "ingredient_refs": [
+        "ing-1"
+      ],
+      "estimated_minutes": 9,
+      "success_cues": [
+        "Glaze is bubbling and browned at the edges",
+        "A thermometer in the thickest part reads 145°F (63°C)"
+      ],
+      "warnings": [
+        "Sugar in the glaze can scorch fast under the broiler; move the tray lower if it darkens before the fish is done.",
+        "Raw fish: wash hands and tools after handling. Check the thickest part reaches 145°F (63°C) with a thermometer rather than relying on looks."
+      ],
+      "creator_note": "A little char on the edges is the best part. Black is too far.",
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    },
+    {
+      "id": "step-5",
+      "order": 4,
+      "instruction": "Rest 2 minutes, then serve over rice with scallion if using.",
+      "ingredient_refs": [
+        "ing-7",
+        "ing-8"
+      ],
+      "estimated_minutes": 2,
+      "success_cues": [
+        "Flesh flakes into large moist pieces"
+      ],
+      "warnings": [
+        "The tray is very hot; use oven mitts."
+      ],
+      "creator_note": null,
+      "source_clip_id": null,
+      "source_start_ms": null,
+      "source_end_ms": null,
+      "evidence_origin": "creator_authored"
+    }
+  ],
+  "creator_notes": [
+    "Leftover salmon flaked over rice with a little soy sauce makes a great lunch."
+  ],
+  "dietary_warnings": [
+    "Contains fish, soy and wheat (miso, soy sauce)."
+  ]
+}
