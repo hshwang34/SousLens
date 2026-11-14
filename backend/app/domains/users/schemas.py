@@ -29,6 +29,9 @@ class UserOut(BaseModel):
     preference_units: Literal["us", "metric"]
     created_at: datetime
     entitlement: Entitlement
+    # Brief 015: null until onboarding is finished / a role is chosen.
+    onboarded_at: datetime | None = None
+    role: Literal["cook", "creator"] | None = None
 
     @classmethod
     def from_model(cls, user: User, settings: Settings) -> UserOut:
@@ -38,7 +41,17 @@ class UserOut(BaseModel):
             preference_units=user.preference_units.value,
             created_at=user.created_at,
             entitlement=entitlement_for(user, settings),
+            onboarded_at=user.onboarded_at,
+            role=user.role.value if user.role else None,
         )
+
+
+class UserPatch(BaseModel):
+    """``PATCH /me`` (brief 015). Only the role is editable for now."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["cook", "creator"]
 
 
 _EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
