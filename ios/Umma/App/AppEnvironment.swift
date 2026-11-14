@@ -37,8 +37,11 @@ final class AppEnvironment {
     var exploreRoutes: [RecipeRoute] = []
     /// A link that arrived while signed out (or mid-onboarding); applied once the tabs show.
     private(set) var pendingDeepLink: DeepLink?
-    /// Brief 015 first-run onboarding, behind `feature.onboarding` until every step has shipped.
-    var onboardingEnabled = UserDefaults.standard.object(forKey: AppEnvironment.onboardingFlagKey) as? Bool ?? false
+    /// Brief 015 first-run onboarding (`feature.onboarding`).
+    /// On by default since brief 015 PR 9; `feature.onboarding = false` turns it off for demos.
+    var onboardingEnabled = UserDefaults.standard.object(forKey: AppEnvironment.onboardingFlagKey) as? Bool ?? true
+    /// Set by onboarding's "Record your first recipe"; Profile opens a new draft and clears it.
+    var requestNewRecipe = false
     nonisolated static let onboardingFlagKey = "feature.onboarding"
 
     /// True while the signed-in user still has to finish onboarding (the tabs aren't shown).

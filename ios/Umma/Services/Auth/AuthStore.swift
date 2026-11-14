@@ -160,7 +160,7 @@ final class AuthStore {
     #if DEBUG
     /// Tests only.
     func forceSignedInForTests() {
-        state = .signedIn(User(id: UUID(), displayName: "Tester", preferenceUnits: .us, createdAt: Date()))
+        state = .signedIn(User(id: UUID(), displayName: "Tester", preferenceUnits: .us, createdAt: Date(), onboardedAt: Date()))
     }
     #endif
 
