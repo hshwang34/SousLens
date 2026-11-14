@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"title\": \"Mum's Kimchi Jjigae\", \"summary\": null, \"servings\": null, \"prep_minutes\": null, \"cook_minutes\": null, \"ingredients\": [{\"id\": \"a\", \"name\": \"pork belly\", \"quantity\": 300, \"unit\": \"g\", \"quantity_source\": \"spoken\", \"preparation\": null, \"optional\": false, \"confidence\": 0.9}, {\"id\": \"b\", \"name\": \"tofu\", \"quantity\": 1, \"unit\": \"block\", \"quantity_source\": \"not_stated\", \"preparation\": null, \"optional\": false, \"confidence\": 0.6}], \"steps\": [{\"instruction\": \"Brown the pork belly with no oil.\", \"start\": \"00:10\", \"end\": \"00:40\", \"ingredient_ids\": [\"a\"], \"success_cues\": [], \"warnings\": [], \"estimated_minutes\": null, \"evidence\": \"spoken\", \"confidence\": 0.8}, {\"instruction\": \"Add the tofu and let it simmer until the kimchi goes soft.\", \"start\": null, \"end\": null, \"ingredient_ids\": [\"b\"], \"success_cues\": [\"the kimchi goes soft\"], \"warnings\": [], \"estimated_minutes\": null, \"evidence\": \"spoken\", \"confidence\": 0.7}], \"unknowns\": [\"amount of tofu not stated\"], \"creator_notes\": [\"Always use the old sour kimchi.\"]}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 900,
+      "candidatesTokenCount": 600,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 1500
+    }
+  }
+}

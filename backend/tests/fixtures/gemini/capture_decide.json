@@ -1,0 +1,26 @@
+{
+  "response": {
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "fixture",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "{\"open_gaps\": [{\"topic_key\": \"Simmer Time\", \"topic\": \"time\", \"question\": \"How long do you let it simmer?\"}], \"filled_gaps\": [\"oven_temperature\"], \"proposed_question\": \"How long do you let it simmer?\", \"topic_key\": \"simmer_time\", \"confidence\": 0.85}"
+            }
+          ]
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 900,
+      "candidatesTokenCount": 80,
+      "thoughtsTokenCount": 0,
+      "totalTokenCount": 980
+    }
+  }
+}

@@ -23,16 +23,19 @@ from app.ai.budget import Capability, CostGuard, Denial, UsageMeter
 from app.ai.notice import AINotice
 from app.ai.providers.base import (
     AIProvider,
+    CaptureInterviewRequest,
     CoachRequest,
     CoachResponse,
     ExtractedRecipeDraft,
     ExtractionRequest,
+    GapDecision,
     InspectRequest,
     InspectResponse,
     PantryObservation,
     PantryObservationRequest,
     SubstitutionRequest,
     SubstitutionResponse,
+    TranscriptExtractionRequest,
 )
 from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.mock import MockAIProvider
@@ -113,6 +116,20 @@ class GuardedProvider:
     # with a video unmetered.
     async def extract(self, request: ExtractionRequest) -> ExtractedRecipeDraft:
         raise ProviderNotConfigured("Video extraction runs in the background worker")
+
+    async def extract_transcript(
+        self, request: TranscriptExtractionRequest
+    ) -> ExtractedRecipeDraft:
+        raise ProviderNotConfigured("Capture drafts are written by the background worker")
+
+    async def decide(self, request: CaptureInterviewRequest) -> GapDecision:
+        """The capture interviewer (brief 014): over a cap, the deterministic rules ask."""
+        return await self._run(
+            "capture",
+            request,
+            lambda m: self._real.decide(request, m),
+            lambda: self._fallback.decide(request),
+        )
 
     async def observe(self, request: PantryObservationRequest) -> PantryObservation:
         capability: Capability = "pantry_photo" if request.mode == "photo" else "pantry_transcript"

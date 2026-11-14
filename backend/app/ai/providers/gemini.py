@@ -45,6 +45,8 @@ from pydantic import BaseModel, Field
 from app.ai.budget import Capability, UsageMeter
 from app.ai.pricing import price_for
 from app.ai.prompts import (
+    CAPTURE_DRAFT_SYSTEM,
+    CAPTURE_INTERVIEW_SYSTEM,
     COACH_SYSTEM,
     INSPECT_SYSTEM,
     PANTRY_SYSTEM,
@@ -53,10 +55,12 @@ from app.ai.prompts import (
     data_block,
 )
 from app.ai.providers.base import (
+    CaptureInterviewRequest,
     CoachRequest,
     CoachResponse,
     ExtractedRecipeDraft,
     ExtractionRequest,
+    GapDecision,
     GroundingRef,
     InspectRequest,
     InspectResponse,
@@ -69,6 +73,7 @@ from app.ai.providers.base import (
     SubstitutionRequest,
     SubstitutionResponse,
     SubstitutionSuggestion,
+    TranscriptExtractionRequest,
     UncertaintyLevel,
 )
 from app.ai.video import VideoExtractionDraft, salvage_video, to_extracted
@@ -95,6 +100,8 @@ MAX_OUTPUT_TOKENS: dict[str, int] = {
     "pantry_transcript": 3072,
     "substitution": 3072,
     "video": 16384,
+    "capture": 1024,
+    "capture_draft": 16384,
 }
 # Video input estimate (brief 008): Gemini bills ~70 tokens per frame at 1 fps with
 # MEDIA_RESOLUTION_LOW plus 32 tokens/s of audio; 100 tok/s of video is a deliberate over-estimate,
@@ -163,6 +170,12 @@ class SubstitutionSuggestionDraft(StrictModel):
     adjusted_steps: list[str] = Field(default_factory=list, max_length=6)
     confidence: float = Field(ge=0.0, le=1.0)
     risks: list[str] = Field(default_factory=list, max_length=6)
+
+
+class CaptureExtractionDraft(VideoExtractionDraft):
+    """The video draft shape (spans always null) plus the creator's own phrases."""
+
+    creator_notes: list[str] = Field(default_factory=list, max_length=6)
 
 
 class SubstitutionDraft(StrictModel):
@@ -366,6 +379,8 @@ class GeminiProvider:
             "pantry_transcript": settings.gemini_model_pantry,
             "substitution": settings.gemini_model_substitution,
             "video": settings.gemini_model_video,
+            "capture": settings.gemini_model_capture,
+            "capture_draft": settings.gemini_model_capture,
         }
         self._deadline_seconds = settings.gemini_timeout_seconds
         self._video_deadline_seconds = settings.gemini_video_timeout_seconds
@@ -491,8 +506,26 @@ class GeminiProvider:
             media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
         )
 
+    def plan_decide(self, request: CaptureInterviewRequest) -> CallPlan:
+        contents = [
+            "Look at what the creator just said and decide whether anything is missing.",
+            data_block("capture_data", request.model_dump(mode="json")),
+        ]
+        return self._plan("capture", CAPTURE_INTERVIEW_SYSTEM, contents, GapDecision)
+
+    def plan_capture_draft(self, request: TranscriptExtractionRequest) -> CallPlan:
+        contents = [
+            "Write a draft recipe from what the creator said while cooking.",
+            data_block("capture_data", request.model_dump(mode="json")),
+        ]
+        return self._plan("capture_draft", CAPTURE_DRAFT_SYSTEM, contents, CaptureExtractionDraft)
+
     def plan_for(self, capability: Capability, request: Any) -> CallPlan:
         match capability:
+            case "capture":
+                return self.plan_decide(request)
+            case "capture_draft":
+                return self.plan_capture_draft(request)
             case "video":
                 return self.plan_video(request)
             case "coach":
@@ -698,6 +731,24 @@ class GeminiProvider:
             log.warning("gemini file delete failed", extra={"error_type": type(exc).__name__})
             return False
 
+    async def decide(
+        self, request: CaptureInterviewRequest, meter: UsageMeter | None = None
+    ) -> GapDecision:
+        return await self.run(self.plan_decide(request), GapDecision, meter)
+
+    async def extract_transcript(
+        self, request: TranscriptExtractionRequest, meter: UsageMeter | None = None
+    ) -> ExtractedRecipeDraft:
+        """Transcript → draft (brief 014). Spans are dropped: there is no video to clip."""
+        draft = await self.run(
+            self.plan_capture_draft(request),
+            CaptureExtractionDraft,
+            meter,
+            salvage=_salvage_capture,
+            deadline_seconds=self._video_deadline_seconds,
+        )
+        return to_capture_extracted(draft)
+
     async def observe(
         self, request: PantryObservationRequest, meter: UsageMeter | None = None
     ) -> PantryObservation:
@@ -789,6 +840,21 @@ def to_substitution_response(
         cannot_substitute=draft.cannot_substitute,
         reason=draft.reason,
     )
+
+
+def to_capture_extracted(draft: VideoExtractionDraft) -> ExtractedRecipeDraft:
+    extracted = to_extracted(draft)
+    steps = [
+        s.model_copy(update={"source_start_ms": None, "source_end_ms": None})
+        for s in extracted.steps
+    ]
+    notes = list(draft.creator_notes) if isinstance(draft, CaptureExtractionDraft) else []
+    return extracted.model_copy(update={"steps": steps, "creator_notes": notes})
+
+
+def _salvage_capture(text: str) -> CaptureExtractionDraft | None:
+    partial = salvage_video(text)
+    return CaptureExtractionDraft(**partial.model_dump()) if partial is not None else None
 
 
 PARTIAL_NOTE = "Some items couldn't be read. Check the list and add anything missing by hand."

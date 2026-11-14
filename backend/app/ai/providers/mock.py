@@ -10,11 +10,14 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.ai import capture_rules
 from app.ai.providers.base import (
+    CaptureInterviewRequest,
     CoachRequest,
     CoachResponse,
     ExtractedRecipeDraft,
     ExtractionRequest,
+    GapDecision,
     GroundingRef,
     InspectRequest,
     InspectResponse,
@@ -25,6 +28,7 @@ from app.ai.providers.base import (
     SubstitutionRequest,
     SubstitutionResponse,
     SubstitutionSuggestion,
+    TranscriptExtractionRequest,
 )
 from app.ai.video import VideoExtractionDraft, to_extracted
 from app.domains.safety.content import is_doneness_question
@@ -392,6 +396,16 @@ class MockAIProvider:
         if request.title_hint:
             extracted = extracted.model_copy(update={"title": request.title_hint})
         return extracted
+
+    # CaptureInterviewer / TranscriptRecipeExtractor (brief 014): deterministic rules that only
+    # use what the creator said; nothing is invented.
+    async def decide(self, request: CaptureInterviewRequest) -> GapDecision:
+        return capture_rules.interview(request)
+
+    async def extract_transcript(
+        self, request: TranscriptExtractionRequest
+    ) -> ExtractedRecipeDraft:
+        return capture_rules.extract(request)
 
     # PantryExtractor
     async def observe(self, request: PantryObservationRequest) -> PantryObservation:
