@@ -25,6 +25,10 @@ final class AppEnvironment {
     let camera: any CameraSource
     let speech: any SpeechInput
     let audio: any AudioOutput
+    /// Brief 012: "Run voice on this iPhone".
+    let voiceSettings: VoiceSettings
+    /// Builds the Free (on-device) voice transport; Paid wraps it until brief 012 PR 2.
+    let makeFreeVoiceTransport: @MainActor () -> any VoiceTransport
     /// Brief 005: open cooking session (resume banner, floating pill, full-screen cooking view).
     let cooking: CookingSessionStore
 
@@ -63,6 +67,8 @@ final class AppEnvironment {
          camera: any CameraSource,
          speech: any SpeechInput,
          audio: any AudioOutput,
+         voiceSettings: VoiceSettings? = nil,
+         makeFreeVoiceTransport: @escaping @MainActor () -> any VoiceTransport = { FakeVoiceTransport(isAvailable: false) },
          sessionCache: SessionCaching = InMemorySessionCache()) {
         self.serverSettings = serverSettings
         self.api = api
@@ -72,6 +78,8 @@ final class AppEnvironment {
         self.camera = camera
         self.speech = speech
         self.audio = audio
+        self.voiceSettings = voiceSettings ?? VoiceSettings()
+        self.makeFreeVoiceTransport = makeFreeVoiceTransport
         cooking = CookingSessionStore(service: api, cache: sessionCache, owner: { [weak auth, weak serverSettings] in
             guard let user = auth?.user, let server = serverSettings?.effectiveBaseURLString, !server.isEmpty else { return nil }
             return SessionOwner(userId: user.id, server: server)
@@ -89,6 +97,16 @@ final class AppEnvironment {
             previous?(oldValue, newValue)
             self?.discardNavigationState()
         }
+    }
+
+    /// A new voice session on the transport the signed-in user's tier calls for (brief 012).
+    func makeVoiceSession(config: VoiceSessionConfig = .init()) -> VoiceSession {
+        let transport = VoiceTierChoice.transport(
+            entitlement: auth.user?.entitlement,
+            runOnDevice: voiceSettings.runOnDevice,
+            makeFree: makeFreeVoiceTransport
+        )
+        return VoiceSession(transport: transport, config: config)
     }
 
     func discardNavigationState() {
@@ -163,6 +181,7 @@ final class AppEnvironment {
             camera: flags.phoneCamera ? PhoneCameraSource() : FakeCameraSource(isAvailable: false),
             speech: flags.phoneSpeech ? PhoneSpeechInput() : FakeSpeechInput(isAvailable: false),
             audio: flags.systemAudio ? SystemAudioOutput() : FakeAudioOutput(isAvailable: false),
+            voiceSettings: VoiceSettings(defaults: defaults),
             sessionCache: SessionCache()
         )
     }
@@ -202,7 +221,9 @@ final class AppEnvironment {
             captureFlags: .allOn,
             camera: FakeCameraSource(),
             speech: FakeSpeechInput(),
-            audio: FakeAudioOutput()
+            audio: FakeAudioOutput(),
+            voiceSettings: VoiceSettings(defaults: defaults),
+            makeFreeVoiceTransport: { FakeVoiceTransport() }
         )
     }
 }
