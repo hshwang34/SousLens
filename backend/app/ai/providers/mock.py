@@ -21,6 +21,8 @@ from app.ai.providers.base import (
     GroundingRef,
     InspectRequest,
     InspectResponse,
+    LiveTokenSpec,
+    MintedLiveToken,
     PantryCandidate,
     PantryObservation,
     PantryObservationRequest,
@@ -583,4 +585,23 @@ class MockAIProvider:
             food_safety_certified=False,
             grounded_revision=request.grounded_revision,
             recommended_step_change=None,
+        )
+
+
+class MockLiveTokenMinter:
+    """Offline ``LiveTokenMinter`` (brief 016): records what each token would be locked to and
+    returns an obviously fake token. Raises ``fail`` when set. Never touches the network."""
+
+    def __init__(self, fail: Exception | None = None) -> None:
+        self.fail = fail
+        self.specs: list[LiveTokenSpec] = []
+
+    async def mint(self, spec: LiveTokenSpec) -> MintedLiveToken:
+        self.specs.append(spec)
+        if self.fail is not None:
+            raise self.fail
+        return MintedLiveToken(
+            token=f"mock-live-token-{len(self.specs)}",
+            expire_time=spec.expire_time,
+            new_session_expire_time=spec.new_session_expire_time,
         )

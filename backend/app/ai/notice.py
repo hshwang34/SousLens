@@ -12,7 +12,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 RESTING_MESSAGE = "AI is resting — demo answers for now"
-DenialReason = Literal["user_daily_cap", "monthly_cap"]
+LIVE_ALLOWANCE_MESSAGE = "Today's live scan allowance is used up — demo mode for now"
+DenialReason = Literal["user_daily_cap", "user_live_daily_cap", "monthly_cap"]
 
 
 class AINotice(BaseModel):

@@ -6,6 +6,7 @@ is always parsed, never trusted raw. Providers may implement several Protocols o
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -363,6 +364,25 @@ class TranscriptExtractionRequest(StrictModel):
     language: str = "en"
 
 
+# --- Brief 016 live pantry scan: ephemeral token for a phone-side Live session ------------
+
+
+class LiveTokenSpec(StrictModel):
+    """What a minted token is locked to. The minter builds the provider's session config from
+    it (tool, modality, resolution are fixed server-side), so the phone can change none of it."""
+
+    model: str
+    system_instruction: str
+    expire_time: datetime
+    new_session_expire_time: datetime
+
+
+class MintedLiveToken(StrictModel):
+    token: str = Field(repr=False)  # a credential: never logged, never in a repr
+    expire_time: datetime
+    new_session_expire_time: datetime
+
+
 # --- Protocols ----------------------------------------------------------------------------
 
 
@@ -401,6 +421,11 @@ class TranscriptRecipeExtractor(Protocol):
     async def extract_transcript(
         self, request: TranscriptExtractionRequest
     ) -> ExtractedRecipeDraft: ...
+
+
+@runtime_checkable
+class LiveTokenMinter(Protocol):
+    async def mint(self, spec: LiveTokenSpec) -> MintedLiveToken: ...
 
 
 @runtime_checkable
