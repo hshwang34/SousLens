@@ -10,11 +10,13 @@ from fastapi import APIRouter, Header, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from app.ai.guard import provider_for
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
 from app.domains.capture import service
 from app.domains.capture.schemas import (
     CommandIn,
+    FinishIn,
+    FinishOut,
     QuestionOutcomeIn,
     QuestionOutcomeOut,
     SessionCreateIn,
@@ -22,6 +24,7 @@ from app.domains.capture.schemas import (
     TurnsIn,
     TurnsOut,
 )
+from app.domains.extraction import jobs
 
 router = APIRouter(prefix="/capture/sessions", tags=["capture"])
 
@@ -96,3 +99,42 @@ async def post_command(
 ) -> JSONResponse:
     sid = service.session_id_or_404(session_id)
     return JSONResponse(content=await service.command(session, user, sid, idempotency_key, body))
+
+
+@router.post("/{session_id}/finish", response_model=FinishOut)
+async def post_finish(
+    session_id: str,
+    idempotency_key: IdempotencyKey,
+    request: Request,
+    session: DbSession,
+    user: CurrentUser,
+    body: FinishIn | None = None,
+) -> JSONResponse:
+    sid = service.session_id_or_404(session_id)
+    out = await service.finish(
+        session, user, sid, idempotency_key, body or FinishIn(), provider_for(request, user.id)
+    )
+    return JSONResponse(content=out)
+
+
+@router.post(
+    "/{session_id}/generate", response_model=jobs.JobOut, status_code=status.HTTP_202_ACCEPTED
+)
+async def post_generate(
+    session_id: str,
+    idempotency_key: IdempotencyKey,
+    request: Request,
+    session: DbSession,
+    user: CurrentUser,
+    settings: SettingsDep,
+) -> jobs.JobOut:
+    job = await service.generate(
+        session,
+        user,
+        service.session_id_or_404(session_id),
+        idempotency_key,
+        settings=settings,
+        provider=request.app.state.ai_provider,
+        guard=request.app.state.cost_guard,
+    )
+    return jobs.to_job_out(job)

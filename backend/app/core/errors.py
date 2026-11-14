@@ -188,6 +188,23 @@ class CaptureModeUnavailable(AppError):
     status_code = 422
 
 
+class CaptureGenerationLimit(AppError):
+    """The per-user monthly extraction cap (shared with video) is used up. The recording is
+    kept; the draft can be made once the month rolls over, or typed in by hand."""
+
+    code = "CAPTURE_GENERATION_LIMIT"
+    status_code = 429
+    retryable = True
+
+
+class AIResting(AppError):
+    """The monthly AI budget is spent; nothing was lost and it can be retried later."""
+
+    code = "AI_RESTING"
+    status_code = 503
+    retryable = True
+
+
 class StorageUnavailable(AppError):
     code = "STORAGE_UNAVAILABLE"
     status_code = 503

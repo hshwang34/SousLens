@@ -96,9 +96,38 @@ Unknown question → 404; already closed → `STATE_CONFLICT` 409.
 `{"command": "stop_asking|pause|resume", "t_ms": 90000}`. Pause stops questions (and the
 phone stops captions); resume allows them again. Stop asking is for the rest of the session.
 
-## 5–6. Finish and generate
+## 5. Finish — `POST /capture/sessions/{id}/finish` → **200**
 
-Coming in the next PR (wrap-up questions and draft generation).
+Body optional: `{"t_ms": 1800000}`. Status → `wrapping_up`. An open live question is closed as
+expired, the interviewer takes one last look at the whole transcript, and at most **3**
+wrap-up questions come back: deferred ("later") ones first, then by importance
+(temperature > time > quantity > doneness > servings > prep > equipment).
+`→ {"questions": [Ask], "session": Session}`. Calling finish again returns the wrap-up questions
+still open. Report each one through §3; anything left unanswered becomes "needs review".
+
+## 6. Generate — `POST /capture/sessions/{id}/generate` → **202** Job
+
+No body. Allowed in `wrapping_up` or `failed` (`recording` → 409 "Tap Done first"). Creates
+the draft (`extracting`) and a Job (`kind: "capture"`, same shape as brief 008; `media_id`
+null, no clips). Poll `GET /extractions/{job_id}`; on `ready` the session is `ready` and the
+draft is in review, on `failed` the session is `failed` (generate may be called again) and
+the draft is editable. Stages: `queued → extracting → done`.
+
+Limits (the recording is always kept; nothing is lost):
+
+* `CAPTURE_GENERATION_LIMIT` 429, `retryable: true`, `details: {limit, used}`: the per-user
+  monthly AI draft allowance, shared with video extraction (5 per UTC month).
+* `AI_RESTING` 503, `retryable: true`: the monthly AI budget is spent (Gemini only).
+* `PROVIDER_NOT_CONFIGURED` 503.
+
+Job failure codes: `AI_RESTING` (budget refused in the worker; doesn't use up the allowance),
+`AI_SAFETY_BLOCKED`, `AI_OUTPUT_INVALID`, `PROVIDER_NOT_CONFIGURED`, `SESSION_DELETED`,
+`TRANSCRIPT_EMPTY`, `JOB_FAILED`.
+
+The draft follows brief 008 §4: every AI field has `evidence_origin: "ai_extracted"`,
+quantities and times she never said stay `null` and are listed in `extraction.unknowns`, her
+own phrases land in `creator_notes`. With `AI_PROVIDER=mock` the draft is built by simple
+rules from her words (`extraction.demo: true`, with a notice saying so).
 
 ## 7. Get — `GET /capture/sessions/{id}` → **200** Session with events
 
