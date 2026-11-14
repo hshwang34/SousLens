@@ -39,6 +39,66 @@ final class FakeCameraSource: CameraSource {
     }
 }
 
+/// Scriptable `FrameStreamingCameraSource`: tests, previews and mock mode (brief 016). It shares
+/// `LiveFrameHub` with the phone camera, so throttling and stop/cancel behave the same. Scripted
+/// frames are offered once per stream, as soon as the preview is running and a consumer exists,
+/// with `capturedAt` as the throttle clock; `send(_:)` offers more.
+@MainActor
+@Observable
+final class FakeFrameStreamingCameraSource: FrameStreamingCameraSource {
+    let kind: CaptureSourceKind
+    var isAvailable: Bool
+    private(set) var activeIndicator = false
+    var scriptedFrames: [CapturedFrame]
+    var startError: CaptureError?
+    @ObservationIgnored private let hub = LiveFrameHub(buffering: .unbounded)
+    @ObservationIgnored private var scriptPending = false
+
+    init(kind: CaptureSourceKind = .phone, isAvailable: Bool = true, scriptedFrames: [CapturedFrame] = []) {
+        self.kind = kind
+        self.isAvailable = isAvailable
+        self.scriptedFrames = scriptedFrames
+    }
+
+    func startPreview() async throws {
+        guard isAvailable else { throw CaptureError.unavailable(kind, reason: "Fake source marked unavailable.") }
+        if let startError { throw startError }
+        activeIndicator = true
+        hub.setDelivering(true)
+        pumpScript()
+    }
+
+    func captureFrame() async throws -> CapturedFrame {
+        guard activeIndicator else { throw CaptureError.notRunning }
+        return scriptedFrames.first ?? CapturedFrame(jpegData: Data(), capturedAt: Date())
+    }
+
+    func stopPreview() async {
+        activeIndicator = false
+        scriptPending = false
+        hub.finish()
+    }
+
+    func frames(maxFPS: Double, longEdge: CGFloat) -> AsyncStream<CapturedFrame> {
+        let stream = hub.makeStream(maxFPS: maxFPS, longEdge: longEdge)
+        scriptPending = true
+        pumpScript()
+        return stream
+    }
+
+    /// Offers one frame; returns true if the stream took it (running, consumer, throttle).
+    @discardableResult
+    func send(_ frame: CapturedFrame) -> Bool {
+        hub.offer(at: frame.capturedAt.timeIntervalSinceReferenceDate) { _ in frame }
+    }
+
+    private func pumpScript() {
+        guard activeIndicator, scriptPending else { return }
+        scriptPending = false
+        for frame in scriptedFrames { send(frame) }
+    }
+}
+
 @MainActor
 @Observable
 final class FakeSpeechInput: SpeechInput {

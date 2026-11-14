@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import Foundation
 import Observation
 import UIKit
@@ -28,14 +29,25 @@ enum CameraRunState {
 ///
 /// `startPreview()` runs the session so frames can be captured; the pantry-scan screen shows it
 /// through `CameraPreviewProviding` (an `AVCaptureVideoPreviewLayer`, device only).
+///
+/// Live scan (brief 016) reads `frames()`: an `AVCaptureVideoDataOutput` on the same session feeds
+/// `frameHub`, which throttles and downsizes. The session keeps the `.photo` preset, so still capture
+/// is unchanged. Under that preset the SDK says the video output delivers preview-sized buffers;
+/// that size is not verified on a device yet, and the encoder downsizes to 768 px either way. The
+/// video connection is enabled only while a `frames()` consumer exists, so photo-only screens pay
+/// nothing for it.
 @MainActor
 @Observable
-final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
+final class PhoneCameraSource: FrameStreamingCameraSource, CameraPreviewProviding {
     let kind: CaptureSourceKind = .phone
     let isAvailable: Bool
     private(set) var activeIndicator = false
 
-    private let pipeline = CameraPipeline()
+    private let pipeline: CameraPipeline
+    private let frameHub = LiveFrameHub()
+    /// Token of the start that completed and owns frame delivery. Any later start or stop makes
+    /// it stale, so a superseded start never delivers frames.
+    @ObservationIgnored private var deliveryToken: Int?
     /// Bumped by every start/stop; a start that resumes after a newer stop/start gives up.
     private var startGate = CaptureStartGate()
     /// Latest caller intent. A superseded start only stops the session if the latest intent is
@@ -45,6 +57,7 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
     private let logger = Logger(subsystem: "com.umma.ios", category: "camera")
 
     init(enabled: Bool = true) {
+        pipeline = CameraPipeline(frameHub: frameHub)
         #if targetEnvironment(simulator)
         isAvailable = false
         #else
@@ -56,6 +69,10 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
         ) { [weak self] _ in
             Task { @MainActor in await self?.stopPreview() }
         })
+        // The pipeline reads the hub's current state, so out-of-order hops still settle correctly.
+        frameHub.setConsumerChangeHandler { [pipeline] in
+            Task { await pipeline.syncFrameConnection() }
+        }
     }
 
     func startPreview() async throws {
@@ -64,6 +81,7 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
         }
         wantsRunning = true
         let token = startGate.begin()
+        updateFrameDelivery()
 
         try await ensurePermission()
         try await superseded(unless: token)
@@ -74,6 +92,23 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
         try await pipeline.start()
         try await superseded(unless: token)
         activeIndicator = await pipeline.isRunning()
+        // No await between this check and arming, so a stop that raced the line above wins.
+        if startGate.isCurrent(token) { deliveryToken = token }
+        updateFrameDelivery()
+    }
+
+    func frames(maxFPS: Double, longEdge: CGFloat) -> AsyncStream<CapturedFrame> {
+        frameHub.makeStream(maxFPS: maxFPS, longEdge: longEdge)
+    }
+
+    /// Frames flow only from the start that is still current, while the session reports running.
+    nonisolated static func shouldDeliverFrames(token: Int?, gate: CaptureStartGate, sessionActive: Bool) -> Bool {
+        guard let token, sessionActive else { return false }
+        return gate.isCurrent(token)
+    }
+
+    private func updateFrameDelivery() {
+        frameHub.setDelivering(Self.shouldDeliverFrames(token: deliveryToken, gate: startGate, sessionActive: activeIndicator))
     }
 
     /// Throws `.cancelled` if a newer start/stop happened while we were suspended. Only when the
@@ -101,6 +136,8 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
     func stopPreview() async {
         wantsRunning = false
         startGate.supersede()
+        deliveryToken = nil
+        frameHub.finish()
         await pipeline.stop()
         activeIndicator = await pipeline.isRunning()
     }
@@ -110,6 +147,7 @@ final class PhoneCameraSource: CameraSource, CameraPreviewProviding {
             logger.error("capture session runtime error: \(message, privacy: .public)")
         }
         activeIndicator = CameraRunState.activeIndicator(after: event)
+        updateFrameDelivery()
     }
 
     /// Built outside actor isolation so the notification callbacks never run as `@MainActor` work.
@@ -171,7 +209,25 @@ private actor CameraPipeline {
         }
     }
     private let photoOutput = AVCapturePhotoOutput()
+    /// Live-scan frames. Its delegate runs on `videoQueue` and does nothing unless the hub has a
+    /// consumer, so it costs almost nothing while only photos are taken.
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let videoQueue = DispatchQueue(label: "com.umma.ios.camera.frames", qos: .userInitiated)
+    private let frameDelegate: LiveFrameDelegate
+    private let frameHub: LiveFrameHub
     private var configured = false
+
+    init(frameHub: LiveFrameHub) {
+        self.frameHub = frameHub
+        frameDelegate = LiveFrameDelegate(hub: frameHub)
+    }
+
+    /// Video buffers flow only while someone wants frames; otherwise the connection is off.
+    func syncFrameConnection() {
+        guard configured, let connection = videoOutput.connection(with: .video) else { return }
+        let wanted = frameHub.hasConsumer
+        if connection.isEnabled != wanted { connection.isEnabled = wanted }
+    }
     private let observers = NotificationObserverBag()
     private var observing = false
 
@@ -234,6 +290,20 @@ private actor CameraPipeline {
         }
         session.addInput(input)
         session.addOutput(photoOutput)
+        // Optional: if the session refuses it, photos still work and live scan gets no frames.
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        // The camera's native bi-planar YUV: no per-buffer conversion, and CIImage reads it directly.
+        let nativeFormat = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        if videoOutput.availableVideoPixelFormatTypes.contains(nativeFormat) {
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: nativeFormat]
+        }
+        videoOutput.setSampleBufferDelegate(frameDelegate, queue: videoQueue)
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+            videoOutput.connection(with: .video)?.isEnabled = frameHub.hasConsumer
+        } else {
+            Logger(subsystem: "com.umma.ios", category: "camera").error("camera session rejected the frame output")
+        }
         configured = true
     }
 }
@@ -265,6 +335,29 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             callback(.success(data))
         } else {
             callback(.failure(CaptureError.failed("Photo had no JPEG representation.")))
+        }
+    }
+}
+
+/// Video-queue side of live scan: skips every buffer unless the hub wants a frame, then encodes the
+/// admitted one (about once a second) right here, off the main actor.
+private final class LiveFrameDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    private let hub: LiveFrameHub
+    private let context = CIContext(options: [.cacheIntermediates: false])
+
+    init(hub: LiveFrameHub) {
+        self.hub = hub
+    }
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard hub.wantsFrames else { return }
+        let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        hub.offer(at: time) { longEdge in
+            guard let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+            // Sensor buffers are landscape; the app is portrait-only, so rotate to upright.
+            let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
+            guard let jpeg = LiveFrameEncoder.encode(upright, longEdge: longEdge, context: context) else { return nil }
+            return CapturedFrame(jpegData: jpeg, capturedAt: Date())
         }
     }
 }
