@@ -32,8 +32,10 @@ enum CameraRunState {
 ///
 /// Live scan (brief 016) reads `frames()`: an `AVCaptureVideoDataOutput` on the same session feeds
 /// `frameHub`, which throttles and downsizes. The session keeps the `.photo` preset, so still capture
-/// is unchanged; with that preset the video output delivers preview-sized buffers (roughly screen
-/// size), which is all a 768 px frame needs.
+/// is unchanged. Under that preset the SDK says the video output delivers preview-sized buffers;
+/// that size is not verified on a device yet, and the encoder downsizes to 768 px either way. The
+/// video connection is enabled only while a `frames()` consumer exists, so photo-only screens pay
+/// nothing for it.
 @MainActor
 @Observable
 final class PhoneCameraSource: FrameStreamingCameraSource, CameraPreviewProviding {
@@ -45,7 +47,7 @@ final class PhoneCameraSource: FrameStreamingCameraSource, CameraPreviewProvidin
     private let frameHub = LiveFrameHub()
     /// Token of the start that completed and owns frame delivery. Any later start or stop makes
     /// it stale, so a superseded start never delivers frames.
-    private var deliveryToken: Int?
+    @ObservationIgnored private var deliveryToken: Int?
     /// Bumped by every start/stop; a start that resumes after a newer stop/start gives up.
     private var startGate = CaptureStartGate()
     /// Latest caller intent. A superseded start only stops the session if the latest intent is
@@ -67,6 +69,10 @@ final class PhoneCameraSource: FrameStreamingCameraSource, CameraPreviewProvidin
         ) { [weak self] _ in
             Task { @MainActor in await self?.stopPreview() }
         })
+        // The pipeline reads the hub's current state, so out-of-order hops still settle correctly.
+        frameHub.setConsumerChangeHandler { [pipeline] in
+            Task { await pipeline.syncFrameConnection() }
+        }
     }
 
     func startPreview() async throws {
@@ -208,10 +214,19 @@ private actor CameraPipeline {
     private let videoOutput = AVCaptureVideoDataOutput()
     private let videoQueue = DispatchQueue(label: "com.umma.ios.camera.frames", qos: .userInitiated)
     private let frameDelegate: LiveFrameDelegate
+    private let frameHub: LiveFrameHub
     private var configured = false
 
     init(frameHub: LiveFrameHub) {
+        self.frameHub = frameHub
         frameDelegate = LiveFrameDelegate(hub: frameHub)
+    }
+
+    /// Video buffers flow only while someone wants frames; otherwise the connection is off.
+    func syncFrameConnection() {
+        guard configured, let connection = videoOutput.connection(with: .video) else { return }
+        let wanted = frameHub.hasConsumer
+        if connection.isEnabled != wanted { connection.isEnabled = wanted }
     }
     private let observers = NotificationObserverBag()
     private var observing = false
@@ -277,9 +292,15 @@ private actor CameraPipeline {
         session.addOutput(photoOutput)
         // Optional: if the session refuses it, photos still work and live scan gets no frames.
         videoOutput.alwaysDiscardsLateVideoFrames = true
+        // The camera's native bi-planar YUV: no per-buffer conversion, and CIImage reads it directly.
+        let nativeFormat = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        if videoOutput.availableVideoPixelFormatTypes.contains(nativeFormat) {
+            videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: nativeFormat]
+        }
         videoOutput.setSampleBufferDelegate(frameDelegate, queue: videoQueue)
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
+            videoOutput.connection(with: .video)?.isEnabled = frameHub.hasConsumer
         } else {
             Logger(subsystem: "com.umma.ios", category: "camera").error("camera session rejected the frame output")
         }

@@ -1,6 +1,7 @@
 import CoreImage
 import Foundation
 import ImageIO
+import os
 import XCTest
 @testable import Umma
 
@@ -129,6 +130,60 @@ final class LiveFrameStreamTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
+    func testFailedEncodeDoesNotSpendTheThrottleSlot() {
+        let hub = LiveFrameHub(buffering: .unbounded)
+        let stream = hub.makeStream(maxFPS: 1, longEdge: 768)
+        defer { withExtendedLifetime(stream) {} }
+        hub.setDelivering(true)
+        XCTAssertFalse(hub.offer(at: 1) { _ in nil }, "encode failed")
+        XCTAssertTrue(hub.offer(at: 1.1) { _ in self.frame(1.1) }, "the next buffer may use the slot")
+        XCTAssertFalse(hub.offer(at: 1.5) { _ in self.frame(1.5) })
+    }
+
+    /// The phone camera enables its video connection from these transitions (photo-only screens
+    /// with no consumer get no buffers).
+    func testConsumerChangesAreReportedForConnectionToggling() async {
+        let hub = LiveFrameHub()
+        let seen = OSAllocatedUnfairLock<[Bool]>(initialState: [])
+        hub.setConsumerChangeHandler { [weak hub] in
+            let now = hub?.hasConsumer ?? false
+            seen.withLock { $0.append(now) }
+        }
+        XCTAssertFalse(hub.hasConsumer)
+
+        let first = hub.makeStream(maxFPS: 1, longEdge: 768)
+        XCTAssertTrue(hub.hasConsumer)
+        hub.finish() // stopPreview
+        XCTAssertFalse(hub.hasConsumer)
+        for await _ in first {}
+
+        let second = hub.makeStream(maxFPS: 1, longEdge: 768)
+        let consumer = Task { for await _ in second {} }
+        XCTAssertTrue(hub.hasConsumer)
+        consumer.cancel()
+        await consumer.value
+        XCTAssertFalse(hub.hasConsumer, "cancelling the consumer turns frames off")
+        XCTAssertEqual(seen.withLock { $0 }, [true, false, true, false])
+    }
+
+    func testHubDeliversAgainAfterStopStartAndFreshStream() async {
+        let hub = LiveFrameHub(buffering: .unbounded)
+        let first = hub.makeStream(maxFPS: 1, longEdge: 768)
+        hub.setDelivering(true)
+        XCTAssertTrue(hub.offer(at: 1) { _ in self.frame(1) })
+        hub.finish()
+        for await _ in first {}
+
+        let second = hub.makeStream(maxFPS: 1, longEdge: 768)
+        XCTAssertFalse(hub.offer(at: 3) { _ in self.frame(3) }, "nothing until the preview runs again")
+        hub.setDelivering(true) // startPreview completed
+        XCTAssertTrue(hub.offer(at: 4) { _ in self.frame(4) })
+        hub.finish()
+        var times: [TimeInterval] = []
+        for await frame in second { times.append(frame.capturedAt.timeIntervalSinceReferenceDate) }
+        XCTAssertEqual(times, [4])
+    }
+
     // MARK: - Start gate (a superseded start never delivers)
 
     func testSupersededStartNeverDeliversFrames() {
@@ -229,6 +284,24 @@ final class LiveFrameStreamTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? CaptureError, .unavailable(.phone, reason: "Fake source marked unavailable."))
         }
+    }
+
+    func testFakeStopStartFreshStreamDeliversAgain() async throws {
+        let camera = FakeFrameStreamingCameraSource(scriptedFrames: [frame(0)])
+        let first = camera.frames()
+        try await camera.startPreview()
+        await camera.stopPreview()
+        var firstCount = 0
+        for await _ in first { firstCount += 1 }
+        XCTAssertEqual(firstCount, 1)
+
+        try await camera.startPreview()
+        let second = camera.frames()
+        XCTAssertTrue(camera.send(frame(5)))
+        await camera.stopPreview()
+        var times: [TimeInterval] = []
+        for await frame in second { times.append(frame.capturedAt.timeIntervalSinceReferenceDate) }
+        XCTAssertEqual(times, [0, 5], "the fresh stream replays the script, then takes new frames")
     }
 
     func testFakeStillCapturesPhotos() async throws {

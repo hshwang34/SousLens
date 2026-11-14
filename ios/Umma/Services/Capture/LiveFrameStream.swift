@@ -39,9 +39,19 @@ struct FrameThrottle: Sendable, Equatable {
         minInterval = 1 / fps
     }
 
-    mutating func admit(at time: TimeInterval) -> Bool {
-        if let lastAdmitted, time - lastAdmitted < minInterval { return false }
+    func allows(at time: TimeInterval) -> Bool {
+        guard let lastAdmitted else { return true }
+        return time - lastAdmitted >= minInterval
+    }
+
+    /// Spends the slot. Called only once a frame was actually produced.
+    mutating func record(_ time: TimeInterval) {
         lastAdmitted = time
+    }
+
+    mutating func admit(at time: TimeInterval) -> Bool {
+        guard allows(at: time) else { return false }
+        record(time)
         return true
     }
 }
@@ -73,7 +83,10 @@ enum LiveFrameEncoder {
 ///
 /// A frame is delivered only while `isDelivering` (the owner sets it from its start gate and session
 /// state), a consumer exists, and the consumer's throttle admits it. The encode closure runs only
-/// for admitted frames, outside the lock.
+/// for admitted frames, outside the lock; a failed encode doesn't spend the throttle slot.
+///
+/// `onConsumerChange` fires (outside the lock) whenever a consumer arrives or leaves, so the phone
+/// camera can switch its video connection off while nobody wants frames.
 final class LiveFrameHub: @unchecked Sendable {
     private struct Consumer {
         let id: UUID
@@ -85,6 +98,7 @@ final class LiveFrameHub: @unchecked Sendable {
     private struct State {
         var delivering = false
         var consumer: Consumer?
+        var onConsumerChange: (@Sendable () -> Void)?
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -106,11 +120,28 @@ final class LiveFrameHub: @unchecked Sendable {
         }
         previous?.continuation.finish()
         continuation.onTermination = { [weak self] _ in
-            self?.state.withLock { state in
-                if state.consumer?.id == id { state.consumer = nil }
+            guard let self else { return }
+            let released = state.withLock { state -> Bool in
+                guard state.consumer?.id == id else { return false }
+                state.consumer = nil
+                return true
             }
+            if released { notifyConsumerChange() }
         }
+        notifyConsumerChange()
         return stream
+    }
+
+    var hasConsumer: Bool {
+        state.withLock { $0.consumer != nil }
+    }
+
+    func setConsumerChangeHandler(_ handler: (@Sendable () -> Void)?) {
+        state.withLock { $0.onConsumerChange = handler }
+    }
+
+    private func notifyConsumerChange() {
+        state.withLock { $0.onConsumerChange }?()
     }
 
     /// True while frames would be delivered. The video delegate checks it before touching pixels.
@@ -135,20 +166,22 @@ final class LiveFrameHub: @unchecked Sendable {
             return old
         }
         consumer?.continuation.finish()
+        if consumer != nil { notifyConsumerChange() }
     }
 
     /// Offers a frame captured at `time`. Returns true if one was yielded.
     @discardableResult
     func offer(at time: TimeInterval, make: (_ longEdge: CGFloat) -> CapturedFrame?) -> Bool {
         let admitted = state.withLock { state -> (id: UUID, longEdge: CGFloat)? in
-            guard state.delivering, var consumer = state.consumer, consumer.throttle.admit(at: time) else { return nil }
-            state.consumer = consumer
+            guard state.delivering, let consumer = state.consumer, consumer.throttle.allows(at: time) else { return nil }
             return (consumer.id, consumer.longEdge)
         }
         guard let admitted, let frame = make(admitted.longEdge) else { return false }
         // Re-check: a stop or cancel while encoding drops the frame.
         return state.withLock { state in
-            guard state.delivering, let consumer = state.consumer, consumer.id == admitted.id else { return false }
+            guard state.delivering, let consumer = state.consumer, consumer.id == admitted.id,
+                  consumer.throttle.allows(at: time) else { return false }
+            state.consumer?.throttle.record(time)
             if case .terminated = consumer.continuation.yield(frame) { return false }
             return true
         }
