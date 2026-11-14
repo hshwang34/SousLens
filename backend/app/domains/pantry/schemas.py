@@ -32,7 +32,9 @@ MAX_ITEMS_PER_REQUEST = 100
 QUANTITY_MAX = 1_000_000
 
 StorageLocationIn = Literal["fridge", "freezer", "pantry", "counter", "other"]
-SourceIn = Literal["manual", "voice", "photo", "live"]
+SourceIn = Literal["manual", "voice", "photo"]
+# ``live`` is written only by a live scan's finish (brief 016), never by the public POST.
+SourceOut = Literal["manual", "voice", "photo", "live"]
 ConfidenceBin = Literal["high", "medium", "unknown"]
 
 Label = Annotated[
@@ -68,7 +70,7 @@ class PantryItemOut(BaseModel):
     quantity_is_estimate: bool
     storage_location: str | None
     note: str | None
-    source: SourceIn
+    source: SourceOut
     confidence: float | None
     last_confirmed_at: datetime | None
     created_at: datetime
@@ -129,6 +131,16 @@ class NewItem(_Strict):
 class CreatePantryItems(_Strict):
     items: list[NewItem] = Field(min_length=1, max_length=MAX_ITEMS_PER_REQUEST)
     observation_id: uuid.UUID | None = None
+
+
+class LiveNewItem(NewItem):
+    """Internal only: a live scan's auto-saved item. Not reachable from ``POST /v1/pantry``."""
+
+    source: Literal["live"]  # type: ignore[assignment]
+
+
+class CreateLivePantryItems(CreatePantryItems):
+    items: list[LiveNewItem] = Field(min_length=1, max_length=MAX_ITEMS_PER_REQUEST)  # type: ignore[assignment]
 
 
 class PantryPatch(_Strict):
@@ -212,7 +224,7 @@ LiveEvidence = Annotated[
 
 
 class CreateLiveScan(_Strict):
-    demo: bool = False  # set by the caller for mock/demo scans: nothing auto-saves
+    demo: bool = False  # the live-token answer's demo flag; forced true off Gemini
 
 
 class LiveScanCreated(BaseModel):
@@ -248,7 +260,7 @@ class LiveScanOut(BaseModel):
 
 
 class LiveReviewItem(LiveItemOut):
-    reason: Literal["unsure", "in_pantry", "demo"]
+    reason: Literal["unsure", "unrecognized", "in_pantry", "demo"]
 
 
 class LiveScanFinished(BaseModel):

@@ -5,9 +5,10 @@
   normaliser, model-claim stripping, pantry duplicate lookup). One matcher, no fork.
 * The basket holds one row per normalised key per scan (unique ``(scan_id, key)``), so repeats
   and concurrent duplicate posts never add a row. A repeat may raise the stored confidence.
-* ``finish`` is the only pantry write: new + high-confidence items go through
-  ``service.create_items`` with source ``live``; everything else is returned for review. Demo
-  scans auto-save nothing.
+* ``finish`` is the only pantry write: new, high-confidence, dictionary-recognised items go
+  through ``service.create_items`` with the internal source ``live``; everything else is
+  returned for review. Demo scans auto-save nothing. The finish answer is stored and replayed
+  on a retry, so a lost response never hides what was auto-added.
 * Scans expire 24 h after creation (``OBSERVATION_TTL``), are purged opportunistically on
   create, and an expired scan is the same 404 as a missing one.
 """
@@ -25,6 +26,7 @@ from app.ai.providers.base import PantryCandidate
 from app.core.errors import NotFound, RateLimited, StateConflict, ValidationError
 from app.db.models import PantryLiveScan, PantryLiveScanItem, User
 from app.domains.matching.dictionary import IngredientDictionary
+from app.domains.matching.normalize import normalize
 from app.domains.ownership import get_owned_or_404
 from app.domains.pantry import service
 from app.domains.pantry.observations import (
@@ -35,14 +37,14 @@ from app.domains.pantry.observations import (
 )
 from app.domains.pantry.schemas import (
     MAX_ITEMS_PER_REQUEST,
-    CreatePantryItems,
+    CreateLivePantryItems,
     LiveConfidence,
     LiveItemIn,
     LiveItemOut,
+    LiveNewItem,
     LiveReviewItem,
     LiveScanFinished,
     LiveScanOut,
-    NewItem,
     PantryItemOut,
 )
 
@@ -87,9 +89,10 @@ async def _scan(
     lock: bool | dict[str, bool] | None = None,
     open_only: bool = False,
 ) -> PantryLiveScan:
-    scan = await get_owned_or_404(session, PantryLiveScan, scan_id, user.id, label="Live scan")
-    if lock:
-        await session.refresh(scan, with_for_update=lock)
+    # Locked in the same query: a scan purged concurrently is the standard 404, never a 500.
+    scan = await get_owned_or_404(
+        session, PantryLiveScan, scan_id, user.id, label="Live scan", for_update=lock or False
+    )
     if scan.expires_at <= now:
         raise NotFound("Live scan not found")
     if open_only and scan.status != "scanning":
@@ -155,6 +158,7 @@ async def add_item(
     if cand.canonical_name is None:
         raise ValidationError("name must name an ingredient", extra={"fields": ["name"]})
     key = cand.canonical_name
+    in_dictionary = normalize(body.name, dictionary).entry is not None
 
     existing = await _repeat(session, scan.id, key, body.confidence)
     if existing is not None:
@@ -170,6 +174,7 @@ async def add_item(
             display_name=cand.raw_label[:120],
             kind=body.kind,
             confidence=body.confidence,
+            in_dictionary=in_dictionary,
             evidence=cand.evidence or None,
         )
         .on_conflict_do_nothing(index_elements=["scan_id", "key"])
@@ -235,17 +240,20 @@ async def finish(
     now: datetime,
 ) -> LiveScanFinished:
     scan = await _scan(session, user, scan_id, now, lock=True)
-    if scan.status != "scanning":
-        raise StateConflict("This scan was already finished")
+    if scan.finish_json is not None:  # a retried finish replays the first answer
+        return LiveScanFinished.model_validate(scan.finish_json)
     await service.lock_user(session, user.id, "pantry")  # pantry keys can't change under us
 
     to_save: list[PantryLiveScanItem] = []
     review: list[LiveReviewItem] = []
     for row, existing in await _basket(session, user, scan):
+        # Auto-save only a new, non-demo, high-confidence name the dictionary recognised.
         if existing is not None:
             reason = "in_pantry"
         elif scan.demo:
             reason = "demo"
+        elif not row.in_dictionary:
+            reason = "unrecognized"
         elif row.confidence != "high":
             reason = "unsure"
         else:
@@ -256,16 +264,18 @@ async def finish(
 
     saved = []
     if to_save:
-        body = CreatePantryItems(
+        body = CreateLivePantryItems(
             items=[
-                NewItem(
+                LiveNewItem(
                     raw_label=r.display_name, source="live", confidence=CONFIDENCE_VALUE["high"]
                 )
                 for r in to_save
             ]
         )
         saved = await service.create_items(session, user, body, dictionary, now)
+    result = LiveScanFinished(saved=[PantryItemOut.of(r) for r in saved], review=review)
     scan.status = "finished"
     scan.finished_at = now
+    scan.finish_json = result.model_dump(mode="json")
     await session.flush()
-    return LiveScanFinished(saved=[PantryItemOut.of(r) for r in saved], review=review)
+    return result

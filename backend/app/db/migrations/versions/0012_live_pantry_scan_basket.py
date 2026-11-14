@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 
 revision: str = '0012'
@@ -30,6 +31,7 @@ def upgrade() -> None:
     sa.Column('demo', sa.Boolean(), server_default=sa.text('false'), nullable=False),
     sa.Column('status', sa.String(length=16), server_default=sa.text("'scanning'"), nullable=False),
     sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('finish_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("status IN ('scanning', 'finished')", name=op.f('ck_pantry_live_scans_status_known')),
@@ -46,6 +48,7 @@ def upgrade() -> None:
     sa.Column('display_name', sa.String(length=120), nullable=False),
     sa.Column('kind', sa.String(length=32), nullable=True),
     sa.Column('confidence', sa.String(length=8), nullable=False),
+    sa.Column('in_dictionary', sa.Boolean(), server_default=sa.text('false'), nullable=False),
     sa.Column('evidence', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.CheckConstraint("confidence IN ('high', 'medium', 'low')", name=op.f('ck_pantry_live_scan_items_confidence_known')),

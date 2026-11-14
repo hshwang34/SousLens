@@ -677,6 +677,9 @@ class PantryLiveScan(CreatedAtMixin, Base):
         String(16), nullable=False, default="scanning", server_default=text("'scanning'")
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The finish response, replayed verbatim on a retried finish (a lost response never hides
+    # what was auto-added).
+    finish_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
@@ -699,6 +702,10 @@ class PantryLiveScanItem(CreatedAtMixin, Base):
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     kind: Mapped[str | None] = mapped_column(String(32))
     confidence: Mapped[str] = mapped_column(String(8), nullable=False)
+    # The name matched the ingredient dictionary; only matched names may auto-save.
+    in_dictionary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     evidence: Mapped[str | None] = mapped_column(Text)
 
 

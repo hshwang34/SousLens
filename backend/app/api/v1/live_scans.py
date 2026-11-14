@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Response, status
 
 from app.core.errors import NotFound
-from app.core.security import CurrentUser
+from app.core.security import CurrentUser, SettingsDep
 from app.db.engine import DbSession
 from app.domains.matching.dictionary import load_dictionary
 from app.domains.pantry import live_scan
@@ -37,9 +37,15 @@ def _scan_id(value: str) -> uuid.UUID:
 
 @router.post("", response_model=LiveScanCreated, status_code=status.HTTP_201_CREATED)
 async def create_live_scan(
-    session: DbSession, user: CurrentUser, body: CreateLiveScan | None = None
+    session: DbSession,
+    user: CurrentUser,
+    settings: SettingsDep,
+    body: CreateLiveScan | None = None,
 ) -> LiveScanCreated:
-    scan = await live_scan.create_scan(session, user, bool(body and body.demo), _now())
+    # Server-enforced: without the real provider every scan is a demo (DECISIONS #28). On the
+    # Gemini path the client passes the live-token response's ``demo`` (budget-denied → demo).
+    demo = settings.ai_provider != "gemini" or bool(body and body.demo)
+    scan = await live_scan.create_scan(session, user, demo, _now())
     return LiveScanCreated(id=scan.id, demo=scan.demo, expires_at=scan.expires_at)
 
 
