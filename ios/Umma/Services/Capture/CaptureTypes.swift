@@ -102,7 +102,11 @@ struct CaptureFeatureFlags: Sendable, Equatable {
     var systemAudio: Bool
     /// Brief 012 Free tier: continuous on-device voice (`OnDeviceVoiceTransport`).
     var phoneVoice: Bool = true
+    /// Brief 016 live pantry scan (camera frame stream). Unlike the adapter flags above it defaults
+    /// OFF until the scan screen ships, and `allOn` leaves it off.
+    var liveScan: Bool = false
 
+    /// Every capture adapter on; the default for a fresh install.
     static let allOn = CaptureFeatureFlags(phoneCamera: true, phoneSpeech: true, systemAudio: true, phoneVoice: true)
 
     enum Key {
@@ -110,6 +114,7 @@ struct CaptureFeatureFlags: Sendable, Equatable {
         static let phoneSpeech = "feature.capture.phoneSpeech"
         static let systemAudio = "feature.capture.systemAudio"
         static let phoneVoice = "feature.capture.phoneVoice"
+        static let liveScan = "feature.capture.liveScan"
     }
 
     static func load(from defaults: UserDefaults = .standard) -> CaptureFeatureFlags {
@@ -120,7 +125,8 @@ struct CaptureFeatureFlags: Sendable, Equatable {
             phoneCamera: flag(Key.phoneCamera),
             phoneSpeech: flag(Key.phoneSpeech),
             systemAudio: flag(Key.systemAudio),
-            phoneVoice: flag(Key.phoneVoice)
+            phoneVoice: flag(Key.phoneVoice),
+            liveScan: defaults.bool(forKey: Key.liveScan)
         )
     }
 }
