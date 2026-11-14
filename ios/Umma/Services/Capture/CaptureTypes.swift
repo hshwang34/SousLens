@@ -100,13 +100,16 @@ struct CaptureFeatureFlags: Sendable, Equatable {
     var phoneCamera: Bool
     var phoneSpeech: Bool
     var systemAudio: Bool
+    /// Brief 012 Free tier: continuous on-device voice (`OnDeviceVoiceTransport`).
+    var phoneVoice: Bool = true
 
-    static let allOn = CaptureFeatureFlags(phoneCamera: true, phoneSpeech: true, systemAudio: true)
+    static let allOn = CaptureFeatureFlags(phoneCamera: true, phoneSpeech: true, systemAudio: true, phoneVoice: true)
 
     enum Key {
         static let phoneCamera = "feature.capture.phoneCamera"
         static let phoneSpeech = "feature.capture.phoneSpeech"
         static let systemAudio = "feature.capture.systemAudio"
+        static let phoneVoice = "feature.capture.phoneVoice"
     }
 
     static func load(from defaults: UserDefaults = .standard) -> CaptureFeatureFlags {
@@ -116,7 +119,8 @@ struct CaptureFeatureFlags: Sendable, Equatable {
         return CaptureFeatureFlags(
             phoneCamera: flag(Key.phoneCamera),
             phoneSpeech: flag(Key.phoneSpeech),
-            systemAudio: flag(Key.systemAudio)
+            systemAudio: flag(Key.systemAudio),
+            phoneVoice: flag(Key.phoneVoice)
         )
     }
 }

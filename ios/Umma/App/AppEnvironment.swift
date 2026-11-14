@@ -182,6 +182,12 @@ final class AppEnvironment {
             speech: flags.phoneSpeech ? PhoneSpeechInput() : FakeSpeechInput(isAvailable: false),
             audio: flags.systemAudio ? SystemAudioOutput() : FakeAudioOutput(isAvailable: false),
             voiceSettings: VoiceSettings(defaults: defaults),
+            // Off by flag, or on the simulator (no recognizer there), the Free tier is the fake,
+            // marked unavailable, so voice screens show an honest "voice is unavailable".
+            makeFreeVoiceTransport: {
+                let onDevice = OnDeviceVoiceTransport(enabled: flags.phoneVoice)
+                return onDevice.isAvailable ? onDevice : FakeVoiceTransport(isAvailable: false)
+            },
             sessionCache: SessionCache()
         )
     }
