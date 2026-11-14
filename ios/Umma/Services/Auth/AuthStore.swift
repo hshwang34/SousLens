@@ -123,6 +123,14 @@ final class AuthStore {
         state = .signedIn(response.user)
     }
 
+    /// A fresh copy of the signed-in user from the server (brief 015: role, onboarding done).
+    /// Ignored unless it is the same account that is signed in now.
+    func updateUser(_ user: User) {
+        guard self.user?.id == user.id else { return }
+        cache(user)
+        state = .signedIn(user)
+    }
+
     /// "Use a different email": back to step 1.
     func cancelPendingChallenge() {
         pendingChallenge = nil
