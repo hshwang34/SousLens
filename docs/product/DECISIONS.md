@@ -263,3 +263,20 @@ must be rebased onto the renamed (Umma) tree first.
   PM, and its usage is priced into the `ai_usage` ledger under the existing caps. No spend before the
   keys arrive and the PM gives a go.
 *Lives in:* `docs/product/briefs/012-voice-mode.md`.
+
+#27 · 2026-11-13 · **First-run onboarding and a minimal social graph (brief 015).** Pulls part of
+PRD §4.2 (P1) forward and amends #4 ("P0 social = feed/save/share only").
+- **Onboarding:** Welcome → cook or creator → allergies (explicit "No allergies" allowed) →
+  diets, cuisines, skill → follow suggested creators → pantry scan or "later" → For You.
+  Creators also get "Record your first recipe". No voice choice.
+- **Social graph:** users follow creators; creator profile pages; a Following list. Explore
+  splits into **For You** and **Following**. Likes, comments, followers lists and notifications
+  stay out (P2).
+- **Discovery of people:** suggested creators and creator profiles only. No contact matching and
+  no email or phone lookup.
+- **For You:** deterministic score on pantry fit (#22) plus favourite cuisines and followed
+  creators, lowered for diet mismatches. Allergy conflicts go last and are labelled, never hidden
+  silently and never called safe. No ML ranking.
+- **Seed content:** six fictional creator personas with original recipes. No real people or
+  brands.
+*Lives in:* `docs/product/briefs/015-onboarding-social.md`, `015-api-contract.md`.
