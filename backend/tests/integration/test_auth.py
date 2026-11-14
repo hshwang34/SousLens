@@ -64,7 +64,13 @@ async def test_challenge_then_verify_creates_user_and_me_returns_it(
     body = response.json()
     assert set(body) == {"access_token", "token_type", "user"}
     assert body["token_type"] == "bearer"
-    assert set(body["user"]) == {"id", "display_name", "preference_units", "created_at"}
+    assert set(body["user"]) == {
+        "id",
+        "display_name",
+        "preference_units",
+        "created_at",
+        "entitlement",
+    }
     assert body["user"]["display_name"] == "tester"
     assert body["user"]["preference_units"] == "us"
     assert await user_count(db_session) == 1
