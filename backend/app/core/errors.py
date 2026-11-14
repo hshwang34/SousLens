@@ -178,6 +178,16 @@ class VideoExtractionDisabled(AppError):
     status_code = 503
 
 
+# --- Voice capture (brief 014) ---------------------------------------------------------------
+
+
+class CaptureModeUnavailable(AppError):
+    """Camera + voice capture is a visible "Coming soon" option (DECISIONS #25)."""
+
+    code = "CAPTURE_MODE_UNAVAILABLE"
+    status_code = 422
+
+
 class StorageUnavailable(AppError):
     code = "STORAGE_UNAVAILABLE"
     status_code = 503
