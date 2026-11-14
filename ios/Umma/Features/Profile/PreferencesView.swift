@@ -101,7 +101,7 @@ private struct PreferenceSection: View {
 }
 
 /// Removable chips, wrapping onto new lines.
-private struct ChipFlow: View {
+struct ChipFlow: View {
     let entries: [String]
     let isFlagged: (String) -> Bool
     let onRemove: (Int) -> Void
