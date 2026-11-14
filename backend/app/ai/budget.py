@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -171,7 +172,10 @@ class CostGuard:
         model: str,
         ceiling: Decimal,
         now: datetime | None = None,
+        precheck: Callable[[AsyncSession], Awaitable[None]] | None = None,
     ) -> Reservation | Denial:
+        """``precheck`` runs under the global lock in the same transaction, before the caps (e.g.
+        a per-user rate limit); an exception it raises rolls back and propagates."""
         now = now or datetime.now(UTC)
         async with self._sessionmaker() as session, session.begin():
             # One global lock: the month check and the insert are atomic across every worker.
@@ -179,6 +183,8 @@ class CostGuard:
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
                 {"k": _GLOBAL_LOCK_KEY},
             )
+            if precheck is not None:
+                await precheck(session)
             month = await _spent(session, month_start(now))
             if month + ceiling > self.month_hard_cap:
                 log.warning(

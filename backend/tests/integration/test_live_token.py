@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -28,6 +29,7 @@ from app.ai.live_pantry import (
 from app.ai.notice import LIVE_ALLOWANCE_MESSAGE
 from app.ai.providers.base import LiveTokenSpec
 from app.ai.providers.mock import MockLiveTokenMinter
+from app.api.v1.ai import LiveTokenOut
 from app.core.config import Settings
 from app.db.engine import make_sessionmaker
 from app.db.models import AIUsage, User
@@ -93,6 +95,7 @@ async def test_gemini_mints_locked_token_and_reserves_ceiling(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["demo"] is False and body["token"] == "mock-live-token-1"
+    assert r.headers["cache-control"] == "no-store"
     expires = datetime.fromisoformat(body["expires_at"])
     starts = datetime.fromisoformat(body["new_session_expires_at"])
     assert timedelta(seconds=40) < expires - before < timedelta(seconds=50)
@@ -236,6 +239,20 @@ async def test_hourly_rate_limit_is_429(settings: Settings, clean_tables: None) 
         assert (await c.post(URL, headers=other)).status_code == 200
 
 
+async def test_concurrent_requests_respect_hourly_limit(
+    settings: Settings, clean_tables: None, db_session: AsyncSession
+) -> None:
+    app = create_app(gemini_settings(settings, live_tokens_per_user_per_hour=2))
+    app.state.live_token_minter = MockLiveTokenMinter()
+    async for c in _client(app):
+        h = await bearer(c, "a@example.com")
+        codes = [
+            r.status_code for r in await asyncio.gather(*(c.post(URL, headers=h) for _ in range(5)))
+        ]
+    assert sorted(codes) == [200, 200, 429, 429, 429]
+    assert len(await ledger(db_session)) == 2  # a 429 leaves no reservation behind
+
+
 async def test_minter_failure_is_retryable_and_settles_at_zero(
     gclient: AsyncClient, db_session: AsyncSession, minter: MockLiveTokenMinter
 ) -> None:
@@ -285,6 +302,18 @@ async def test_gemini_minter_locks_model_prompt_and_tool() -> None:
     minted = await minter.mint(spec)
     assert minted.token == "auth_tokens/fake"
     assert "auth_tokens/fake" not in repr(minted)
+    out = LiveTokenOut(
+        token=minted.token,
+        model=spec.model,
+        expires_at=None,
+        new_session_expires_at=None,
+        max_session_seconds=30,
+        nudge_text="n",
+        nudge_every_frames=2,
+        frame_max_fps=1.0,
+        demo=False,
+    )
+    assert "auth_tokens/fake" not in repr(out)
 
     (config,) = tokens.configs
     assert config.uses == 1

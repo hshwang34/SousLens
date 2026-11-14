@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.ai.budget import CostGuard
@@ -54,7 +54,7 @@ class LiveTokenIn(BaseModel):
 
 
 class LiveTokenOut(BaseModel):
-    token: str | None
+    token: str | None = Field(repr=False)  # a credential: never in a repr or a log
     model: str
     expires_at: datetime | None
     new_session_expires_at: datetime | None
@@ -68,8 +68,9 @@ class LiveTokenOut(BaseModel):
 
 @router.post("/live-token", response_model=LiveTokenOut)
 async def live_token(
-    request: Request, user: CurrentUser, body: LiveTokenIn | None = None
+    request: Request, response: Response, user: CurrentUser, body: LiveTokenIn | None = None
 ) -> LiveTokenOut:
+    response.headers["Cache-Control"] = "no-store"  # carries a credential
     settings = request.app.state.settings
     out = LiveTokenOut(
         token=None,
@@ -88,7 +89,6 @@ async def live_token(
     if minter is None:
         raise ProviderNotConfigured("Gemini live scan is not configured. Set GEMINI_API_KEY.")
     result = await issue_live_token(
-        sessionmaker=request.app.state.sessionmaker,
         guard=request.app.state.cost_guard,
         minter=minter,
         settings=settings,

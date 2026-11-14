@@ -28,7 +28,7 @@ from typing import Any
 
 from google.genai import types
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.budget import CostGuard, Denial, UsageMeter
 from app.ai.notice import LIVE_ALLOWANCE_MESSAGE, AINotice
@@ -38,7 +38,6 @@ from app.ai.providers.base import LiveTokenMinter, LiveTokenSpec, MintedLiveToke
 from app.core.config import Settings
 from app.core.errors import ProviderUnavailable, RateLimited
 from app.db.models import AIUsage
-from app.domains.pantry.service import lock_user
 
 log = logging.getLogger("umma.ai.live")
 
@@ -177,7 +176,6 @@ class LiveTokenResult:
 
 async def issue_live_token(
     *,
-    sessionmaker: async_sessionmaker[AsyncSession],
     guard: CostGuard,
     minter: LiveTokenMinter,
     settings: Settings,
@@ -193,9 +191,10 @@ async def issue_live_token(
         new_session_expire_time=now + timedelta(seconds=settings.live_token_start_seconds),
     )
     ceiling = live_ceiling_usd(settings, now)
-    async with sessionmaker() as session, session.begin():
-        # Held until the reservation row is committed, so concurrent requests count each other.
-        await lock_user(session, user_id, "live_token")
+
+    async def hourly_limit(session: AsyncSession) -> None:
+        # Runs inside the reservation's transaction, under the cost guard's global lock, so
+        # concurrent requests count each other and only one DB connection is used.
         recent = await session.scalar(
             select(func.count())
             .select_from(AIUsage)
@@ -207,7 +206,8 @@ async def issue_live_token(
         )
         if (recent or 0) >= settings.live_tokens_per_user_per_hour:
             raise RateLimited("Too many live scans in the last hour; try again later")
-        decision = await guard.reserve(user_id, CAPABILITY, model, ceiling, now)
+
+    decision = await guard.reserve(user_id, CAPABILITY, model, ceiling, now, precheck=hourly_limit)
     if isinstance(decision, Denial):
         log.info("live token: demo fallback", extra={"reason": decision.reason})
         notice = AINotice(reason=decision.reason)
