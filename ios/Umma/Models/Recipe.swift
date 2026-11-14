@@ -23,6 +23,8 @@ struct RecipeCard: Codable, Sendable, Identifiable, Hashable {
     /// Brief 003: true/false for a signed-in caller, null when unauthenticated. Absent in Slice 0
     /// payloads, so it stays optional.
     var saved: Bool? = nil
+    /// Brief 015: only on For You cards.
+    var feed: FeedInfo? = nil
 
     var id: UUID { recipeId }
     var coverImageURL: URL? { coverImageUrl.flatMap(URL.init(string:)) }

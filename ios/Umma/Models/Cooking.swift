@@ -13,12 +13,21 @@ struct FoodPreferences: Codable, Sendable, Equatable {
     /// Entries the server couldn't map to an allergen class or ingredient (still stored): swaps
     /// can't check for them, so the editor warns until they're removed.
     var unrecognized: [String]
+    /// Brief 015 taste profile: soft ranking signals only, never safety. Raw values from the
+    /// server's closed lists (see `TasteOptions`).
+    var diets: [String]
+    var cuisines: [String]
+    var skillLevel: String?
 
-    init(allergies: [String] = [], avoid: [String] = [], updatedAt: Date? = nil, unrecognized: [String] = []) {
+    init(allergies: [String] = [], avoid: [String] = [], updatedAt: Date? = nil, unrecognized: [String] = [],
+         diets: [String] = [], cuisines: [String] = [], skillLevel: String? = nil) {
         self.allergies = allergies
         self.avoid = avoid
         self.updatedAt = updatedAt
         self.unrecognized = unrecognized
+        self.diets = diets
+        self.cuisines = cuisines
+        self.skillLevel = skillLevel
     }
 
     init(from decoder: Decoder) throws {
@@ -27,15 +36,87 @@ struct FoodPreferences: Codable, Sendable, Equatable {
         avoid = try container.decodeIfPresent([String].self, forKey: .avoid) ?? []
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
         unrecognized = try container.decodeIfPresent([String].self, forKey: .unrecognized) ?? []
+        diets = try container.decodeIfPresent([String].self, forKey: .diets) ?? []
+        cuisines = try container.decodeIfPresent([String].self, forKey: .cuisines) ?? []
+        skillLevel = try container.decodeIfPresent(String.self, forKey: .skillLevel)
     }
 
-    /// PUT body: the two lists only (`updated_at` is the server's).
+    /// PUT body: the two lists only (`updated_at` is the server's). The server keeps the brief 015
+    /// taste fields when they're omitted, so the allergies editor never wipes them.
     struct Update: Encodable, Equatable {
         let allergies: [String]
         let avoid: [String]
     }
 
     var update: Update { Update(allergies: allergies, avoid: avoid) }
+
+    /// PUT body that also writes the taste fields. `skill_level` is always sent, as `null` to
+    /// clear it, because an omitted taste field is kept by the server.
+    struct TasteUpdate: Encodable, Equatable {
+        let allergies: [String]
+        let avoid: [String]
+        let diets: [String]
+        let cuisines: [String]
+        let skillLevel: String?
+
+        private enum CodingKeys: String, CodingKey { case allergies, avoid, diets, cuisines, skillLevel }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(allergies, forKey: .allergies)
+            try c.encode(avoid, forKey: .avoid)
+            try c.encode(diets, forKey: .diets)
+            try c.encode(cuisines, forKey: .cuisines)
+            if let skillLevel {
+                try c.encode(skillLevel, forKey: .skillLevel)
+            } else {
+                try c.encodeNil(forKey: .skillLevel)
+            }
+        }
+    }
+
+    var tasteUpdate: TasteUpdate {
+        TasteUpdate(allergies: allergies, avoid: avoid, diets: diets, cuisines: cuisines, skillLevel: skillLevel)
+    }
+}
+
+/// The server's closed vocabularies for the brief 015 taste step, with display labels.
+enum TasteOptions {
+    struct Option: Identifiable, Hashable, Sendable {
+        let id: String
+        let label: String
+    }
+
+    static let diets: [Option] = [
+        .init(id: "vegetarian", label: "Vegetarian"),
+        .init(id: "vegan", label: "Vegan"),
+        .init(id: "pescatarian", label: "Pescatarian"),
+        .init(id: "halal", label: "Halal"),
+        .init(id: "kosher", label: "Kosher"),
+    ]
+
+    static let cuisines: [Option] = [
+        .init(id: "korean", label: "Korean"),
+        .init(id: "italian", label: "Italian"),
+        .init(id: "mexican", label: "Mexican"),
+        .init(id: "indian", label: "Indian"),
+        .init(id: "japanese", label: "Japanese"),
+        .init(id: "chinese", label: "Chinese"),
+        .init(id: "thai", label: "Thai"),
+        .init(id: "american", label: "American"),
+        .init(id: "mediterranean", label: "Mediterranean"),
+        .init(id: "french", label: "French"),
+    ]
+
+    static let skillLevels: [Option] = [
+        .init(id: "beginner", label: "Just starting"),
+        .init(id: "comfortable", label: "Comfortable"),
+        .init(id: "confident", label: "Confident"),
+    ]
+
+    static func label(for id: String, in options: [Option]) -> String {
+        options.first { $0.id == id }?.label ?? id.capitalized
+    }
 }
 
 // MARK: - Substitutions (SUB-01/02/05, PRD §8.4)

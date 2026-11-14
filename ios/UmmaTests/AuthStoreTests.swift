@@ -32,6 +32,27 @@ final class AuthStoreTests: XCTestCase {
 
     // MARK: - Two-step dev sign-in
 
+    func testUpdateUserReplacesSameAccountOnly() async throws {
+        AuthFixtures.installHappyPath()
+        let h = makeHarness()
+        await h.auth.restore()
+        let challenge = try await h.auth.requestCode(email: "tester@example.com")
+        try await h.auth.verify(challengeId: challenge.challengeId, code: "123456")
+        let signedIn = try XCTUnwrap(h.auth.user)
+        XCTAssertTrue(signedIn.needsOnboarding)
+
+        let done = User(id: signedIn.id, displayName: signedIn.displayName, preferenceUnits: signedIn.preferenceUnits,
+                        createdAt: signedIn.createdAt, onboardedAt: Date(), role: .cook)
+        h.auth.updateUser(done)
+        XCTAssertEqual(h.auth.user?.role, .cook)
+        XCTAssertFalse(h.auth.user?.needsOnboarding ?? true)
+        let cached = try JSONCoding.makeDecoder().decode(User.self, from: XCTUnwrap(h.defaults.data(forKey: AuthStore.cachedUserKey)))
+        XCTAssertNotNil(cached.onboardedAt, "a relaunch keeps the finished onboarding")
+
+        h.auth.updateUser(User(id: UUID(), displayName: "someone else", preferenceUnits: .us, createdAt: Date()))
+        XCTAssertEqual(h.auth.user?.id, signedIn.id, "a different account is ignored")
+    }
+
     func testTwoStepSignInHappyPath() async throws {
         AuthFixtures.installHappyPath()
         let h = makeHarness()
