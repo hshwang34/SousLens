@@ -17,12 +17,14 @@ from app.ai.providers import gemini as gemini_mod
 from app.ai.providers.base import (
     AIProvider,
     CoachRequest,
+    GapDecision,
     InspectRequest,
     PantryObservationRequest,
     StepSummary,
     SubstitutionRequest,
 )
 from app.ai.providers.gemini import (
+    CaptureExtractionDraft,
     CoachDraft,
     GeminiProvider,
     InspectDraft,
@@ -83,7 +85,17 @@ def provider(*script: object, **settings_kw: object) -> tuple[GeminiProvider, Fa
 # --- schema derivation ----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("draft", [CoachDraft, InspectDraft, PantryDraft, SubstitutionDraft])
+@pytest.mark.parametrize(
+    "draft",
+    [
+        CoachDraft,
+        InspectDraft,
+        PantryDraft,
+        SubstitutionDraft,
+        GapDecision,
+        CaptureExtractionDraft,
+    ],
+)
 def test_derived_schema_fits_gemini_subset(draft: type) -> None:
     schema = gemini_schema(draft)
     text = json.dumps(schema)

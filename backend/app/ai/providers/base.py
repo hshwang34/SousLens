@@ -71,6 +71,8 @@ class ExtractedRecipeDraft(StrictModel):
     )
     confidence: Confidence = Field(ge=0.0, le=1.0)
     requires_review: bool = True
+    # Brief 014: the creator's own phrases worth keeping verbatim (capture only).
+    creator_notes: list[str] = Field(default_factory=list)
 
 
 # --- 8.3 / 10.2 Pantry observation --------------------------------------------------------
@@ -314,6 +316,53 @@ class GapDecision(StrictModel):
     confidence: Confidence = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class CaptureUtterance(StrictModel):
+    t_ms: int = Field(ge=0)
+    text: str = Field(max_length=2000)
+
+
+class CaptureGapState(StrictModel):
+    topic_key: str
+    topic: CaptureTopic
+    question: str
+    status: str
+
+
+class CaptureInterviewRequest(StrictModel):
+    """``window`` is what the creator said since the interviewer last looked; ``recent`` is a
+    little context before it. ``final`` is the sweep after Done over the whole transcript."""
+
+    window: list[CaptureUtterance] = Field(default_factory=list)
+    recent: list[CaptureUtterance] = Field(default_factory=list, max_length=20)
+    known_gaps: list[CaptureGapState] = Field(default_factory=list)
+    said_keys: list[str] = Field(
+        default_factory=list, description="topic_keys the creator already covered"
+    )
+    title_hint: str | None = None
+    final: bool = False
+
+
+class CaptureFact(StrictModel):
+    """A question the interviewer asked and the creator's answer, in her exact words."""
+
+    topic_key: str
+    topic: CaptureTopic
+    question: str
+    answer: str
+    t_ms: int | None = Field(default=None, ge=0)
+    phase: Literal["live", "wrapup"] = "live"
+
+
+class TranscriptExtractionRequest(StrictModel):
+    title_hint: str | None = None
+    utterances: list[CaptureUtterance] = Field(default_factory=list)
+    facts: list[CaptureFact] = Field(default_factory=list)
+    unanswered: list[str] = Field(
+        default_factory=list, description="Questions still open at the end (for unknowns)"
+    )
+    language: str = "en"
+
+
 # --- Protocols ----------------------------------------------------------------------------
 
 
@@ -343,8 +392,27 @@ class VisualObserver(Protocol):
 
 
 @runtime_checkable
+class CaptureInterviewer(Protocol):
+    async def decide(self, request: CaptureInterviewRequest) -> GapDecision: ...
+
+
+@runtime_checkable
+class TranscriptRecipeExtractor(Protocol):
+    async def extract_transcript(
+        self, request: TranscriptExtractionRequest
+    ) -> ExtractedRecipeDraft: ...
+
+
+@runtime_checkable
 class AIProvider(
-    RecipeExtractor, PantryExtractor, SubstitutionAdvisor, CookingCoach, VisualObserver, Protocol
+    RecipeExtractor,
+    PantryExtractor,
+    SubstitutionAdvisor,
+    CookingCoach,
+    VisualObserver,
+    CaptureInterviewer,
+    TranscriptRecipeExtractor,
+    Protocol,
 ):
     name: str
 

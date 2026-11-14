@@ -36,8 +36,19 @@ from app.db.models import AIUsage
 log = logging.getLogger("umma.ai.budget")
 
 Capability = Literal[
-    "coach", "inspect", "pantry_photo", "pantry_transcript", "substitution", "video"
+    "coach",
+    "inspect",
+    "pantry_photo",
+    "pantry_transcript",
+    "substitution",
+    "video",
+    "capture",
+    "capture_draft",
 ]
+# Draft-making calls (one per video / capture session) are limited by the per-user monthly
+# extraction count instead of the $0.25 per-user day budget (brief 008, brief 014). They still
+# count towards both monthly caps. ``capture`` (the interviewer) is interactive: day budget.
+EXTRACTION_CAPABILITIES: frozenset[str] = frozenset({"video", "capture_draft"})
 
 _GLOBAL_LOCK_KEY = "umma:ai_budget"
 # ``status`` reports "resting" once less than about one interactive call's reservation is left.
@@ -124,7 +135,9 @@ async def _spent(
     stmt = select(_spent_expr()).where(AIUsage.created_at >= since)
     if user_id is not None:
         # The per-user day budget is for interactive features; video has its own count cap.
-        stmt = stmt.where(AIUsage.user_id == user_id, AIUsage.capability != "video")
+        stmt = stmt.where(
+            AIUsage.user_id == user_id, AIUsage.capability.not_in(EXTRACTION_CAPABILITIES)
+        )
     return Decimal(await session.scalar(stmt) or 0)
 
 
@@ -160,7 +173,7 @@ class CostGuard:
             if capability == "video" and month + ceiling > self.month_soft_cap:
                 return Denial("monthly_cap")
             day = await _spent(session, day_start(now), user_id)
-            if capability != "video" and day + ceiling > self.user_daily_cap:
+            if capability not in EXTRACTION_CAPABILITIES and day + ceiling > self.user_daily_cap:
                 log.info("ai budget: user daily cap", extra={"capability": capability})
                 return Denial("user_daily_cap")
             row = AIUsage(
