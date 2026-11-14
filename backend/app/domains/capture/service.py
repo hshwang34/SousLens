@@ -23,14 +23,19 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.budget import CostGuard
 from app.ai.providers.base import (
     CaptureGapState,
     CaptureInterviewer,
     CaptureInterviewRequest,
     CaptureUtterance,
 )
+from app.ai.providers.gemini import GeminiProvider
+from app.core.config import Settings
 from app.core.errors import (
+    AIResting,
     AppError,
+    CaptureGenerationLimit,
     CaptureModeUnavailable,
     NotFound,
     RateLimited,
@@ -41,6 +46,10 @@ from app.db.models import (
     CaptureEvent,
     CaptureRequest,
     CaptureSession,
+    DraftStatus,
+    ExtractionJob,
+    ExtractionStatus,
+    RecipeDraft,
     User,
 )
 from app.domains.capture import policy
@@ -49,6 +58,8 @@ from app.domains.capture.schemas import (
     AskOut,
     CommandIn,
     EventOut,
+    FinishIn,
+    FinishOut,
     PolicyOut,
     QuestionOutcomeIn,
     QuestionOutcomeOut,
@@ -57,8 +68,11 @@ from app.domains.capture.schemas import (
     TurnsIn,
     TurnsOut,
 )
+from app.domains.extraction import jobs
 from app.domains.media import service as media
 from app.domains.ownership import get_owned_or_404
+from app.domains.recipes import drafts
+from app.domains.recipes.draft_schemas import DraftContent, DraftExtraction
 
 log = logging.getLogger("umma.capture")
 
@@ -69,6 +83,7 @@ WINDOW_MAX = 200  # utterances sent to the interviewer per pause
 RECENT_MAX = 20  # earlier utterances sent along as context
 INFLIGHT_SECONDS = 30.0  # an interviewer claim lapses after this, even if its worker died
 INTERVIEWER_BACKOFF_MS = 10_000  # phone time to wait after a failed interviewer call
+FINAL_SWEEP_MAX = 2000
 
 
 def _now() -> datetime:
@@ -556,3 +571,153 @@ async def command(
     response = to_session_out(row).model_dump(mode="json")
     _remember(session, row, key, digest, response)
     return response
+
+
+async def finish(
+    session: AsyncSession,
+    user: User,
+    session_id: uuid.UUID,
+    key: str,
+    body: FinishIn,
+    interviewer: CaptureInterviewer,
+) -> dict[str, Any]:
+    """Done: one last sweep for gaps, then at most 3 wrap-up questions. Calling it again
+    (wrapping up already) returns the wrap-up questions still open. Like ``turns``, the
+    interviewer runs with no lock held; the state is re-checked under the lock after."""
+    row = await _owned(session, user, session_id, lock=True)
+    digest = request_hash(body)
+    if (replayed := await _replay(session, row, key, digest)) is not None:
+        return replayed
+    _require_open(row)
+    if row.status == "recording":
+        ledger = _ledger(row)
+        everything = _speech(await _utterances(session, row, limit=FINAL_SWEEP_MAX))
+        now_ms = max([body.t_ms or 0, ledger.latest_t_ms, *(u.t_ms for u in everything)])
+        policy.observe_time(ledger, now_ms)
+        if ledger.pending is not None:
+            q = policy.apply_outcome(ledger, ledger.pending.question_id, "expired", None, now_ms)
+            session.add(_close_event(row, q, None))
+        _save(row, ledger)
+        request = CaptureInterviewRequest(
+            window=everything,
+            known_gaps=_known(ledger),
+            said_keys=ledger.said,
+            title_hint=row.title_hint,
+            final=True,
+        )
+        await session.commit()  # no lock is held while the AI thinks
+        decision = None
+        if everything:
+            try:
+                decision = await interviewer.decide(request)
+            except AppError:
+                log.warning("capture interviewer failed; wrap-up uses the gaps already noted")
+        row = await _owned(session, user, session_id, lock=True)
+        if (replayed := await _replay(session, row, key, digest)) is not None:
+            return replayed
+        _require_open(row)
+        if row.status == "recording":  # nobody else finished it meanwhile
+            ledger = _ledger(row)
+            if decision is not None:
+                policy.merge_decision(ledger, decision, t_ms=everything[-1].t_ms)
+            ids = [uuid.uuid4() for _ in range(policy.DEFAULT_POLICY.max_wrapup_questions)]
+            for ask in policy.pick_wrapup_questions(ledger, map(str, ids), now_ms=now_ms):
+                session.add(
+                    CaptureEvent(
+                        id=uuid.UUID(ask.question_id),
+                        session_id=row.id,
+                        t_ms=now_ms,
+                        kind="question",
+                        text=ask.text,
+                        topic_key=ask.topic_key,
+                    )
+                )
+            row.status = "wrapping_up"
+            row.ended_at = _now()
+            _save(row, ledger)
+    await session.flush()
+    out = to_session_out(row)
+    response = FinishOut(questions=out.wrapup_questions, session=out).model_dump(mode="json")
+    _remember(session, row, key, digest, response)
+    return response
+
+
+# --- generate -----------------------------------------------------------------------------
+
+
+async def generate(
+    session: AsyncSession,
+    user: User,
+    session_id: uuid.UUID,
+    key: str,
+    *,
+    settings: Settings,
+    provider: object,
+    guard: CostGuard,
+) -> ExtractionJob:
+    """Queue the draft: a draft (``extracting``) and an ``ExtractionJob`` of kind ``capture``,
+    polled through ``GET /v1/extractions/{job_id}``. Over a cap it refuses (retryable) and
+    the recording is kept untouched."""
+    row = await _owned(session, user, session_id, lock=True)
+    digest = request_hash({"generate": True})
+    if (replayed := await _replay(session, row, key, digest)) is not None:
+        return await jobs.get_job(session, user, uuid.UUID(replayed["job_id"]))
+    if row.status == "recording":
+        raise StateConflict("Tap Done to finish the recording first")
+    if row.status not in ("wrapping_up", "failed"):
+        raise StateConflict("A draft was already made from this recording")
+    if row.transcript_purged_at is not None:
+        raise StateConflict("This recording's transcript was deleted")
+    await media.lock_user_video(session, user.id)
+    if isinstance(provider, GeminiProvider):
+        if not provider.configured:
+            raise provider.unavailable("capture")
+        if (await guard.status(None)).reason == "monthly_cap":
+            raise AIResting(
+                "AI is resting for the rest of the month. Your recording is saved: make the "
+                "draft later, or type the recipe in."
+            )
+    limit = settings.ai_user_video_extractions_per_month
+    used = await jobs.monthly_extractions(session, user.id)
+    if used >= limit:
+        raise CaptureGenerationLimit(
+            f"You've used all {limit} AI recipe drafts this month. Your recording is saved: "
+            "make the draft next month, or type the recipe in.",
+            extra={"details": {"limit": limit, "used": used}},
+        )
+    ledger = _ledger(row)
+    for q in policy.open_wrapup_questions(ledger):  # unanswered wrap-up questions stay unknowns
+        closed = policy.apply_outcome(ledger, q.question_id, "expired", None, q.expires_at_ms or 0)
+        session.add(_close_event(row, closed, None))
+    _save(row, ledger)
+
+    job_id = uuid.uuid4()
+    content = DraftContent(title=row.title_hint, extraction=DraftExtraction(job_id=job_id))
+    draft = await session.get(RecipeDraft, row.draft_id) if row.draft_id else None
+    if draft is None or draft.status != DraftStatus.EDITING or draft.owner_user_id != user.id:
+        draft = RecipeDraft(owner_user_id=user.id, status=DraftStatus.EXTRACTING)
+        session.add(draft)
+    draft.structured_draft_json = drafts.normalise(content)
+    draft.status = DraftStatus.EXTRACTING
+    await session.flush()
+    job = ExtractionJob(
+        id=job_id,
+        owner_user_id=user.id,
+        draft_id=draft.id,
+        kind="capture",
+        status=ExtractionStatus.QUEUED,
+        attempts=0,
+        progress=0,
+        stage="queued",
+        params_json={"capture_session_id": str(row.id), "title_hint": row.title_hint},
+        counts_toward_limit=True,
+    )
+    session.add(job)
+    row.status = "generating"
+    row.draft_id = draft.id
+    await session.flush()
+    row.extraction_job_id = job.id
+    _remember(session, row, key, digest, {"job_id": str(job.id)})
+    await session.flush()
+    await session.refresh(job)
+    return job

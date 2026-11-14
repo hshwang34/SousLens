@@ -77,7 +77,7 @@ class JobError(BaseModel):
 
 class JobOut(BaseModel):
     id: uuid.UUID
-    kind: Literal["extract", "trim"]
+    kind: Literal["extract", "trim", "capture"]
     status: JobStatusOut
     stage: str | None
     progress: int = Field(ge=0, le=100)
@@ -151,7 +151,8 @@ async def monthly_extractions(
     since = month_start(now or datetime.now(UTC))
     stmt = select(func.count(ExtractionJob.id)).where(
         ExtractionJob.owner_user_id == user_id,
-        ExtractionJob.kind == "extract",
+        # Video extractions and voice-capture drafts share one monthly cap (brief 014).
+        ExtractionJob.kind.in_(("extract", "capture")),
         ExtractionJob.counts_toward_limit.is_(True),
         ExtractionJob.created_at >= since,
     )
