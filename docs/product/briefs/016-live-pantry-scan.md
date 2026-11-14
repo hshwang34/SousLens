@@ -64,8 +64,10 @@ iPhone in hand. Glasses come later on the same path.
 2. **What does the cook confirm?** — Options: one tap for the whole basket, nothing (auto-save
    with undo), only unsure items. **Recommendation:** one tap for the whole basket.
    → *Answer:* only unsure items (PM, 2026-11-13). Logged as DECISIONS #28.
-3. **Spend go.** The spike (under $1) and beta usage need the PM's explicit go on real Gemini
-   spend, which is the Slice 4 gate. → *Answer:* pending.
+3. **Spend go.** → *Answer:* PM supplied the keys and asked for a real test (2026-11-13). Spike run.
+4. **Per-user cap for live scans?** A 2-minute scan costs about $0.15 (spike), so the $0.25/day cap allows
+   1–2. Options: keep it, a separate live-scan allowance, or cut cost first (session rotation).
+   **Recommendation:** cut cost first, then re-measure. → *Answer:* pending.
 
 ## PR sequence
 0. Docs: this brief and DECISIONS #28.
@@ -81,6 +83,33 @@ iPhone in hand. Glasses come later on the same path.
 5. iOS: Live API WebSocket transport plus a fake transport for tests and mock mode.
 6. iOS: Live scan screen, basket animation, short review, "Auto-added" chip with undo.
 7. Smoke: UmmaSmoke drives the flow with the fake transport. A device check on a real kitchen.
+
+## Spike results (2026-11-13, real `gemini-3.8-live`, two runs)
+Four generated kitchen scenes (fridge door, fridge shelf, cupboard, counter; 33 items), panned
+at 1 frame/s for 28 frames, ending with a revisit of the fridge door. The labels were cleaner
+than a real kitchen's, so these numbers are optimistic until a real device test.
+- **Phone path works.** A single-use token locked to the model, instructions and tool (v1alpha
+  `auth_tokens`) connected and ran the session with no API key on the "phone".
+- **Video alone never triggers the model.** Video-only sessions close for "client inactivity". With
+  silent audio they stay open, but the model never takes a turn. The client must send a short
+  text nudge every few frames ("Report any new items now visible") plus silent 16 kHz audio to
+  keep the session alive.
+- **Detection:** 33/33 and 32/33 items reported, 0 invented. 31 and 30 at high confidence;
+  "ginger" and "peanut butter" came back medium. The first item arrived at 3.8–4.5 s. Items
+  arrive in bursts at each nudge (roughly every 5–6 s), so the nudge rate sets the latency.
+- **Dedupe:** the revisit of the fridge door added nothing, and the model repeated itself only 1–2 times
+  after an `already_in_basket` reply. Two matcher gaps: "long grain rice" doesn't map to rice,
+  and "chopped tomatoes" (canned) collapses into fresh "tomatoes", so the counter's tomatoes were
+  dropped as a duplicate. Both are fixed in PR 3 or the dictionary.
+- **It speaks anyway.** It said "The items currently visible are already recorded" for 5–9 s of
+  audio per run despite the instructions. Harmless, because the app never plays it.
+- **Cost is higher than first estimated.** Each nudge is a turn that re-reads the whole growing
+  context: 9 turns billed 43.4k prompt tokens for 36 s, about $0.04, or roughly $0.15 for a
+  2-minute scan, not "under a cent". Mitigations for PR 2/5: rotate to a fresh session every
+  ~30 s carrying the basket names, or use the context-window sliding window, and nudge only when
+  frames change. At today's $0.25/day per-user cap that's 1–2 full scans a day unless the cap
+  changes.
+- **Spike spend:** about $0.35 in total (scene images plus four Live sessions).
 
 ## Engineering decisions (filled in by the lead while building)
 - Dedupe lives on the backend (`domains/matching/normalize.py::normalize`) so there is one
