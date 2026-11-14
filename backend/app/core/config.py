@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     gemini_model_pantry: str = "gemini-3.5-flash-lite"
     gemini_model_video: str = "gemini-3.8-flash"  # brief 008
     gemini_model_capture: str = "gemini-3.8-flash"  # brief 014 interviewer + draft
+    # Brief 014: a capture transcript nobody published is deleted after this many idle days.
+    capture_transcript_ttl_days: int = Field(default=30, ge=1, le=365)
     # Whole-call deadline for interactive features, retries included (brief 007).
     gemini_timeout_seconds: float = Field(default=18.0, gt=0, le=60)
 

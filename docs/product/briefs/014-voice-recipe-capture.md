@@ -122,6 +122,10 @@ None. Answered in DECISIONS #25.
   coordinator. Its Gemini Live base class is not ported.
 - Generation reuses the brief 008 extraction job, worker, `build_content` and `evidence_origin`
   labelling, with a new `capture` job kind.
+- Transcript retention: events are deleted when the draft is published or deleted (any path; a
+  database trigger on drafts backs this up), when the session is deleted, and by a **30-day
+  TTL** for transcripts nobody published (`CAPTURE_TRANSCRIPT_TTL_DAYS`, run by the worker next
+  to the upload reaper).
 
 ## Risks / what could go wrong for users
 - **Kitchen noise reads as speech, so the agent never finds a pause.** Mitigation: on-device
