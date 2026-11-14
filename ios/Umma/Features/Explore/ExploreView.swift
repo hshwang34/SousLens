@@ -31,7 +31,7 @@ struct ExploreView: View {
         }
         .task {
             if model == nil {
-                let created = ExploreViewModel(service: environment.api, cache: environment.recipeCache)
+                let created = ExploreViewModel(service: environment.api, feeds: environment.api, cache: environment.recipeCache)
                 let api = environment.api
                 fits = ExploreFitLoader(fit: { try await api.fit(recipeVersionId: $0) })
                 model = created
@@ -54,8 +54,14 @@ private struct ExploreContent: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Spacing.lg) {
+                if model.query.isEmpty {
+                    feedPicker
+                }
                 if let notice = model.offlineNotice {
                     cachedBanner(notice)
+                }
+                if model.showsPantryNudge {
+                    pantryNudge
                 }
                 switch model.phase {
                 case .idle, .loading:
@@ -106,6 +112,44 @@ private struct ExploreContent: View {
         let pantry: Int
     }
 
+    // MARK: Feeds (brief 015)
+
+    private var feedPicker: some View {
+        Picker("Feed", selection: $model.feed) {
+            ForEach(ExploreViewModel.Feed.allCases) { feed in
+                Text(feed.title).tag(feed)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("explore.feed")
+    }
+
+    private var pantryNudge: some View {
+        Button {
+            environment.selectedTab = .pantry
+        } label: {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "basket.fill")
+                    .font(SLFont.title3)
+                    .foregroundStyle(SLColor.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: Spacing.xxs) {
+                    Text("See what you can make tonight").font(SLFont.headline).foregroundStyle(SLColor.textPrimary)
+                    Text("Scan your pantry and For You puts what fits first.")
+                        .font(SLFont.subheadline)
+                        .foregroundStyle(SLColor.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").foregroundStyle(SLColor.textSecondary).accessibilityHidden(true)
+            }
+            .padding(Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SLColor.accentSoft, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("explore.pantryNudge")
+    }
+
     // MARK: Chips
 
     private var filterChips: some View {
@@ -140,7 +184,21 @@ private struct ExploreContent: View {
         )
     }
 
+    @ViewBuilder
     private var emptyState: some View {
+        if model.query.isEmpty, model.feed == .following {
+            EmptyStateView(
+                systemImage: "person.2",
+                title: "Nobody followed yet",
+                message: "Tap a cook’s name on any recipe to see their page and follow them. Their recipes land here.",
+                primary: EmptyStateView.Action("Browse For You") { model.feed = .forYou }
+            )
+        } else {
+            defaultEmptyState
+        }
+    }
+
+    private var defaultEmptyState: some View {
         let searching = !model.query.isEmpty
         return EmptyStateView(
             systemImage: searching ? "magnifyingglass" : "leaf",
