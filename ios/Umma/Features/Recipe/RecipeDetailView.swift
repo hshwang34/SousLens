@@ -72,6 +72,7 @@ struct RecipeDetailView: View {
                 RecipeHeaderView(
                     title: model.title,
                     creatorName: model.creatorName,
+                    creatorId: model.creatorId,
                     versionNumber: model.versionNumber,
                     summary: model.summary,
                     prepMinutes: model.prepMinutes,
@@ -313,6 +314,8 @@ struct RecipeDetailView: View {
 struct RecipeHeaderView: View {
     let title: String
     let creatorName: String?
+    /// Brief 015: links "by …" to the creator's profile. `nil` in the draft preview.
+    var creatorId: UUID? = nil
     let versionNumber: Int?
     let summary: String?
     let prepMinutes: Int?
@@ -350,7 +353,20 @@ struct RecipeHeaderView: View {
                 .foregroundStyle(SLColor.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: Spacing.sm) {
-                if let creatorName {
+                if let creatorName, let creatorId {
+                    NavigationLink(value: RecipeRoute.creator(id: creatorId)) {
+                        HStack(spacing: Spacing.xxs) {
+                            Text("by \(creatorName)")
+                            Image(systemName: "chevron.right").font(SLFont.caption)
+                        }
+                        .font(SLFont.subheadline.weight(.semibold))
+                        .foregroundStyle(SLColor.accent)
+                        .frame(minHeight: Metrics.minTapTarget)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens their profile")
+                    .accessibilityIdentifier("recipe.creator")
+                } else if let creatorName {
                     Text("by \(creatorName)")
                         .font(SLFont.subheadline)
                         .foregroundStyle(SLColor.textSecondary)

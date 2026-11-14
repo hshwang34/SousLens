@@ -23,6 +23,8 @@ struct ExploreView: View {
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(for: RecipeRoute.self) { route in
                 switch route {
+                case .creator(let id):
+                    CreatorProfileView(creatorId: id)
                 case .recipe(let id, let card):
                     RecipeDetailView(recipeId: id, card: card)
                         .zoomTransition(sourceID: card == nil ? nil : id, in: zoom, enabled: !reduceMotion)
@@ -101,6 +103,10 @@ private struct ExploreContent: View {
         .searchable(text: $model.searchText, prompt: "Search recipes or ingredients")
         .onSubmit(of: .search) {
             Task { await model.submitSearchNow() }
+        }
+        .onChange(of: environment.followRevision) {
+            // Brief 015: a follow changes Following and the For You boost.
+            Task { await model.refresh() }
         }
         .task(id: FitKey(versions: model.cards.map(\.recipeVersionId), pantry: environment.pantryRevision)) {
             await fits.load(versionIds: model.cards.map(\.recipeVersionId), pantryRevision: environment.pantryRevision)

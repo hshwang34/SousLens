@@ -5,6 +5,8 @@ import Observation
 /// paint before the detail loads; a deep link only has the id.
 enum RecipeRoute: Hashable {
     case recipe(id: UUID, card: RecipeCard?)
+    /// Brief 015: a creator's profile (from a recipe's "by …" line or the Following list).
+    case creator(id: UUID)
 
     static func card(_ card: RecipeCard) -> RecipeRoute { .recipe(id: card.recipeId, card: card) }
 }
@@ -61,6 +63,13 @@ final class AppEnvironment {
 
     func notePantryChanged() {
         pantryRevision += 1
+    }
+
+    /// Brief 015: bumped after a follow / unfollow so Explore's feeds re-read.
+    private(set) var followRevision = 0
+
+    func noteFollowChanged() {
+        followRevision += 1
     }
 
     #if DEBUG

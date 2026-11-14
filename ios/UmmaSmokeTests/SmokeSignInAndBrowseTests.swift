@@ -89,6 +89,22 @@ final class SmokeSignInAndBrowseTests: XCTestCase {
         next.tap()
         XCTAssertTrue(app.tabBars.buttons["Explore"].waitForExistence(timeout: 15), "onboarding did not finish")
         attach(app, "015-8-explore")
+
+        // Following shows the followed cook's recipes; their page says Following.
+        let following = app.segmentedControls["explore.feed"].buttons["Following"]
+        XCTAssertTrue(following.waitForExistence(timeout: 10), "feed picker missing")
+        following.tap()
+        let firstCard = app.scrollViews.descendants(matching: .button).matching(NSPredicate(format: "label CONTAINS 'by '")).firstMatch
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 15), "Following feed is empty after a follow")
+        attach(app, "015-9-following")
+        firstCard.tap()
+        let creatorLink = app.buttons["recipe.creator"]
+        XCTAssertTrue(creatorLink.waitForExistence(timeout: 10), "recipe detail has no creator link")
+        creatorLink.tap()
+        let followButton = app.buttons["creator.follow"]
+        XCTAssertTrue(followButton.waitForExistence(timeout: 10), "creator page did not load")
+        XCTAssertEqual(followButton.label, "Following")
+        attach(app, "015-10-creator")
     }
 
     // MARK: - Brief 003
