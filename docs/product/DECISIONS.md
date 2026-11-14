@@ -249,3 +249,11 @@ must be rebased onto the renamed (Umma) tree first.
   a draft. It is never published automatically: the creator reviews it in the existing editor,
   and AI-drafted fields are labelled.
 *Lives in:* `docs/product/briefs/014-voice-recipe-capture.md`.
+
+#26 · 2026-11-13 · **Product site domain: `ummacooks.app`, auto-deployed from `main`.** Supersedes
+the free-domain line of #20: `umma.vercel.app` and `umma-site.vercel.app` were already taken.
+- **Domain:** the PM bought `ummacooks.app` on Vercel `hshwang34` ($9.99 first year, then $15/yr).
+  `ummacooks.com` was not bought for now. `www` redirects to the bare domain.
+- **Deploys:** Vercel project `umma-site` deploys `site/` from `main` automatically. Merging a PR
+  that changes `site/` puts it live in production; other commits are skipped.
+*Lives in:* `docs/product/briefs/011-product-site.md`.
