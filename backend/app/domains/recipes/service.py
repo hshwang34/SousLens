@@ -285,6 +285,27 @@ async def unsave(session: AsyncSession, user: User, recipe_id: uuid.UUID) -> Sav
     return SaveStatus(recipe_id=recipe_id, saved=False)
 
 
+async def public_recipes(
+    session: AsyncSession, owner_ids: Iterable[uuid.UUID] | None = None
+) -> list[Recipe]:
+    """Every public, published recipe (optionally only these owners), newest first.
+
+    Brief 015 creator pages and feeds read the whole published set; it is small (tens of
+    recipes). Page or cache this before the catalogue grows.
+    """
+    stmt = _base_query().where(*_public_published())
+    if owner_ids is not None:
+        stmt = stmt.where(Recipe.owner_user_id.in_(list(owner_ids)))
+    stmt = stmt.order_by(Recipe.published_at.desc(), Recipe.id.desc())
+    return list((await session.execute(stmt)).unique().scalars().all())
+
+
+async def cards_for(
+    session: AsyncSession, rows: list[Recipe], user: User | None
+) -> list[RecipeCard]:
+    return await _cards(session, rows, user)
+
+
 async def list_saved(session: AsyncSession, user: User) -> list[RecipeCard]:
     stmt = (
         _base_query()
