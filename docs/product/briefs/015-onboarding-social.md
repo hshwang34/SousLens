@@ -1,6 +1,6 @@
 # 015 — First-run onboarding, following creators, For You / Following feeds
 
-**Status:** approved · **Owner:** PM · **PR:** — · **Updated:** 2026-11-13
+**Status:** shipped · **Owner:** PM · **PR:** #20, #22, #24, #26, #28, #29, #35, #41, #42, #45, #46 · **Updated:** 2026-11-13
 
 ## Problem
 A new user goes straight from sign-in to the tabs. Allergies are the strongest safety rule, but
@@ -107,6 +107,17 @@ recipes you like.
 - Seeded creators are users with `auth_provider = "seed"`, which no sign-in path accepts.
 - For You computes fit per recipe per request. Fine for ~20 recipes; cap or cache before the
   catalogue grows.
+- For You `coverage` counts required ingredients *present* in the pantry, ignoring amounts:
+  scanned pantries rarely record quantities. `can_make` stays the strict fit verdict.
+- Creator suggestions rank by how many of a creator's recipes are in the chosen cuisines, so a
+  specialist beats a generalist with one matching dish.
+- `DELETE /creators/{id}/follow` answers 404 for a non-creator unless the caller held a follow,
+  so it never reveals an arbitrary user's name (found by automated security review).
+- Creator pages open from the "by …" line on recipe detail, not from feed cards (a card is one
+  tap target). Seeded personas have no avatar image; the app draws monograms.
+- "Record your first recipe" opens Profile's new-recipe editor until brief 014's recorder ships.
+- `feature.onboarding` (UserDefaults) defaults on; `-feature.onboarding NO` turns it off. The
+  live smoke tests run with it off except `testOnboardingFirstRun`.
 
 ## Risks / what could go wrong for users
 - Someone skips allergies by tapping "No allergies" to get through faster. Mitigation: plain
