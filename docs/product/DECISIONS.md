@@ -234,3 +234,18 @@ CI (macOS) is now free, so it can run on every iOS PR instead of manual dispatch
 driving #13 closed partway through fixing a glasses test that hangs on iOS CI. Its unfinished fix is
 left uncommitted in the `feature-slice6-glasses` worktree. When the glasses work resumes, the branch
 must be rebased onto the renamed (Umma) tree first.
+
+#25 · 2026-11-13 · **Recipe capture: record it while you cook, with a voice interviewer (brief 014).**
+- **Modes:** two capture modes, voice only and camera + voice. v1 builds voice only. Camera + voice
+  shows as a visible "Coming soon" option in the chooser.
+- **Voice stack:** built on brief 012's stack (Free = on-device Apple speech and voice; Paid =
+  server speech-to-text and voice through the Gemini guard). No Gemini Live, consistent with #22.
+- **Agent manners:** the agent never interrupts. It asks only after a pause and only for
+  what's missing (temperature, time, quantity, doneness), and it waits for the answer.
+  "Skip" and "stop asking" are honoured.
+- **Timing:** v1 timestamps every sentence, question and answer. Inferring step durations from
+  them is v2.
+- **Wrap-up:** after Done, up to 3 spoken questions for what's still missing, then Umma generates
+  a draft. It is never published automatically: the creator reviews it in the existing editor,
+  and AI-drafted fields are labelled.
+*Lives in:* `docs/product/briefs/014-voice-recipe-capture.md`.

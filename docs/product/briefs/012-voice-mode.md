@@ -92,7 +92,7 @@ to the last step.
 - StoreKit purchases and real charges (they need a PM go at launch).
 - Wake word.
 - Gemini Live, and video streaming to the model.
-- Voice on the creator editor.
+- Voice on the creator editor. Recording a recipe by voice is a separate capture screen, brief 014, which reuses this brief's voice core.
 
 ## Open product questions
 None. Answered in DECISIONS #22.
