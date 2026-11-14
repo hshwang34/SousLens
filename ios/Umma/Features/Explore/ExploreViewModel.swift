@@ -4,6 +4,13 @@ import Observation
 @MainActor
 @Observable
 final class ExploreViewModel {
+    /// Brief 015: Explore's two feeds. Search ignores the feed and covers every recipe.
+    enum Feed: String, CaseIterable, Identifiable, Sendable {
+        case forYou, following
+        var id: String { rawValue }
+        var title: String { self == .forYou ? "For You" : "Following" }
+    }
+
     enum Phase: Equatable {
         case idle
         case loading
@@ -21,6 +28,17 @@ final class ExploreViewModel {
     }
 
     private(set) var query = ""
+    /// Switching feeds clears the cards and fetches the new one.
+    var feed: Feed = .forYou {
+        didSet {
+            guard feed != oldValue else { return }
+            cards = []
+            offlineNotice = nil
+            cachedAt = nil
+            phase = .idle
+            Task { await fetch() }
+        }
+    }
     private(set) var phase: Phase = .idle
     private(set) var cards: [RecipeCard] = []
     /// Set when the cards on screen came from disk because the server was unreachable.
@@ -31,12 +49,15 @@ final class ExploreViewModel {
     var pageSize = 20
 
     private let service: RecipeService
+    /// `nil` keeps the pre-015 behaviour: one newest-first list from `/recipes`.
+    private let feeds: FeedService?
     private let cache: RecipeCaching
     private var searchTask: Task<Void, Never>?
     private var fetchTask: Task<Result<RecipePage, Error>, Never>?
 
-    init(service: RecipeService, cache: RecipeCaching, debounce: Duration = .milliseconds(300)) {
+    init(service: RecipeService, feeds: FeedService? = nil, cache: RecipeCaching, debounce: Duration = .milliseconds(300)) {
         self.service = service
+        self.feeds = feeds
         self.cache = cache
         self.debounce = debounce
     }
@@ -48,9 +69,18 @@ final class ExploreViewModel {
 
     var isShowingCached: Bool { offlineNotice != nil }
 
+    /// For You with an empty pantry: the server sends no coverage on any card, so nudge a scan.
+    var showsPantryNudge: Bool {
+        feeds != nil && feed == .forYou && query.isEmpty && phase == .loaded
+            && !cards.isEmpty && cards.allSatisfy { $0.feed?.coverage == nil }
+    }
+
+    /// The cache holds the default first page only (For You, or the plain list without feeds).
+    private var usesCache: Bool { query.isEmpty && feed == .forYou }
+
     /// First appearance: paint cached cards immediately, then fetch.
     func load() async {
-        if cards.isEmpty, query.isEmpty, let cached = cache.load(), !cached.items.isEmpty {
+        if cards.isEmpty, usesCache, let cached = cache.load(), !cached.items.isEmpty {
             cards = cached.items
             cachedAt = cached.savedAt
             phase = .loaded
@@ -84,15 +114,24 @@ final class ExploreViewModel {
     private func fetch() async {
         fetchTask?.cancel()
         let currentQuery = query
-        let task = Task { [service, cache, pageSize] () -> Result<RecipePage, Error> in
+        let currentFeed = feed
+        let cacheable = usesCache
+        let task = Task { [service, feeds, cache, pageSize] () -> Result<RecipePage, Error> in
             do {
-                let page = try await service.listRecipes(
-                    query: currentQuery.isEmpty ? nil : currentQuery,
-                    tag: nil,
-                    cursor: nil,
-                    limit: pageSize
-                )
-                if currentQuery.isEmpty {
+                let page: RecipePage
+                if currentQuery.isEmpty, let feeds {
+                    page = currentFeed == .forYou
+                        ? try await feeds.forYou(cursor: nil, limit: pageSize)
+                        : try await feeds.followingFeed(cursor: nil, limit: pageSize)
+                } else {
+                    page = try await service.listRecipes(
+                        query: currentQuery.isEmpty ? nil : currentQuery,
+                        tag: nil,
+                        cursor: nil,
+                        limit: pageSize
+                    )
+                }
+                if cacheable {
                     try? cache.save(page.items)
                 }
                 return .success(page)
@@ -105,7 +144,7 @@ final class ExploreViewModel {
 
         let result = await task.value
         // A newer fetch superseded this one; let it own the state.
-        guard fetchTask == task, currentQuery == query else { return }
+        guard fetchTask == task, currentQuery == query, currentFeed == feed else { return }
 
         switch result {
         case .success(let page):
@@ -118,7 +157,7 @@ final class ExploreViewModel {
             if apiError == .cancelled { return }
             let message = apiError?.userMessage ?? error.localizedDescription
             let retryable = apiError?.isRetryable ?? true
-            if currentQuery.isEmpty, let cached = cache.load(), !cached.items.isEmpty {
+            if cacheable, let cached = cache.load(), !cached.items.isEmpty {
                 cards = cached.items
                 cachedAt = cached.savedAt
                 offlineNotice = message

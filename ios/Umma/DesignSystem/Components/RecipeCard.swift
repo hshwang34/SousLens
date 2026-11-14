@@ -31,6 +31,17 @@ struct RecipeCardView: View {
                     .font(SLFont.subheadline)
                     .foregroundStyle(SLColor.textSecondary)
                     .multilineTextAlignment(.leading)
+                if let conflict = card.feed?.allergyConflict {
+                    // Brief 015: shown, never hidden; and never "safe" for anyone else.
+                    Label("Contains \(conflict), on your allergy list", systemImage: "exclamationmark.triangle.fill")
+                        .font(SLFont.caption.weight(.semibold))
+                        .foregroundStyle(SLColor.warning)
+                        .accessibilityIdentifier("card.allergy")
+                } else if let reason = feedReason {
+                    Text(reason)
+                        .font(SLFont.caption.weight(.semibold))
+                        .foregroundStyle(SLColor.accent)
+                }
             }
             .padding(.horizontal, Spacing.lg)
             .padding(.vertical, Spacing.md)
@@ -41,6 +52,12 @@ struct RecipeCardView: View {
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the recipe")
+    }
+
+    /// For You's reason, unless the cover's fit chip already says it ("You have …") or it's "New".
+    private var feedReason: String? {
+        guard let reason = card.feed?.reason, !reason.hasPrefix("You have"), reason != "New" else { return nil }
+        return reason
     }
 
     /// "by Min-ji Park · 40 min · Serves 4"
