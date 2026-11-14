@@ -9,29 +9,28 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import PantryItem, User
+from app.db.models import PantryItem, RecipeVersion, User
 from app.domains.matching.dictionary import load_dictionary
 from app.domains.matching.fit import FitResult, PantryEntry, RecipeIngredient, fit
 from app.domains.recipes import service as recipes_service
 from app.domains.recipes.schemas import IngredientOut
 
 
-async def fit_version(
-    session: AsyncSession, user: User, version_id: uuid.UUID, now: datetime
-) -> FitResult:
-    version, _recipe, _saved = await recipes_service.get_accessible_version(
-        session, version_id, user=user
-    )
-    ingredients = [
+def ingredients_of(version: RecipeVersion) -> list[RecipeIngredient]:
+    return [
         RecipeIngredient(
             id=i.id, name=i.name, quantity=i.quantity, unit=i.unit, optional=i.optional
         )
         for i in (IngredientOut.model_validate(raw) for raw in version.ingredient_json or [])
     ]
+
+
+async def load_pantry(session: AsyncSession, user: User) -> list[PantryEntry]:
+    """The caller's confirmed pantry, as the pure ``fit`` reads it."""
     rows = (
         await session.execute(select(PantryItem).where(PantryItem.owner_user_id == user.id))
     ).scalars()
-    pantry = [
+    return [
         PantryEntry(
             id=r.id,
             raw_label=r.raw_label,
@@ -43,5 +42,14 @@ async def fit_version(
         )
         for r in rows
     ]
+
+
+async def fit_version(
+    session: AsyncSession, user: User, version_id: uuid.UUID, now: datetime
+) -> FitResult:
+    version, _recipe, _saved = await recipes_service.get_accessible_version(
+        session, version_id, user=user
+    )
+    pantry = await load_pantry(session, user)
     dictionary = await load_dictionary(session)
-    return fit(version.id, ingredients, pantry, dictionary, now)
+    return fit(version.id, ingredients_of(version), pantry, dictionary, now)

@@ -81,8 +81,9 @@ default 20, opaque `cursor`.
 ```jsonc
 "feed": {
   "reason": "You have 8 of 9",     // display as is; also "Korean", "From Mina", "New"
-  "coverage": 0.89,                // 0–1, null when the pantry is empty
-  "can_make": false,
+  "coverage": 0.89,                // 0–1, null when the pantry is empty. Share of required
+                                   //   ingredients found in the pantry, amounts ignored
+  "can_make": false,               // the strict pantry-fit verdict (amounts checked)
   "allergy_conflict": "peanut|null" // when set, show "Contains peanut"
 }
 ```
