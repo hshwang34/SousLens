@@ -249,3 +249,17 @@ must be rebased onto the renamed (Umma) tree first.
   a draft. It is never published automatically: the creator reviews it in the existing editor,
   and AI-drafted fields are labelled.
 *Lives in:* `docs/product/briefs/014-voice-recipe-capture.md`.
+
+#26 · 2026-11-13 · **Brief 012 is unblocked: voice core first; Paid voice on Deepgram + ElevenLabs.**
+- **Order:**
+  - PR 1, voice core: the voice session, the voice bar with live captions, the Free tier on the
+    iPhone (Apple speech and voice, echo-cancelled, with pause detection), and the Free/Paid
+    entitlement (everyone is Paid in the beta, by config).
+  - PR 2: Paid server voice.
+  - PR 3+: the cooking, pantry and discovery cards, and landscape.
+  - Brief 014's recording screen builds on PR 1.
+- **Paid vendors:** Deepgram for streaming speech-to-text and turn detection, ElevenLabs for the
+  agent's voice. These are two new paid vendors on personal accounts. PR 2 needs both keys from the
+  PM, and its usage is priced into the `ai_usage` ledger under the existing caps. No spend before the
+  keys arrive and the PM gives a go.
+*Lives in:* `docs/product/briefs/012-voice-mode.md`.

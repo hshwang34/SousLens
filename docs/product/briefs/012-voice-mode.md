@@ -1,6 +1,6 @@
 # 012 — Voice mode: hands-free from pantry to plate
 
-**Status:** draft · **Owner:** PM · **PR:** — · **Updated:** 2026-11-12
+**Status:** approved, building PR 1 (voice core) · **Owner:** PM · **PR:** — · **Updated:** 2026-11-13
 
 ## Problem
 Cooking happens with wet, busy hands. Today every step of Umma needs a tap: adding pantry
@@ -96,6 +96,20 @@ to the last step.
 
 ## Open product questions
 None. Answered in DECISIONS #22.
+
+## Sequencing (DECISIONS #26)
+1. **PR 1, voice core:**
+   - `VoiceSession` (start/stop, listening/thinking/speaking states, the 10-minute silence end).
+   - The voice bar with live captions of both sides.
+   - Free tier on the iPhone: continuous Apple speech recognition with echo cancellation and
+     pause detection, and the Apple voice.
+   - A Paid transport interface (faked until PR 2).
+   - The Free/Paid entitlement read from the server (everyone is Paid in the beta).
+   - Brief 014's recording screen builds on this.
+2. **PR 2, Paid server voice:** Deepgram for streaming speech-to-text and turn detection,
+   ElevenLabs for the voice. Usage priced in the ledger. Needs both keys and the PM's go.
+3. **PR 3+:** the cooking, pantry and discovery cards, the agent turn, landscape, and the
+   updated privacy and site copy.
 
 ## Engineering decisions (filled in by the lead while building)
 - …
