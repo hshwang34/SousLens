@@ -165,8 +165,10 @@ async def test_kimchi_jjigae_replay(env: Env) -> None:
     assert "(Until the kimchi goes soft.)" in simmer["instruction"]
     assert not any(s["instruction"] == "Until the kimchi goes soft." for s in draft["steps"])
     assert "My mum always says never rush the kimchi." in draft["creator_notes"]
-    for text in (json.dumps(draft),):
-        assert not re.search(r"\b(15|fifteen|20|minutes?)\b", text.lower())
+    # Timestamps (created_at etc.) are not draft content: strip them, or the check fails
+    # whenever the wall clock reads :15 or :20.
+    text = re.sub(r"\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?", "", json.dumps(draft))
+    assert not re.search(r"\b(15|fifteen|20|minutes?)\b", text.lower())
 
     # The creator fixes what's missing and publishes: the transcript is deleted.
     assert await env.count(CaptureEvent, cap.sid) > 0
