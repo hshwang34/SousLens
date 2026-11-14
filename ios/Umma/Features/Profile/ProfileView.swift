@@ -32,6 +32,8 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .navigationDestination(for: RecipeRoute.self) { route in
                 switch route {
+                case .creator(let id):
+                    CreatorProfileView(creatorId: id)
                 case .recipe(let id, let card):
                     RecipeDetailView(recipeId: id, card: card)
                 }
@@ -204,6 +206,20 @@ struct ProfileView: View {
                     .frame(minHeight: Metrics.minTapTarget)
             }
             .accessibilityIdentifier("profile.preferences")
+            NavigationLink {
+                TastePreferencesView()
+            } label: {
+                Label("Diets, cuisines & skill", systemImage: "fork.knife")
+                    .frame(minHeight: Metrics.minTapTarget)
+            }
+            .accessibilityIdentifier("profile.taste")
+            NavigationLink {
+                FollowingListView()
+            } label: {
+                Label("Following", systemImage: "person.2")
+                    .frame(minHeight: Metrics.minTapTarget)
+            }
+            .accessibilityIdentifier("profile.following")
         } header: {
             Text("Cooking")
         } footer: {

@@ -45,6 +45,7 @@ final class RecipeDetailViewModel {
 
     var title: String { detail?.title ?? card?.title ?? "Recipe" }
     var creatorName: String? { detail?.creator.displayName ?? card?.creator.displayName }
+    var creatorId: UUID? { detail?.creator.id ?? card?.creator.id }
     var versionNumber: Int? { detail?.versionNumber ?? card?.versionNumber }
     var summary: String? { detail?.summary ?? card?.summary }
     var servings: Int? { detail?.servings ?? card?.servings }

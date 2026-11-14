@@ -20,6 +20,8 @@ struct SavedView: View {
             .navigationTitle("Saved")
             .navigationDestination(for: RecipeRoute.self) { route in
                 switch route {
+                case .creator(let id):
+                    CreatorProfileView(creatorId: id)
                 case .recipe(let id, let card):
                     RecipeDetailView(recipeId: id, card: card)
                 }
