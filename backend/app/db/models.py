@@ -20,6 +20,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     Numeric,
@@ -368,12 +369,13 @@ class RecipeDraft(TimestampMixin, Base):
 
 class ExtractionJob(TimestampMixin, Base):
     """A background job on a creator's video (brief 008): ``extract`` (video → draft + clips)
-    or ``trim`` (re-render one step clip). Claimed by the worker with ``FOR UPDATE SKIP
+    or ``trim`` (re-render one step clip); or ``capture`` (a voice capture transcript → draft,
+    brief 014). Claimed by the worker with ``FOR UPDATE SKIP
     LOCKED``; ``lease_expires_at`` lets another worker resume it after a crash."""
 
     __tablename__ = "extraction_jobs"
     __table_args__ = (
-        CheckConstraint("kind IN ('extract', 'trim')", name="kind_known"),
+        CheckConstraint("kind IN ('extract', 'trim', 'capture')", name="kind_known"),
         # One extraction per uploaded video: marking it uploaded twice returns the same job.
         Index(
             "uq_extraction_jobs_one_extract_per_media",
@@ -424,6 +426,113 @@ class ExtractionJob(TimestampMixin, Base):
     worker_id: Mapped[str | None] = mapped_column(String(64))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+CAPTURE_MODES = ("voice", "camera")
+CAPTURE_STATUSES = ("recording", "wrapping_up", "generating", "ready", "failed")
+CAPTURE_EVENT_KINDS = ("utterance", "question", "answer", "skip", "marker")
+
+
+def _in(column: str, values: tuple[str, ...]) -> str:
+    return f"{column} IN (" + ", ".join(f"'{v}'" for v in values) + ")"
+
+
+class CaptureSession(TimestampMixin, Base):
+    """A voice recipe capture (brief 014): the creator cooks and talks; the interviewer asks
+    the odd question; ``generate`` turns the transcript into a draft.
+
+    ``state_json`` is the interviewer's ledger (gaps, questions, budget, quiet/paused), owned
+    by ``app.domains.capture.policy``. No audio is ever stored (brief 014 privacy)."""
+
+    __tablename__ = "capture_sessions"
+    __table_args__ = (
+        CheckConstraint(_in("mode", CAPTURE_MODES), name="mode_known"),
+        CheckConstraint(_in("status", CAPTURE_STATUSES), name="status_known"),
+        Index(
+            "uq_capture_sessions_owner_idempotency_key",
+            "owner_user_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("ix_capture_sessions_owner_created", "owner_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="recording", server_default=text("'recording'")
+    )
+    title_hint: Mapped[str | None] = mapped_column(String(120))
+    draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("recipe_drafts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    extraction_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("extraction_jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    state_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the transcript was deleted (draft published or discarded).
+    transcript_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Optional Idempotency-Key on create: a retry returns this session.
+    idempotency_key: Mapped[str | None] = mapped_column(String(128))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class CaptureEvent(CreatedAtMixin, Base):
+    """One timestamped transcript event. ``t_ms`` is milliseconds since the session started
+    (the phone's clock). Deleted with the session, when its draft is published or deleted
+    (a trigger on ``recipe_drafts`` covers every delete path), and after 30 idle days."""
+
+    __tablename__ = "capture_events"
+    __table_args__ = (
+        CheckConstraint(_in("kind", CAPTURE_EVENT_KINDS), name="kind_known"),
+        CheckConstraint("t_ms >= 0", name="t_ms_non_negative"),
+        UniqueConstraint("session_id", "client_key"),
+        Index("ix_capture_events_session_t_ms", "session_id", "t_ms"),
+        Index("ix_capture_events_session_seq", "session_id", "seq"),
+    )
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    t_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
+    topic_key: Mapped[str | None] = mapped_column(String(64))
+    # An answer / skip / marker about a question points at that question's event.
+    question_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("capture_events.id", ondelete="CASCADE"), nullable=True
+    )
+    # ``<Idempotency-Key>:<n>`` for transcript segments, so a retried batch never duplicates.
+    client_key: Mapped[str | None] = mapped_column(String(160))
+    # Insertion order. The interviewer tracks what it has seen by ``seq``, never by ``t_ms``
+    # (two utterances can share a ``t_ms``).
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False)
+
+
+class CaptureRequest(CreatedAtMixin, Base):
+    """Idempotent replay for capture writes: same key + same body → the stored response."""
+
+    __tablename__ = "capture_requests"
+    __table_args__ = (UniqueConstraint("session_id", "idempotency_key"),)
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
 
 class Save(CreatedAtMixin, Base):
@@ -863,4 +972,5 @@ OWNED_TABLES: tuple[type[Base], ...] = (
     MediaConsent,
     RecipeVariation,
     SubstitutionSuggestionRecord,
+    CaptureSession,
 )

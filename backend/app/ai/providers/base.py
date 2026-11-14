@@ -283,6 +283,37 @@ class InspectResponse(StrictModel):
     recommended_step_change: int | None = None
 
 
+# --- Brief 014 voice capture: interviewer + transcript extraction ----------------------------
+
+CaptureTopic = Literal[
+    "temperature", "time", "quantity", "doneness", "servings", "prep", "equipment"
+]
+
+
+class GapProposal(StrictModel):
+    """One thing a cook would need that the creator hasn't said yet."""
+
+    topic_key: str = Field(
+        min_length=1,
+        max_length=64,
+        description='Stable snake_case key naming the thing and attribute, e.g. "simmer_time"',
+    )
+    topic: CaptureTopic
+    question: str = Field(min_length=1, max_length=200, description="One short spoken question")
+
+
+class GapDecision(StrictModel):
+    """The interviewer's proposal for one pause. ``app.domains.capture.policy`` decides."""
+
+    open_gaps: list[GapProposal] = Field(default_factory=list, max_length=10)
+    filled_gaps: list[str] = Field(
+        default_factory=list, max_length=20, description="topic_keys the creator just answered"
+    )
+    proposed_question: str | None = Field(default=None, max_length=200)
+    topic_key: str | None = Field(default=None, max_length=64)
+    confidence: Confidence = Field(default=0.0, ge=0.0, le=1.0)
+
+
 # --- Protocols ----------------------------------------------------------------------------
 
 
