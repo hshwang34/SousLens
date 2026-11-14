@@ -49,6 +49,11 @@ class PreferenceUnits(enum.StrEnum):
     METRIC = "metric"
 
 
+class UserRole(enum.StrEnum):
+    COOK = "cook"
+    CREATOR = "creator"
+
+
 class Visibility(enum.StrEnum):
     PUBLIC = "public"
     PRIVATE = "private"
@@ -139,6 +144,29 @@ class User(TimestampMixin, Base):
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     preference_units: Mapped[PreferenceUnits] = mapped_column(
         _enum(PreferenceUnits, "preference_units"), nullable=False, default=PreferenceUnits.US
+    )
+    # Brief 015: null until the user finishes first-run onboarding.
+    onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    role: Mapped[UserRole | None] = mapped_column(_enum(UserRole, "user_role"))
+    # Public creator profile fields (brief 015). Shown on creator pages and follow suggestions.
+    bio: Mapped[str | None] = mapped_column(String(280))
+    avatar_url: Mapped[str | None] = mapped_column(String(2048))
+
+
+class Follow(CreatedAtMixin, Base):
+    """A user following a creator (brief 015, DECISIONS #27). No followers list or notifications."""
+
+    __tablename__ = "follows"
+    __table_args__ = (
+        CheckConstraint("follower_id <> creator_id", name="no_self_follow"),
+        Index("ix_follows_creator", "creator_id"),
+    )
+
+    follower_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    creator_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -665,6 +693,14 @@ class UserPreference(Base):
     )
     allergies: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     avoid: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    # Brief 015 taste profile: closed vocabularies, soft signals for ranking only.
+    diets: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    cuisines: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default=text("'{}'")
+    )
+    skill_level: Mapped[str | None] = mapped_column(String(32))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

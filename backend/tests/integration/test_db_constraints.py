@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CookingSession, SessionEvent, Timer
+from app.db.models import CookingSession, Follow, SessionEvent, Timer
 from app.domains.users import service as users_service
 from app.scripts.seed import seed_fixtures
 from tests.conftest import FIXTURES_DIR
@@ -53,3 +53,33 @@ async def test_timer_step_index_cannot_go_negative(db_session: AsyncSession) -> 
     with pytest.raises(IntegrityError, match="ck_timers_step_index_non_negative"):
         await db_session.flush()
     await db_session.rollback()
+
+
+async def test_follow_rejects_self_follow(db_session: AsyncSession) -> None:
+    """Migration 0010 (brief 015): a user cannot follow themselves."""
+    a = await users_service.get_or_create_by_email(
+        db_session, email="a@example.com", display_name=None, auth_provider="dev"
+    )
+    db_session.add(Follow(follower_id=a.id, creator_id=a.id))
+    with pytest.raises(IntegrityError, match="ck_follows_no_self_follow"):
+        await db_session.flush()
+    await db_session.rollback()
+
+
+async def test_new_onboarding_columns_default_empty(db_session: AsyncSession) -> None:
+    user = await users_service.get_or_create_by_email(
+        db_session, email="p@example.com", display_name=None, auth_provider="dev"
+    )
+    await db_session.execute(
+        text("insert into user_preferences (user_id, allergies, avoid) values (:u, '{}', '{}')"),
+        {"u": user.id},
+    )
+    row = (
+        await db_session.execute(
+            text("select diets, cuisines, skill_level from user_preferences where user_id = :u"),
+            {"u": user.id},
+        )
+    ).one()
+    assert (row.diets, row.cuisines, row.skill_level) == ([], [], None)
+    assert user.onboarded_at is None
+    assert user.role is None
